@@ -1,0 +1,11 @@
+.Options{
+    position: absolute;
+    /* top:10%; */
+    left:60%;
+    width: 200px;
+    height: 500px;
+    border-radius: 20px;
+    border: solid green;
+    z-index: 3;
+}
+

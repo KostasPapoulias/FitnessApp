@@ -1,0 +1,13 @@
+.NavBar{
+
+    position: absolute;
+    top:88%;
+    width: 500px;
+    height: 80px;
+    border-radius: 20px;
+    /* border: solid blue; */
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 120px;
+    grid-auto-rows: minmax(100px, auto);
+}

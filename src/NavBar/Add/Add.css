@@ -1,0 +1,22 @@
+.Add_Icon{
+    grid-column: 2 / 3 ;
+    grid-row: 1;
+
+    width: 70px;
+    height: 70px;
+    /* border: solid black; */
+    border-radius: 100%;
+}
+
+.Add{
+
+    position: absolute;
+    width: 400px;
+    height: 500px;
+    border: solid rgb(25, 69, 97);
+    top:-650%;
+    right: 10%;
+
+    z-index: 2;
+
+}
