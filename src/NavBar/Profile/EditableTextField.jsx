@@ -21,6 +21,7 @@ const EditableTextField = () => {
 
   return (
     <div>
+      <label>First name</label>
       {editing ? (
         <TextField
           value={value}
