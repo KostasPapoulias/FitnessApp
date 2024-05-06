@@ -18,5 +18,19 @@
     right: 10%;
 
     z-index: 2;
+}
 
+.push{
+    position: absolute;
+    top:20px;
+}
+
+.pull{
+    position: absolute;
+    top:200px;
+}
+
+.legs{
+    position: absolute;
+    top:360px;
 }

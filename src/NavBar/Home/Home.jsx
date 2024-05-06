@@ -15,7 +15,29 @@ export default function({Exersices}){
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Push">
                         <ul>
-                            {Exersices.map((item, index) => (
+                            {Exersices.filter(item => item.group === 'push').map((item, index) => (
+                                <li key={index}>{item.name}</li>
+                            ))}
+                        </ul>
+                    </TreeItem>
+                </SimpleTreeView>
+            </Box>
+            <Box className="pull" >
+                <SimpleTreeView className='tree'>
+                    <TreeItem itemId="grid" label="Pull">
+                        <ul>
+                            {Exersices.filter(item => item.group === 'pull').map((item, index) => (
+                                <li key={index}>{item.name}</li>
+                            ))}
+                        </ul>
+                    </TreeItem>
+                </SimpleTreeView>
+            </Box>
+            <Box className="legs" >
+                <SimpleTreeView className='tree'>
+                    <TreeItem itemId="grid" label="Legs">
+                        <ul>
+                            {Exersices.filter(item => item.group === 'legs').map((item, index) => (
                                 <li key={index}>{item.name}</li>
                             ))}
                         </ul>

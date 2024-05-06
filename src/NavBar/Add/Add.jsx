@@ -21,14 +21,19 @@ export default function Add({ Exersices, onListChange }) {
             <Box className="push">
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Push">
-                        {/* Render your push items here */}
+                        {List.filter(item => item.group === 'push').map(item => (
+                            <div key={item.id} itemID={item.cId}>
+                                {item.name}
+                                <button onClick={() => addItemToList(item)}>Add</button> 
+                            </div>
+                        ))}
                     </TreeItem>
                 </SimpleTreeView>
             </Box>
             <Box className="pull">
                 <SimpleTreeView>
                     <TreeItem itemId="grid" label="Pull">
-                        {List.map(item => (
+                        {List.filter(item => item.group === 'pull').map(item => (
                             <div key={item.id} itemID={item.cId}>
                                 {item.name}
                                 <button onClick={() => addItemToList(item)}>Add</button> 
@@ -40,9 +45,12 @@ export default function Add({ Exersices, onListChange }) {
             <Box className="legs">
                 <SimpleTreeView>
                     <TreeItem itemId="grid" label="Legs">
-                        <TreeItem itemId="grid-community" label="Barbell Squat" />
-                        <TreeItem itemId="grid-pro" label="Roumanian Deadlift" />
-                        <TreeItem itemId="grid-premium" label="Hip Thrust" />
+                        {List.filter(item => item.group === 'legs').map(item => (
+                            <div key={item.id} itemID={item.cId}>
+                                {item.name}
+                                <button onClick={() => addItemToList(item)}>Add</button> 
+                            </div>
+                        ))}     
                     </TreeItem>
                 </SimpleTreeView>
             </Box>
