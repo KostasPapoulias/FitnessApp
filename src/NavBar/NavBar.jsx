@@ -6,6 +6,7 @@ import ProfileIcon from './Profile/ProfileIcon.jsx'
 import Add_Icon from './Add/AddIcon.jsx'
 import HomeIcon from './Home/HomeIcon.jsx'
 import Profile from './Profile/Profile.jsx'
+import Exersices from './Exersices.jsx'
 
 export default function NavBar(){
 
@@ -27,19 +28,23 @@ export default function NavBar(){
         setIsProfilePressed(true);
         setIsAddPressed(false);
         setIsHomePressed(false);
-
-
-
     }
+
+    const [list, setListItems] = useState(Exersices); // Assuming Data is defined somewhere
+
+    const handleListChange = (newList) => {
+        setListItems(newList);
+      }
 
     return(
         <div className="NavBar">
             <HomeIcon onHomePress={handleHomePress}/>
             <Add_Icon onAddPress={handleAddPress}/>
-            <ProfileIcon onProfilePress={handleProfilePress}/>            
-            
-            {isHomePressed && <Home />}
-            {isAddPressed && <Add />}
+            <ProfileIcon onProfilePress={handleProfilePress}/>  
+                      
+            {isAddPressed && <Add Exersices={list} onListChange={handleListChange}/>}
+
+            {isHomePressed && <Home Exersices={list}/>}
             {isProfilePressed && <Profile />}
             
         </div>
