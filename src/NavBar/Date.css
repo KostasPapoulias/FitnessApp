@@ -1,0 +1,29 @@
+.date-picker{
+    display:flex;
+    height: 38px;
+}
+
+.selected-date{
+    /* border: solid black; */
+    text-align: center;
+    display: block;
+    flex: 0 0 auto; 
+    width: 66px; 
+    cursor: pointer;
+    border-radius: 10px;
+    
+}
+
+.selected-date:hover {
+    background-color: rgb(226, 225, 225);
+}
+
+.button{
+    /* background-color: rgb(241, 242, 243); */
+    border: solid aliceblue;
+}
+
+.clicked{
+    background-color: rgb(226, 225, 225);
+    /* background-color: brown; */
+}

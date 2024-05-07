@@ -22,7 +22,7 @@
 
 .push{
     position: absolute;
-    top:20px;
+    top:40px;
 }
 
 .pull{
@@ -33,4 +33,9 @@
 .legs{
     position: absolute;
     top:360px;
+}
+
+.welcome{
+    position: absolute;
+    top: -60px
 }

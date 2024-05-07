@@ -6,6 +6,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import List from './List';
+import DatePicker from '../Date';
 
 export default function Add({ Exersices, onListChange }) { 
  
@@ -18,6 +19,7 @@ export default function Add({ Exersices, onListChange }) {
 
     return (
         <div className="Add">
+            <DatePicker />
             <Box className="push">
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Push">
