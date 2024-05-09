@@ -8,7 +8,14 @@ import { useState } from 'react';
 import DatePicker from '../Date';
 
 export default function({Exersices}){
-   
+    
+    const [homeDate, setDate] = useState(new Date().toISOString().slice(0, 10));
+    // const currentDate = data.toISOString().slice(0, 10); // format YYYY-MM-DD
+
+    const handleDate = (newDate) =>{
+        setDate(newDate);
+        console.log("date in home: " + homeDate)
+    };
 
     return(
         <div className="Home">
@@ -19,13 +26,13 @@ export default function({Exersices}){
             <br />
             Your schedule:
             </div>
-            <DatePicker />
+            <DatePicker saveDate={handleDate}/>
             <br/>
             <Box className="push" >
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Push">
                         <ul>
-                            {Exersices.filter(item => item.group === 'push').map((item, index) => (
+                            {Exersices.filter(item => (item.group === 'push' && item.date === homeDate)).map((item, index) => (
                                 <li key={index}>{item.name}</li>
                             ))}
                         </ul>
@@ -36,7 +43,7 @@ export default function({Exersices}){
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Pull">
                         <ul>
-                            {Exersices.filter(item => item.group === 'pull').map((item, index) => (
+                            {Exersices.filter(item => (item.group === 'pull' && item.date === homeDate)).map((item, index) => (
                                 <li key={index}>{item.name}</li>
                             ))}
                         </ul>
@@ -47,7 +54,7 @@ export default function({Exersices}){
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Legs">
                         <ul>
-                            {Exersices.filter(item => item.group === 'legs').map((item, index) => (
+                            {Exersices.filter(item => (item.group === 'legs' && item.date === homeDate)).map((item, index) => (
                                 <li key={index}>{item.name}</li>
                             ))}
                         </ul>

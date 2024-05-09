@@ -30,11 +30,17 @@ export default function NavBar(){
         setIsHomePressed(false);
     }
 
-    const [list, setListItems] = useState(Exersices); // Assuming Data is defined somewhere
+    const [list, setListItems] = useState(Exersices); 
 
     const handleListChange = (newList) => {
         setListItems(newList);
       }
+    const [date, setDate] = useState();  
+
+    const handleDate = (newDate) => {
+        // setDate(newDate);
+        console.log(newDate);
+    }
 
     return(
         <div className="NavBar">
@@ -42,9 +48,9 @@ export default function NavBar(){
             <Add_Icon onAddPress={handleAddPress}/>
             <ProfileIcon onProfilePress={handleProfilePress}/>  
                       
-            {isAddPressed && <Add Exersices={list} onListChange={handleListChange}/>}
+            {isAddPressed && <Add Exersices={list} onListChange={handleListChange} saveDate={handleDate}/>}
 
-            {isHomePressed && <Home Exersices={list}/>}
+            {isHomePressed && <Home Exersices={list} />}
             {isProfilePressed && <Profile />}
             
         </div>

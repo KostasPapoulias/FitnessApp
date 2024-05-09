@@ -8,18 +8,33 @@ import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import List from './List';
 import DatePicker from '../Date';
 
-export default function Add({ Exersices, onListChange }) { 
+export default function Add({ Exersices, onListChange, saveDate}) { 
  
 
     const addItemToList = (newItem) => {
+        // const updatedExercises = exercises.map(exercise => ({
+        //     ...exercise,
+        //     date: date
+        //   }));
+        newItem.date = date;
         const updatedList = [...Exersices, newItem]; 
+        console.log("date: " + date);
         console.log(newItem);
         onListChange(updatedList); 
     };
 
+    const [date, setDate] = useState();
+
+
+    const handleDate = (newDate) => {
+        saveDate(newDate)
+        setDate(newDate);
+    }
+
+
     return (
         <div className="Add">
-            <DatePicker />
+            <DatePicker saveDate={handleDate}/>
             <Box className="push">
                 <SimpleTreeView className='tree'>
                     <TreeItem itemId="grid" label="Push">

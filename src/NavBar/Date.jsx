@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Date.css';
 
 
-const DatePicker = () => {
+function DatePicker ({saveDate}) {
     const [selectedDate1, setSelectedDate1] = useState(new Date());
 
     const initialDate2 = new Date();
@@ -22,7 +22,9 @@ const DatePicker = () => {
     const [selectedDate5, setSelectedDate5] = useState(initialDate5);
 
 
-
+/**
+ * decreases each of the 5 selectedDate by 1
+ */
   const handlePrevDay = () => {
     let prevDay = new Date(selectedDate1);
     prevDay.setDate(selectedDate1.getDate() - 1);
@@ -40,7 +42,9 @@ const DatePicker = () => {
     prevDay.setDate(selectedDate5.getDate() - 1);
     setSelectedDate5(prevDay);
   };
-
+/**
+ * increases each of the 5 selectedDate by 1
+ */
   const handleNextDay = () => {
     let nextDay = new Date(selectedDate1);
     nextDay.setDate(selectedDate1.getDate() + 1);
@@ -57,6 +61,7 @@ const DatePicker = () => {
     nextDay = new Date(selectedDate5);
     nextDay.setDate(selectedDate5.getDate() + 1);
     setSelectedDate5(nextDay);
+
   };
 
   const formatDate = (date) => {
@@ -65,38 +70,47 @@ const DatePicker = () => {
     });
   };
 
+  /**
+   * initialize saveDate with today's date
+   */
+  useEffect(() => {
+    saveDate(selectedDate1.toISOString().slice(0, 10));
+  }, []);
 
-  const [clickedDate, setClickedDate] = useState(1);
+  //save the date that is clicked
+  const [clickedDate, setClickedDate] = useState(selectedDate1);
 
-
-  const handleClickDate = (index) => {
-        setClickedDate(index);
+  const handleClickDate = (data) => {
+      const editDate = data.toISOString().slice(0,10);
+      setClickedDate(data);
+      saveDate(editDate);
     }
+
 
     return (
         <div className="date-picker">
             <button className='button' onClick={handlePrevDay}>&lt;</button>
-            <div className={`selected-date ${clickedDate === 1 ? 'clicked' : ''}`} onClick={() => handleClickDate(1)}>
+            <div className={`selected-date ${clickedDate.getDate() === selectedDate1.getDate() ? 'clicked' : ''}`} onClick={() => handleClickDate(selectedDate1)}>
                 {formatDate(selectedDate1)}
                 <br />
                 {selectedDate1.getDate()}
             </div>
-            <div className={`selected-date ${clickedDate === 2 ? 'clicked' : ''}`} onClick={() => handleClickDate(2)}>
+            <div className={`selected-date ${clickedDate.getDate() === selectedDate2.getDate() ? 'clicked' : ''}`} onClick={() => handleClickDate(selectedDate2)}>
                 {formatDate(selectedDate2)}
                 <br />
                 {selectedDate2.getDate()}
             </div>
-            <div className={`selected-date ${clickedDate === 3 ? 'clicked' : ''}`} onClick={() => handleClickDate(3)}>
+            <div className={`selected-date ${clickedDate.getDate() === selectedDate3.getDate() ? 'clicked' : ''}`} onClick={() => handleClickDate(selectedDate3)}>
                 {formatDate(selectedDate3)}
                 <br />
                 {selectedDate3.getDate()}
             </div>
-            <div className={`selected-date ${clickedDate === 4 ? 'clicked' : ''}`} onClick={() => handleClickDate(4)}>
+            <div className={`selected-date ${clickedDate.getDate() === selectedDate4.getDate() ? 'clicked' : ''}`} onClick={() => handleClickDate(selectedDate4)}>
                 {formatDate(selectedDate4)}
                 <br />
                 {selectedDate4.getDate()}
             </div>
-            <div className={`selected-date ${clickedDate === 5 ? 'clicked' : ''}`} onClick={() => handleClickDate(5)}>
+            <div className={`selected-date ${clickedDate.getDate() === selectedDate5.getDate() ? 'clicked' : ''}`} onClick={() => handleClickDate(selectedDate5)}>
                 {formatDate(selectedDate5)}
                 <br />
                 {selectedDate5.getDate()}
