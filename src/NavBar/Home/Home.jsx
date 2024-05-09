@@ -14,7 +14,7 @@ export default function({Exersices}){
 
     const handleDate = (newDate) =>{
         setDate(newDate);
-        console.log("date in home: " + homeDate)
+        // console.log("date in home: " + homeDate)
     };
 
     return(

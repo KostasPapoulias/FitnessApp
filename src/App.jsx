@@ -18,16 +18,18 @@ function App() {
   });
 
   return(
-    <div className='container'>
-      <span className='menuIcon' onClick={handleShowOptions}>
-        <TransparentFab>
-          <MenuIcon style={{ fontSize: 35 }} />
-        </TransparentFab>
-      </span>    
+    <div>
+      <div className='container' >
+        <span className='menuIcon' onClick={handleShowOptions}>
+          <TransparentFab>
+            <MenuIcon style={{ fontSize: 35 }} />
+          </TransparentFab>
+        </span>  
 
-      {showOptions && <Options />}
-      <NavBar />
-     </div>
+        {showOptions && <Options />}
+        <NavBar />
+      </div>
+    </div>
   );
 }
 

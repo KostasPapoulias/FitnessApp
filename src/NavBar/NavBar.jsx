@@ -39,7 +39,7 @@ export default function NavBar(){
 
     const handleDate = (newDate) => {
         // setDate(newDate);
-        console.log(newDate);
+        // console.log(newDate);
     }
 
     return(
