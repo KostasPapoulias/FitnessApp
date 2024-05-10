@@ -16,9 +16,16 @@ export default function({Exersices}){
         setDate(newDate);
         // console.log("date in home: " + homeDate)
     };
+    const push = (Exersices.some(item => (item.group === 'push')) && Exersices.some(item => (item.date === homeDate)));
+    const pull = (Exersices.some(item => (item.group === 'pull')) && Exersices.some(item => (item.date === homeDate)));
+    const legs = (Exersices.some(item => (item.group === 'legs')) && Exersices.some(item => (item.date === homeDate)));
+    const custom = (push && pull) || (push && legs) || (pull && legs);
+
+
 
     return(
         <div className="Home">
+            {/* {console.log("push: "+push+" pull: "+pull + " legs: "+legs+" custom: "+custom)} */}
             <div className='welcome'>
                 <div style={{ fontFamily: "Copperplate, Fantasy" }}>
                     Hello, Kostas 
@@ -28,40 +35,30 @@ export default function({Exersices}){
             </div>
             <DatePicker saveDate={handleDate}/>
             <br/>
-            <Box className="push" >
-                <SimpleTreeView className='tree'>
-                    <TreeItem itemId="grid" label="Push">
-                        <ul>
-                            {Exersices.filter(item => (item.group === 'push' && item.date === homeDate)).map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                            ))}
-                        </ul>
-                    </TreeItem>
-                </SimpleTreeView>
-            </Box>
-            <Box className="pull" >
-                <SimpleTreeView className='tree'>
-                    <TreeItem itemId="grid" label="Pull">
-                        <ul>
-                            {Exersices.filter(item => (item.group === 'pull' && item.date === homeDate)).map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                            ))}
-                        </ul>
-                    </TreeItem>
-                </SimpleTreeView>
-            </Box>
-            <Box className="legs" >
-                <SimpleTreeView className='tree'>
-                    <TreeItem itemId="grid" label="Legs">
-                        <ul>
-                            {Exersices.filter(item => (item.group === 'legs' && item.date === homeDate)).map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                            ))}
-                        </ul>
-                    </TreeItem>
-                </SimpleTreeView>
-            </Box>
+
+            <div ></div>
+
+            {push && <Plan Exersices={Exersices} homeDate={homeDate} category={'push'} />}
+            {pull && <Plan Exersices={Exersices} homeDate={homeDate} category={'pull'} />}
+            {legs && <Plan Exersices={Exersices} homeDate={homeDate} category={'legs'} />}
+            
             
         </div>
+    );
+}
+
+function Plan({category , Exersices, homeDate}){
+    return(
+        <Box className = {category} >
+            <SimpleTreeView className='tree'>
+                <TreeItem itemId="grid" label={category}>
+                    <ul>
+                        {Exersices.filter(item => (item.group === category && item.date === homeDate)).map((item, index) => (
+                            <li key={index}>{item.name}</li>
+                        ))}
+                    </ul>
+                </TreeItem>
+            </SimpleTreeView>
+        </Box>
     );
 }

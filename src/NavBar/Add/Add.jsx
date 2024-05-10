@@ -64,48 +64,36 @@ function ExercisePlan({passCategory, addItemToList}){
 
     return(
         <div className=''>
-            {category === "push" && <PushPlan returnItem={handleAddItemToList}/>}
-            {category === "pull" && <PullPlan returnItem={handleAddItemToList}/>}
-            {category === "legs" && <LegsPlan returnItem={handleAddItemToList}/>}
+            
+            {category === "push" && <Plan returnItem={handleAddItemToList} category={category}/>}
+            {category === "pull" && <Plan returnItem={handleAddItemToList} category={category}/>}
+            {category === "legs" && <Plan returnItem={handleAddItemToList} category={category}/>}
+
             {/* {category === "custom" && <PullPlan returnItem={handleAddItemToList}/>} */}
 
-            {/* <Box className="push">
-                    <SimpleTreeView className='tree'>
-                        <TreeItem itemId="grid" label="Push">
-                            {List.filter(item => item.group === 'push').map(item => (
-                                <div key={item.id} itemID={item.cId}>
-                                    {item.name}
-                                    <button onClick={() => handleAddItemToList(item)}>Add</button> 
-                                </div>
-                            ))}
-                        </TreeItem>
-                    </SimpleTreeView>
-                </Box>
-                <Box className="pull">
-                    <SimpleTreeView>
-                        <TreeItem itemId="grid" label="Pull">
-                            {List.filter(item => item.group === 'pull').map(item => (
-                                <div key={item.id} itemID={item.cId}>
-                                    {item.name}
-                                    <button onClick={() => addItemToList(item)}>Add</button> 
-                                </div>
-                            ))}
-                        </TreeItem>
-                    </SimpleTreeView>
-                </Box>
-                <Box className="legs">
-                    <SimpleTreeView>
-                        <TreeItem itemId="grid" label="Legs">
-                            {List.filter(item => item.group === 'legs').map(item => (
-                                <div key={item.id} itemID={item.cId}>
-                                    {item.name}
-                                    <button onClick={() => addItemToList(item)}>Add</button> 
-                                </div>
-                            ))}     
-                        </TreeItem>
-                    </SimpleTreeView>
-                </Box> */}
             </div>
+    );
+}
+
+function Plan({returnItem, category}){
+    const handleAddItemToList = (item) => {
+        returnItem(item);
+    }
+    return(
+        <div>
+            <Box className={category}>
+                <SimpleTreeView className='tree'>
+                    <TreeItem itemId="grid" label={category}>
+                        {List.filter(item => item.group === category).map(item => (
+                            <div key={item.id} itemID={item.cId}>
+                                {item.name}
+                                <button onClick={() => handleAddItemToList(item)}>Add</button> 
+                            </div>
+                        ))}
+                    </TreeItem>
+                </SimpleTreeView>
+            </Box>   
+        </div>
     );
 }
 
@@ -130,7 +118,6 @@ function PushPlan({returnItem}){
         </div>
     );
 }
-
 function PullPlan({returnItem}){
     const handleAddItemToList = (item) => {
         returnItem(item);
@@ -176,7 +163,6 @@ function SelectCategory({ getCategory }) {
     const handleSelection = (category) => {
         getCategory(category);
     };
-
     return (
         <div className='selectCategory'>
             <div className='pushCategory' onClick={() => handleSelection("push")}>PUSH</div>
@@ -186,5 +172,3 @@ function SelectCategory({ getCategory }) {
         </div>
     );
 }
-
-
