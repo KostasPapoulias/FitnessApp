@@ -11,11 +11,11 @@
 .Home{
 
     position: absolute;
-    width: 400px;
+    width: 90%;
     height: 500px;
-    border: solid rgb(142, 130, 63);
+    /* border: solid rgb(142, 130, 63); */
     top:-650%;
-    right: 10%;
+    left: 5%;
 
     z-index: 2;
 }
