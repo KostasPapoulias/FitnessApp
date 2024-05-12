@@ -20,11 +20,11 @@ function App() {
   return(
     <div>
       <div className='container' >
-        <span className='menuIcon' onClick={handleShowOptions}>
+        {/* <span className='menuIcon' onClick={handleShowOptions}>
           <TransparentFab>
             <MenuIcon style={{ fontSize: 35 }} />
           </TransparentFab>
-        </span>  
+        </span>   */}
 
         {showOptions && <Options />}
         <NavBar />
