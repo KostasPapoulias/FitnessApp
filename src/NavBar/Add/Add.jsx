@@ -7,6 +7,7 @@ import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import List from './List';
 import DatePicker from '../Date';
+import {AddExerciseMenu} from './AddExerciseMenu';  
 
 export default function Add({ Exersices, onListChange, saveDate}) { 
  
@@ -44,18 +45,86 @@ export default function Add({ Exersices, onListChange, saveDate}) {
         if(displayExersicePlan)
             handledisplayExersicePlan();
     }
+    const [addClicked, setAddClicked] = useState(false);
+
+    const handleAddClick = () => {
+        setAddClicked(!addClicked);
+    };
+    const handleReturn = () => {
+        setAddClicked(false);
+    }
     
 
     return (
         <div className="Add">
-            <div className='backToSelect' onClick={handleBackClick}>&lt;</div>
-            <DatePicker saveDate={handleDate}/>
-            {!displayExersicePlan && <SelectCategory getCategory={handleCategory}/>}
-            {displayExersicePlan && <ExercisePlan passCategory={category} addItemToList={addItemToList}/>}
+            
+            {addClicked? <AddExerciseMenu goBack={handleReturn}/> : <DisplayDefault clicked={handleAddClick}/>}
         </div>
     );
 }
 
+const DisplayDefault = ({clicked}) => {
+    const handleAddClick = () => {
+        clicked(true);
+    }
+    return(
+        <div>
+            <TopPart />
+            <CategoriesProgress />
+            <ChosenExercises />
+            <AddExercise clicked={handleAddClick}/>
+        </div>
+    );
+}
+const TopPart = () =>{
+    return(
+        <div className='topPart'>
+            <div className='newWorkout'>new</div>
+            <div className='info'>info</div>
+        </div>
+    );
+}
+
+const CategoriesProgress = () => {
+    return(
+        <div className='categoriesProgress'>
+            <div className='pushProgress'>push</div>
+            <div className='pullProgress'>pull</div>
+            <div className='legsProgress'>legs</div>
+        </div>
+    );
+}
+
+const ChosenExercises = () => {
+
+    return(
+        <div className='chosenExercises'>
+            {List.map(item => (
+                <div className='exersice' key={item.id} itemID={item.cId}>
+                    {item.name}
+                </div>
+            ))}
+        </div>
+    );
+}
+const AddExercise = ({clicked}) => {
+    const handleClick = () => {
+        console.log("add exercise");
+        clicked(true);
+    
+    }
+    return(
+        <div className='addExercise'>
+            <Fab color="primary" aria-label="add">
+                <AddIcon onClick={handleClick}/>
+            </Fab>
+        </div>
+    );
+};
+
+
+
+//////
 function ExercisePlan({passCategory, addItemToList}){
     const [category, setCategory] = useState(passCategory);
     const handleAddItemToList = (item) => {

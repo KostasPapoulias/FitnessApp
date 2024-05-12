@@ -11,20 +11,97 @@
 .Add{
 
     position: absolute;
-    width: 400px;
-    height: 500px;
+    width: 100%;
+    height: 760%;
     border: solid rgb(25, 69, 97);
-    top:-650%;
-    right: 10%;
+    top:-770%;
+    right: 0%;
+    border-top-left-radius: 20px ;
+    border-top-right-radius: 20px ;
 
     z-index: 2;
 
-
-    display: grid;
+    /* display: grid;
     grid-template-columns: 1fr; /* One column */
-    grid-template-rows: 70px 70px 70px; /* Three rows */
-    gap: 100px;
+    /* grid-template-rows: 70px 70px 70px; /* Three rows */
+    /* gap: 100px; */ 
 
+}
+.topPart{
+    width: auto;
+    height: 60px;
+    border: solid black;
+    background-color: #b2b2b2;
+    border-top-left-radius: 20px ;
+    border-top-right-radius: 20px ;
+}
+.newWorkout{
+    position: absolute;
+    top: 20px;
+    border: solid black;
+    left: 15px;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    cursor: pointer;
+}
+.info{
+    position: absolute;
+    top:20px;
+    border: solid black;
+    right: 15px;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    cursor: pointer;
+}
+
+.categoriesProgress{
+    position: absolute;
+    top: 11%;
+    width: 100%;
+    height: 100px;
+    border: solid black;
+    text-align: center;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+    
+}
+.addExercise{
+    position: absolute;
+    top: 28%;
+    left: 5%;
+
+    width: 12%;
+    height: 50px;
+    border: solid black;
+    text-align: center;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+.chosenExercises{
+    position: absolute;
+    top: 38%;
+    left: 5%;
+    width: 90%;
+    height: 380px;
+    border: solid black;
+    text-align: center;
+    /* display: flex; */
+    flex-direction: column;
+    /* justify-content: space-evenly; */
+    overflow-y: scroll;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+
+}
+.exersice{
+    position: relative;
+    
+    width: 100%;
+    height: 80px;
+    border: solid rgb(207, 51, 51);
+    text-align: center;
 }
 .push{
     position: absolute;
@@ -118,4 +195,11 @@
     border-radius: 20px;
     cursor: pointer;
 
+}
+
+.backToSelect{
+    border: solid black;
+    border-radius: 100%;
+    padding: 10px;
+    cursor: pointer;
 }
