@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import human1 from '../../../human1.png';
-import human2 from '../../../human2.png';
+import human1 from '../../../pictures/human1.png';
+import human2 from '../../../pictures/human2.png';
 import './Human.css'
+import flip from '../../../pictures/flip.png';
 
 const Human = () => {
     const [isHuman1, setIsHuman1] = useState(true);
@@ -117,7 +118,7 @@ const Human = () => {
                 ) : (
                     <img src={human2} alt="Human 2" />
                 )}
-                <button className='switchSide' onClick={handleClick}>Switch Image</button>
+                <button className='switchSide' onClick={handleClick}><img src={flip} alt="flip" style={{width: '50px'}}/></button>
             </div>
         </div>
     );
