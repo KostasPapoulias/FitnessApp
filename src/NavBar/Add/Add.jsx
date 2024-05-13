@@ -9,75 +9,44 @@ import List from './List';
 import DatePicker from '../Date';
 import {AddExerciseMenu} from './AddExerciseMenu';  
 import {AddCategoryMenu} from './AddCategoryMenu';
-
+import plus from '../../../pictures/plus.png';
+import back from '../../../pictures/back.png';
+const triceps = '../../../pictures/traps_files/Triceps.png';
+import biceps from '../../../pictures/traps_files/Biceps.png';
+import abs from '../../../pictures/traps_files/Abs.png';
+import calves from '../../../pictures/traps_files/Calves.png';
+import chest from '../../../pictures/traps_files/Chest.png';
+import forearms from '../../../pictures/traps_files/Forearms.png';
+import glutes from '../../../pictures/traps_files/Glutes.png';
+import hamstrings from '../../../pictures/traps_files/Hamstrings.png';
+import quads from '../../../pictures/traps_files/Quads.png';
+import shoulders from '../../../pictures/traps_files/Shoulders.png';
+import lats from '../../../pictures/traps_files/Lats.png';
+import traps from '../../../pictures/traps_files/Traps.png';
+import Exersices from '../Exersices';
 export default function Add({ Exersices, onListChange, saveDate}) { 
  
-
+    const [ExersicesChosenToDisplay, setExersicesChosenToDisplay] = useState();
     const addItemToList = (newItem) => {
         // const updatedExercises = exercises.map(exercise => ({
         //     ...exercise,
         //     date: date
         //   }));
-        newItem.date = date;
+        // newItem.date = date;
         const updatedList = [...Exersices, newItem]; 
         // console.log("date: " + date);
         console.log(newItem);
         onListChange(updatedList); 
+        setExersicesChosenToDisplay(updatedList);
     };
 
-    // const [date, setDate] = useState();
+    const [date, setDate] = useState();
 
-
-    // const handleDate = (newDate) => {
-    //     saveDate(newDate)
-    //     setDate(newDate);
-    // }
-    // const [category, setCategory] = useState();
-    // const handleCategory = (category) => {
-    //     setCategory(category);
-    //     handledisplayExersicePlan();
-    // }
-
-    // const [displayExersicePlan, setdisplayExersicePlan] = useState(false);
-    // const handledisplayExersicePlan = () => {
-    //         setdisplayExersicePlan(!displayExersicePlan);
-    // }
-    // const handleBackClick = () => {
-    //     if(displayExersicePlan)
-    //         handledisplayExersicePlan();
-    // }
-    // const [addClicked, setAddClicked] = useState(false);
-
-    // const handleAddClick = () => {
-    //     setAddClicked(!addClicked);
-    // };
-    // const handleReturn = () => {
-    //     setAddClicked(false);
-    //     setAddNewClicked(false);
-    // }
-    // const [addNewPlanClicked, setAddNewClicked] = useState(false);
-    // const handleNewPlanClicked = () => {
-    //     setAddNewClicked(!addNewPlanClicked);
-    //     setAddClicked(true);
-    // }
-    // const [selectedCategories, setSelectedCategories] = useState([]);
-
-    // const handleSave = (category) => {
-    //     setSelectedCategories(category);
-        
-    // };
-    // const [selected, setSelectedCategory] = useState();
-    // const handleSetCategory = (category) => {
-    //     setSelectedCategory(category);
-    // }
-    // const [addNewExercisesButton, setAddNewExercisesButton] = useState();
-    // const handleAddNewExercisesButton = () => {
-    //     setAddNewExercisesButton(true);
-    //     setShowChosenExersices(false);
-    // }
-    // const [showChosenExersices, setShowChosenExersices] = useState(true);
-    //////////
-
+    const handleDate = (newDate) => {
+        saveDate(newDate)
+        setDate(newDate);
+    }
+    
 
     const [topNew, setTopNew] = useState(false);
     const [topReturn, setTopReturn] = useState(false);
@@ -103,15 +72,12 @@ export default function Add({ Exersices, onListChange, saveDate}) {
 
 
     return (
-        // <div className="Add">
-        //     {addNewExercisesButton? !addNewPlanClicked && <AddExerciseMenu goBack={handleReturn} category={selected}/> : !addNewPlanClicked && <DisplayDefault addPlanButtonClicked={handleNewPlanClicked} categ={selectedCategories} selectedCategory={handleSetCategory} addButtonCl={handleAddNewExercisesButton} showChosenExersices={showChosenExersices}/> }
-        //     {addNewPlanClicked? <AddCategoryMenu goBack={handleReturn} chosenCategories={handleSave}/> : <DisplayDefault addPlanButtonClicked={handleNewPlanClicked} categ={selectedCategories} selectedCategory={handleSetCategory} addButtonCl={handleAddNewExercisesButton} showChosenExersices={showChosenExersices}/>}
-        // </div>
+        
         <div className='Add'>
             {topNew? <AddCategoryMenu goBack={handleTopReturn} 
                                       chosenCategories={handleChosenCategories}/> 
                     : <TopPart topNew={handleTopNew}/>}
-            {!topNew? <DisplayDefault selectedCategory={returnCategorySelected}/> : <></>}
+            {!topNew? <DisplayDefault selectedCategory={returnCategorySelected} Exersice={ExersicesChosenToDisplay} returnItem={addItemToList}/> : <></>}
             {!topNew && <ShowSelectedCategories categoriesArray={chosenCategories} returnSelectedCategory={handleReturnSelectedCategory}/>}
         </div>
     );
@@ -119,44 +85,38 @@ export default function Add({ Exersices, onListChange, saveDate}) {
 /**
  * displayes the default view
  */
-const DisplayDefault = ({selectedCategory}) => {
+const DisplayDefault = ({selectedCategory, Exersice, returnItem}) => {
 
-    // return(
-    //     <div>
-    //         <Add />
-    //         <ChosenExercises />
-    //         const handleAdd = () => {
-    //     console.log("add exercise");
-    //     addBclicked(true);
-    //     setButtonPressed(true);
-    // }
-    // const handleBack = () => {
-    //     setButtonPressed(false);
-    // }
 
     const [middleNew, setMiddleNew] = useState(false);
     const handleMiddleNew = () => {
         setMiddleNew(!middleNew);
     }
+
+    const handleReturnExersice = (item) => {
+        returnItem(item);
+    }
     return(
         <div>
             {middleNew ? (
                 <div>
-                        <div className='addExercise' onClick={handleMiddleNew}>return
-                        </div>
-                    <AddExerciseMenu category={selectedCategory}/>
+                    <div className='addExercise' onClick={handleMiddleNew}>
+                        <img src={back} alt="back" style={{width: '20px'}}/>
+
+                        return
+                    </div>
+                    <AddExerciseMenu category={selectedCategory} returnExersice={handleReturnExersice}/>
 
                 </div>
                 
             ):( 
                 <div>
                     <div className='addExercise' onClick={handleMiddleNew}> 
-                        {/* <Fab color="primary" aria-label="add">
-                            <AddIcon onClick={handleMiddleNew}/>
-                        </Fab> */}
+                        <img src={plus} alt="plus" style={{width: '35px'}}/>
+
                         add new exercise
                     </div>
-                    <ChosenExercises />
+                    <ChosenExercises ExersicesList={Exersice}/>
 
                 </div>
             )
@@ -200,7 +160,8 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
             <div className='displayCateg'>
                 {categoriesArray.map((category) => (
                     <div key={category} className='categ' onClick={() => handleSelection(category)}>
-                        {category}
+                        <div>{category}</div>
+                        <img src={'../../../pictures/traps_files/'+category+'.png'} alt={category} style={{width: '80px'}}/>
                     </div>
                 ))}
             </div>
@@ -211,12 +172,13 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
  * 
  * @returns displayes the chosen exercises
  */
-const ChosenExercises = () => {
+const ChosenExercises = ({ExersicesList}) => {
 
     return(
         <div className='chosenExercises'>
-            {List.map(item => (
+            {ExersicesList && ExersicesList.map(item => (
                 <div className='exersice' key={item.id} itemID={item.cId}>
+                    <img src={item.image} alt={item.name} style={{width: '60px'}}/>
                     {item.name}
                 </div>
             ))}
@@ -225,112 +187,6 @@ const ChosenExercises = () => {
 }
 
 
-
-
-
-
-////
-const DdisplayDefault = ({addPlanButtonClicked, categ, selectedCategory, addButtonCl, showChosenExersices}) => {
-    const handleAddPlan = () => {
-        addPlanButtonClicked(true);
-    }
-    const handleSelectedCategory = (category) => {
-        selectedCategory(category);
-    }
-    const handleAddButton = () => {
-        addButtonCl(true);
-    }
-    return(
-        <div>
-            <TopPart newAddPlan={handleAddPlan}/>
-            <ShowSelectedCategories categ={categ} returnCategorySelected={handleSelectedCategory}/>
-            {showChosenExersices && <ChosenExercises />}
-            <AddExerciseButton addBclicked={handleAddButton}/>
-        </div>
-    );
-}
-const TtopPart = ({newAddPlan}) =>{
-    const handleNew = () => {
-        newAddPlan(true);
-    }
-    return(
-        <div className='topPart'>
-            <div className='newWorkout' onClick={handleNew}>new</div>
-            <div className='info'>info</div>
-        </div>
-    );
-}
-/**
- * displayes the categories that have been selected/added
- * @param {} param0 
- * @returns 
- */
-const SshowSelectedCategories = ({categ, returnCategorySelected}) => {
-    
-    const [selection, setSelection] = useState(categ[0]);
-    const handleSelection = (category) => {
-        setSelection(prevSelection => category);
-        returnCategorySelected(prevSelection => category);
-    };
-
-    return (
-        <div className='exersices'>
-            <div className='displayCateg'>
-                {categ.map((category) => (
-                    <div key={category} className='categ' onClick={() => handleSelection(category)}>
-                        {category}
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-/**
- * the exersices that have been added
- * @returns 
- */
-const CchosenExercises = () => {
-
-    return(
-        <div className='chosenExercises'>
-            {List.map(item => (
-                <div className='exersice' key={item.id} itemID={item.cId}>
-                    {item.name}
-                </div>
-            ))}
-        </div>
-    );
-}
-/**
- * the button to add a new exercise
- * @param {*} param0 
- * @returns 
- */
-const AaddExerciseButton = ({addBclicked}) => {
-    const [buttonPressed, setButtonPressed] = useState(false);  
-
-    const handleAdd = () => {
-        console.log("add exercise");
-        addBclicked(true);
-        setButtonPressed(true);
-    }
-    const handleBack = () => {
-        setButtonPressed(false);
-    }
-    return(
-        <div>
-            {buttonPressed ? (
-                <div className='addExercise'>
-                    <Fab color="primary" aria-label="add">
-                        <AddIcon onClick={handleAdd}/>
-                    </Fab>
-                </div>
-            ):( <div className='addExercise' onClick={handleBack}>return</div>
-
-            )
-        }</div>
-    );
-};
 
 
 

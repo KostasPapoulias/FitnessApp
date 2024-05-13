@@ -44,8 +44,8 @@ export default function NavBar(){
 
     return(
         <div className="NavBar">
-            <HomeIcon onHomePress={handleHomePress}/>
-            <Add_Icon onAddPress={handleAddPress}/>
+            <HomeIcon onHomePress={handleHomePress} isHomePressed={isHomePressed}/>
+            <Add_Icon onAddPress={handleAddPress} isaAddPressed={isAddPressed}/>
             <ProfileIcon onProfilePress={handleProfilePress}/>  
                       
             {isAddPressed && <Add Exersices={list} onListChange={handleListChange} saveDate={handleDate}/>}

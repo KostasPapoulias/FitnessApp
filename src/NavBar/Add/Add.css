@@ -6,6 +6,7 @@
     height: 70px;
     /* border: solid black; */
     border-radius: 100%;
+    cursor: pointer;
 }
 
 .Add{
@@ -71,13 +72,17 @@
     top: 31%;
     left: 5%;
 
-    width: 25%;
+    width: auto;    
     height: 40px;
-    border: solid black;
+    /* border: solid black; */
     text-align: center;
     display: flex;
     /* flex-direction: row; */
     justify-content: space-evenly;
+    justify-content: center; 
+    align-items: center; 
+    cursor: pointer;
+    color: rgb(249, 74, 74);
 }
 .chosenExercises{
     position: absolute;

@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './AddExerciseMenu.css';
 import List from './List.jsx'
 
-// const AddExerciseMenu = ({ goBack, category }) => {
-    const AddExerciseMenu = ({ category }) => {
+const AddExerciseMenu = ({ category, returnExersice }) => {
 
     const [selectedCategories, setSelectedCategories] = useState([]);
 
@@ -13,10 +12,11 @@ import List from './List.jsx'
             setSavePressed(true);
         console.log(selectedCategories);
     };
+    const handleToList = (item) => {
+        returnExersice(item);
+    }
 
-    // const handleReturn = () => {
-    //     savePressed ? setSavePressed(false) : goBack(true);
-    // };
+    
 
     const [savePressed, setSavePressed] = useState(false);
 
@@ -25,7 +25,7 @@ import List from './List.jsx'
         <div className='addExerciseMenu'>
             {/* <TopPartMenu goBack={handleReturn} onSave={handleSave} /> */}
             
-            <ShowExersices category={category}/>
+            <ShowExersices category={category} toList={handleToList}/>
 
         </div>
     );
@@ -33,10 +33,10 @@ import List from './List.jsx'
 
 
 
-const ShowExersices = ({category}) => {
+const ShowExersices = ({category, toList}) => {
 
     const handleAddItemToList = (item) => {
-        console.log(item);
+        toList(item);
     }
 
     return(

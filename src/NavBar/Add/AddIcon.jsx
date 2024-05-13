@@ -2,17 +2,18 @@ import './Add.css'
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
 import AddIcon from '@mui/icons-material/Add';
+import workout1 from '../../../pictures/workout1.png';
+import workout2 from '../../../pictures/workout2.png';
 
-const Add_Icon = ({ onAddPress }) => {
+const Add_Icon = ({ onAddPress, isaAddPressed }) => {
 
     return(
         <div className='Add_Icon' onClick={onAddPress}>
-            <Box sx={{ '& > :not(style)': { m: 1 } }}>
-
-                <Fab color="primary" aria-label="add" style={{ width: 70, height: 70 }}>
-                    <AddIcon style={{ fontSize: 35 }}/>
-                </Fab>
-            </Box>
+            {isaAddPressed ? (
+                    <img src={workout2} alt="workout 2" style={{ width: '90px' }} />
+                ) : (
+                    <img src={workout1} alt="workout 1"style={{ width: '90px' }} />
+                )}
         </div>
     );
 }
