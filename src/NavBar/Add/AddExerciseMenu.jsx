@@ -2,38 +2,53 @@ import React, { useEffect, useState } from 'react';
 import './AddExerciseMenu.css';
 import List from './List.jsx'
 
-const AddExerciseMenu = ({ category, returnExersice }) => {
+const AddExerciseMenu = ({ category, returnExersice, allCategoriesSelected }) => {
 
     const [selectedCategories, setSelectedCategories] = useState([]);
 
-    const handleSave = () => {
-        // Do something with the selected categories
-        if(selectedCategories.length !== 0)
-            setSavePressed(true);
-        console.log(selectedCategories);
-    };
+     const cate = category;
+
     const handleToList = (item) => {
         returnExersice(item);
     }
 
     
 
-    const [savePressed, setSavePressed] = useState(false);
-
-
     return (
         <div className='addExerciseMenu'>
-            {/* <TopPartMenu goBack={handleReturn} onSave={handleSave} /> */}
             
-            <ShowExersices category={category} toList={handleToList}/>
+            {cate ? <ShowExersicesByCategory category={category} toList={handleToList} /> : <ShowExersices  category={allCategoriesSelected} toList={handleToList} />}
 
         </div>
     );
 };
 
 
-
 const ShowExersices = ({category, toList}) => {
+
+    const handleAddItemToList = (item) => {
+        toList(item);
+    }
+    console.log(category);
+
+    return(
+        <div className='pickExersiceContainer'>
+            {category.map(cat => (
+                List.filter(item => item.category === cat).map(item => (
+                    <div key={item.id} itemID={item.cId} className='pickExersice'>
+                        <img src={item.image} alt={item.name} style={{width: '60px'}}/>
+
+                        {item.name}
+                        <button onClick={() => handleAddItemToList(item)}>Add</button> 
+                    </div>
+                ))
+            ))}
+        </div>
+    );
+};
+
+
+const ShowExersicesByCategory = ({category, toList}) => {
 
     const handleAddItemToList = (item) => {
         toList(item);
@@ -43,6 +58,8 @@ const ShowExersices = ({category, toList}) => {
         <div className='pickExersiceContainer'>
             {List.filter(item => item.category === category).map(item => (
                 <div key={item.id} itemID={item.cId} className='pickExersice'>
+                    <img src={item.image} alt={item.name} style={{width: '60px'}}/>
+
                     {item.name}
                     <button onClick={() => handleAddItemToList(item)}>Add</button> 
                 </div>

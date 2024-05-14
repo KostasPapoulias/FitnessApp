@@ -69,15 +69,13 @@ export default function Add({ Exersices, onListChange, saveDate}) {
     }
 
 
-
-
     return (
         
         <div className='Add'>
             {topNew? <AddCategoryMenu goBack={handleTopReturn} 
                                       chosenCategories={handleChosenCategories}/> 
                     : <TopPart topNew={handleTopNew}/>}
-            {!topNew? <DisplayDefault selectedCategory={returnCategorySelected} Exersice={ExersicesChosenToDisplay} returnItem={addItemToList}/> : <></>}
+            {!topNew? <DisplayDefault selectedCategory={returnCategorySelected} Exersice={ExersicesChosenToDisplay} returnItem={addItemToList} allCate={chosenCategories}/> : <></>}
             {!topNew && <ShowSelectedCategories categoriesArray={chosenCategories} returnSelectedCategory={handleReturnSelectedCategory}/>}
         </div>
     );
@@ -85,7 +83,7 @@ export default function Add({ Exersices, onListChange, saveDate}) {
 /**
  * displayes the default view
  */
-const DisplayDefault = ({selectedCategory, Exersice, returnItem}) => {
+const DisplayDefault = ({selectedCategory, Exersice, returnItem, allCate}) => {
 
 
     const [middleNew, setMiddleNew] = useState(false);
@@ -105,7 +103,7 @@ const DisplayDefault = ({selectedCategory, Exersice, returnItem}) => {
 
                         return
                     </div>
-                    <AddExerciseMenu category={selectedCategory} returnExersice={handleReturnExersice}/>
+                    <AddExerciseMenu category={selectedCategory} returnExersice={handleReturnExersice} allCategoriesSelected={allCate}/>
 
                 </div>
                 
@@ -160,7 +158,7 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
             <div className='displayCateg'>
                 {categoriesArray.map((category) => (
                     <div key={category} className='categ' onClick={() => handleSelection(category)}>
-                        <div>{category}</div>
+                        <div style={{fontFamily: "Copperplate, Fantasy"}}>{category}</div>
                         <img src={'../../../pictures/traps_files/'+category+'.png'} alt={category} style={{width: '80px'}}/>
                     </div>
                 ))}
@@ -182,128 +180,6 @@ const ChosenExercises = ({ExersicesList}) => {
                     {item.name}
                 </div>
             ))}
-        </div>
-    );
-}
-
-
-
-
-
-//////
-function ExercisePlan({passCategory, addItemToList}){
-    const [category, setCategory] = useState(passCategory);
-    const handleAddItemToList = (item) => {
-        addItemToList(item);
-    }
-
-    return(
-        <div className=''>
-            
-            {category === "push" && <Plan returnItem={handleAddItemToList} category={category}/>}
-            {category === "pull" && <Plan returnItem={handleAddItemToList} category={category}/>}
-            {category === "legs" && <Plan returnItem={handleAddItemToList} category={category}/>}
-
-            {/* {category === "custom" && <PullPlan returnItem={handleAddItemToList}/>} */}
-
-            </div>
-    );
-}
-
-function Plan({returnItem, category}){
-    const handleAddItemToList = (item) => {
-        returnItem(item);
-    }
-    return(
-        <div>
-            <Box className={category}>
-                <SimpleTreeView className='tree'>
-                    <TreeItem itemId="grid" label={category}>
-                        {List.filter(item => item.group === category).map(item => (
-                            <div key={item.id} itemID={item.cId}>
-                                {item.name}
-                                <button onClick={() => handleAddItemToList(item)}>Add</button> 
-                            </div>
-                        ))}
-                    </TreeItem>
-                </SimpleTreeView>
-            </Box>   
-        </div>
-    );
-}
-
-function PushPlan({returnItem}){
-    const handleAddItemToList = (item) => {
-        returnItem(item);
-    }
-    return(
-        <div>
-            <Box className="push">
-                <SimpleTreeView className='tree'>
-                    <TreeItem itemId="grid" label="Push">
-                        {List.filter(item => item.group === 'push').map(item => (
-                            <div key={item.id} itemID={item.cId}>
-                                {item.name}
-                                <button onClick={() => handleAddItemToList(item)}>Add</button> 
-                            </div>
-                        ))}
-                    </TreeItem>
-                </SimpleTreeView>
-            </Box>   
-        </div>
-    );
-}
-function PullPlan({returnItem}){
-    const handleAddItemToList = (item) => {
-        returnItem(item);
-    }
-    return(
-        <div>
-            <Box className="pull">
-                <SimpleTreeView>
-                    <TreeItem itemId="grid" label="Pull">
-                        {List.filter(item => item.group === 'pull').map(item => (
-                            <div key={item.id} itemID={item.cId}>
-                                {item.name}
-                                <button onClick={() => handleAddItemToList(item)}>Add</button> 
-                            </div>
-                        ))}
-                    </TreeItem>
-                </SimpleTreeView>
-            </Box>
-        </div>
-    );
-}
-function LegsPlan({returnItem}){
-    const handleAddItemToList = (item) => {
-        returnItem(item);
-    }
-    return(
-        <Box className="legs">
-            <SimpleTreeView>
-                <TreeItem itemId="grid" label="Legs">
-                    {List.filter(item => item.group === 'legs').map(item => (
-                        <div key={item.id} itemID={item.cId}>
-                            {item.name}
-                            <button onClick={() => handleAddItemToList(item)}>Add</button> 
-                        </div>
-                    ))}     
-                </TreeItem>
-            </SimpleTreeView>
-        </Box> 
-    );
-}
-
-function SelectCategory({ getCategory }) {
-    const handleSelection = (category) => {
-        getCategory(category);
-    };
-    return (
-        <div className='selectCategory'>
-            <div className='pushCategory' onClick={() => handleSelection("push")}>PUSH</div>
-            <div className='pullCategory' onClick={() => handleSelection("pull")}>PULL</div>
-            <div className='legsCategory' onClick={() => handleSelection("legs")}>LEGS</div>
-            <div className='customCategory' onClick={() => handleSelection("custom")}>CUSTOM</div>
         </div>
     );
 }

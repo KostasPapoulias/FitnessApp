@@ -57,6 +57,7 @@
     width: 130px; 
     height: 115px;
     border: solid rgb(193, 48, 48);
+    border-radius: 20%;
     text-align: center;
     flex-shrink: 0; 
     justify-content: space-evenly;
@@ -84,9 +85,12 @@
     border: solid rgb(193, 48, 48);
     text-align: center;
     flex-shrink: 0; 
-    justify-content: space-evenly;
-    cursor: pointer;
+    justify-content: center; /* Add this line */
+    align-items: center; /* Add this line */    
+    /* cursor: pointer; */
+    
 }
+
 
 
 .tricepsCat{
