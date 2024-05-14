@@ -1,14 +1,20 @@
-.ProfileIcon{
+.StartIcon{
     grid-column: 3 / 3;
     grid-row: 1;
 
-    width: 70px;
-    height: 70px;
+    width: 120px;
+    height: 100px;
     /* border: solid black; */
     border-radius: 100%;
+    cursor: pointer;
+    position: absolute;
+    top: -45%;
+    right: 10%;
+    background-color: #b2b2b2;
+    z-index: 100;
 }
 
-.Profile{
+.Start{
 
     position: absolute;
     width: 400px;

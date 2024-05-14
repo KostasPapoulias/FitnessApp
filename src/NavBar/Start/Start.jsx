@@ -1,9 +1,9 @@
 import EditableTextField from './EditableTextField.jsx'
 
-export default function Profile(){
+export default function Start(){
 
     return(
-        <div className="Profile">
+        <div className="Start">
             <EditableTextField />
 
         </div>

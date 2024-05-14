@@ -2,30 +2,30 @@ import './NavBar.css'
 import Home from './Home/Home.jsx'
 import Add from './Add/Add.jsx'
 import { useState } from 'react'
-import ProfileIcon from './Profile/ProfileIcon.jsx'
+import StartIcon from './Start/StartIcon.jsx'
 import Add_Icon from './Add/AddIcon.jsx'
 import HomeIcon from './Home/HomeIcon.jsx'
-import Profile from './Profile/Profile.jsx'
+import Start from './Start/Start.jsx'
 import Exersices from './Exersices.jsx'
 
 export default function NavBar(){
 
     const [isHomePressed, setIsHomePressed] = useState(true);
     const [isAddPressed, setIsAddPressed] = useState(false);
-    const [isProfilePressed, setIsProfilePressed] = useState(false);
+    const [isStartPressed, setIsStartPressed] = useState(false);
 
     const handleHomePress = () => {
         setIsHomePressed(true);
         setIsAddPressed(false);
-        setIsProfilePressed(false);
+        setIsStartPressed(false);
     };
     const handleAddPress = () => {
         setIsAddPressed(true);
-        setIsProfilePressed(false);
+        setIsStartPressed(false);
         setIsHomePressed(false);
     };
-    const handleProfilePress = () => {
-        setIsProfilePressed(true);
+    const handleStartPress = () => {
+        setIsStartPressed(true);
         setIsAddPressed(false);
         setIsHomePressed(false);
     }
@@ -46,12 +46,12 @@ export default function NavBar(){
         <div className="NavBar">
             <HomeIcon onHomePress={handleHomePress} isHomePressed={isHomePressed}/>
             <Add_Icon onAddPress={handleAddPress} isaAddPressed={isAddPressed}/>
-            <ProfileIcon onProfilePress={handleProfilePress}/>  
+            <StartIcon onStartPress={handleStartPress} isStartPressed={isStartPressed}/>  
                       
             {isAddPressed && <Add Exersices={list} onListChange={handleListChange} saveDate={handleDate}/>}
 
             {isHomePressed && <Home Exersices={list} />}
-            {isProfilePressed && <Profile />}
+            {isStartPressed && <Start />}
             
         </div>
     );
