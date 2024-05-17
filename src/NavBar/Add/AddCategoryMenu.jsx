@@ -11,6 +11,7 @@ import quads from '../../../pictures/traps_files/Quads.png';
 import shoulders from '../../../pictures/traps_files/Shoulders.png';
 import lats from '../../../pictures/traps_files/Lats.png';
 import traps from '../../../pictures/traps_files/Traps.png';
+import './AddCategoryMenu.css';
 
 const AddCategoryMenu = ({ goBack,  chosenCategories}) => {
     const [selectedCategories, setSelectedCategories] = useState([]);

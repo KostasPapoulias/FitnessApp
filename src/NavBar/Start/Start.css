@@ -20,9 +20,23 @@
     width: 400px;
     height: 500px;
     border: solid rgb(237, 187, 187);
-    top:-650%;
+    top:-680%;
     right: 10%;
 
     z-index: 2;
 
+}
+
+.begin{
+    position: absolute;
+    top: 480px;
+    left: -10px;
+    border: solid 1px black;
+    width: 30%;
+    height: 50px;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 0 100px rgba(198, 188, 188, 0.2);
+    
 }

@@ -58,8 +58,9 @@ const ShowExersicesByCategory = ({category, toList}) => {
         <div className='pickExersiceContainer'>
             {List.filter(item => item.category === category).map(item => (
                 <div key={item.id} itemID={item.cId} className='pickExersice'>
-                    <img src={item.image} alt={item.name} style={{width: '60px'}}/>
-
+                    
+                    <img className ='im' src={item.image} alt={item.name} style={{width: '60px'}}/>
+                    
                     {item.name}
                     <button onClick={() => handleAddItemToList(item)}>Add</button> 
                 </div>

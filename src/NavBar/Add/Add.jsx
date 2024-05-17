@@ -24,6 +24,9 @@ import shoulders from '../../../pictures/traps_files/Shoulders.png';
 import lats from '../../../pictures/traps_files/Lats.png';
 import traps from '../../../pictures/traps_files/Traps.png';
 import Exersices from '../Exersices';
+import plus2 from '../../../pictures/traps_files/simple plus.png';
+import info from '../../../pictures/info.png';
+
 export default function Add({ Exersices, onListChange, saveDate}) { 
  
     const [ExersicesChosenToDisplay, setExersicesChosenToDisplay] = useState();
@@ -34,8 +37,8 @@ export default function Add({ Exersices, onListChange, saveDate}) {
         //   }));
         // newItem.date = date;
         const updatedList = [...Exersices, newItem]; 
-        // console.log("date: " + date);
-        console.log(newItem);
+        console.log(updatedList);
+        // console.log(newItem);
         onListChange(updatedList); 
         setExersicesChosenToDisplay(updatedList);
     };
@@ -135,8 +138,13 @@ const TopPart = ({topNew}) =>{
     }
     return(
         <div className='topPart'>
-            <div className='newWorkout' onClick={handleNew}>new</div>
-            <div className='info'>info</div>
+            <div className='newWorkout' onClick={handleNew}>
+                <img src={plus2} alt="plus2" style={{width: '10px'}}/>
+
+                new</div>
+            <div className='info'>
+                <img src={info} alt="info" style={{width: '20px'}}/>
+            </div>
         </div>
     );
 }
@@ -176,7 +184,7 @@ const ChosenExercises = ({ExersicesList}) => {
         <div className='chosenExercises'>
             {ExersicesList && ExersicesList.map(item => (
                 <div className='exersice' key={item.id} itemID={item.cId}>
-                    <img src={item.image} alt={item.name} style={{width: '60px'}}/>
+                    <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
                     {item.name}
                 </div>
             ))}
