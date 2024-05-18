@@ -30,13 +30,14 @@ import info from '../../../pictures/info.png';
 export default function Add({ Exersices, onListChange, saveDate}) { 
  
     const [ExersicesChosenToDisplay, setExersicesChosenToDisplay] = useState();
+    const [exersicesCopy, setExersicesCopy] = useState(Exersices);
     const addItemToList = (newItem) => {
         // const updatedExercises = exercises.map(exercise => ({
         //     ...exercise,
         //     date: date
         //   }));
         // newItem.date = date;
-        const updatedList = [...Exersices, newItem]; 
+        const updatedList = [...exersicesCopy, newItem]; 
         console.log(updatedList);
         // console.log(newItem);
         onListChange(updatedList); 
@@ -65,6 +66,7 @@ export default function Add({ Exersices, onListChange, saveDate}) {
     }
     const handleTopNew = () => {
         setTopNew(true);
+        setExersicesCopy([]);
     }
     //to be given to addExerciseMenu
     const handleReturnSelectedCategory = (c) => {
