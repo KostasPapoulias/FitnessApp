@@ -42,6 +42,11 @@ export default function NavBar(){
         // setDate(newDate);
         // console.log(newDate);
     }
+    const [musclesNav, setMuscles] = useState([]);
+    const handleMuscles = (muscles) => {
+        setMuscles(muscles);
+        console.log("nav: "+muscles);
+    }
 
     return(
         <div className="NavBar">
@@ -51,8 +56,8 @@ export default function NavBar(){
                       
             {isAddPressed && <Add Exersices={list} onListChange={handleListChange} saveDate={handleDate}/>}
 
-            {isHomePressed && <Home Exersices={list} />}
-            {list ? isStartPressed && <Start exe={list}/> : <></>}
+            {isHomePressed && <Home Exersices={list} Wmuscles={musclesNav}/>}
+            {list ? isStartPressed && <Start exe={list} workedMuscles={handleMuscles}/> : <></>}
             
         </div>
     );

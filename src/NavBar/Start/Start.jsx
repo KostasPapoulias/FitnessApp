@@ -1,16 +1,21 @@
 import React, {useState} from 'react';
 
-export default function Start({exe}){
+export default function Start({exe, workedMuscles}){
 
     // const [Exersices, setExersices] = useState(Exercises);
     const [Exersices, setExersices] = useState(exe);
-    const handleClick = () => {
-        console.log(Exersices);
+    const handleBegin = () => {
+        // console.log(Exersices);
+
+        let groups = Array.isArray(Exersices) ? Exersices.map(item => item.category) : [];
+        
+        workedMuscles(groups);
+        // workedMuscles(Exersices.map(item => item.group));
     }
     return(
         <div className="Start">
             <ChosenExercises ExersicesList={Exersices} />
-            <div className="begin" onClick={handleClick}>Start Exersice</div>
+            <div className="begin" onClick={handleBegin}>Start Exersice</div>
         </div>
     );
 }
