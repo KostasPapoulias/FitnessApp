@@ -7,8 +7,9 @@ import { useState } from 'react';
 // import HomeList from './HomeList.jsx';
 import DatePicker from '../Date';
 import {Human} from './Human';
+import Test from './Test';
 
-export default function({Exersices}){
+export default function({Exersices, Wmuscles}){
     
     const [homeDate, setDate] = useState(new Date().toISOString().slice(0, 10));
     // const currentDate = data.toISOString().slice(0, 10); // format YYYY-MM-DD
@@ -43,7 +44,8 @@ export default function({Exersices}){
             setShowFirstLayer(true);
         }
     }
-    
+
+    console.log(Wmuscles);
 
 
     return(
@@ -51,7 +53,8 @@ export default function({Exersices}){
             
             
 
-            <Human />
+            {/* <Human /> */}
+            <Test WoMuscles={Wmuscles}/>
 
             {/* {showFirstLayer && <FirstLayer saveDate={handleDate} todayWorkout={handleTodayWorkout}/>} */}
 
