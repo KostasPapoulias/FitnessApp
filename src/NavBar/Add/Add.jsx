@@ -37,7 +37,8 @@ export default function Add({ Exersices, onListChange, saveDate}) {
         //     date: date
         //   }));
         // newItem.date = date;
-        const updatedList = [...exersicesCopy, newItem]; 
+        // const updatedList = [...exersicesCopy, newItem]; 
+        const updatedList = [...Exersices, newItem];
         console.log(updatedList);
         // console.log(newItem);
         onListChange(updatedList); 
