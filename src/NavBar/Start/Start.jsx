@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 
-export default function Start({exe, workedMuscles}){
+export default function Start({exe, workedMuscles, worked}){
 
     // const [Exersices, setExersices] = useState(Exercises);
     const [Exersices, setExersices] = useState(exe);
@@ -10,6 +10,7 @@ export default function Start({exe, workedMuscles}){
         let groups = Array.isArray(Exersices) ? Exersices.map(item => item.category) : [];
         
         workedMuscles(groups);
+        worked(true);
         // workedMuscles(Exersices.map(item => item.group));
     }
     return(
