@@ -1,21 +1,24 @@
 import React, {useState} from 'react';
+import { useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 
-export default function Start({exe, workedMuscles, worked}){
 
-    // const [Exersices, setExersices] = useState(Exercises);
-    const [Exersices, setExersices] = useState(exe);
+export default function Start({workedMuscles, worked}){
+    const dispatch = useDispatch();
+    const list = useSelector(state => state.exercises.list);
+
     const handleBegin = () => {
-        // console.log(Exersices);
+        let groups = Array.isArray(list) ? list.map(item => item.category) : [];
 
-        let groups = Array.isArray(Exersices) ? Exersices.map(item => item.category) : [];
-        
         workedMuscles(groups);
         worked(true);
-        // workedMuscles(Exersices.map(item => item.group));
+        dispatch({ type: 'CLEAR_LIST' });
+        dispatch({type: 'CLEAR_CATEGORY'});
+
     }
     return(
         <div className="Start">
-            <ChosenExercises ExersicesList={Exersices} />
+            <ChosenExercises />
             <div className="begin" onClick={handleBegin}>Start Exersice</div>
         </div>
     );
@@ -25,11 +28,11 @@ export default function Start({exe, workedMuscles, worked}){
  * 
  * @returns displayes the chosen exercises
  */
-const ChosenExercises = ({ExersicesList}) => {
-    console.log(ExersicesList);
+const ChosenExercises = () => {
+    const list = useSelector(state => state.exercises.list);
     return(
         <div className='chosenExercises'>
-            {ExersicesList && ExersicesList.map(item => (
+            {list && list.map(item => (
                 <div className='exersice' key={item.id} itemID={item.cId}>
                     <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
                     {item.name}
