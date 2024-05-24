@@ -6,7 +6,6 @@ import StartIcon from './Start/StartIcon.jsx'
 import Add_Icon from './Add/AddIcon.jsx'
 import HomeIcon from './Home/HomeIcon.jsx'
 import Start from './Start/Start.jsx'
-import Exersices from './Exersices.jsx'
 
 export default function NavBar(){
 
@@ -62,7 +61,7 @@ export default function NavBar(){
             {isAddPressed && <Add Exersices={list} onListChange={handleListChange} saveDate={handleDate}/>}
 
             {isHomePressed && <Home Exersices={list} Wmuscles={musclesNav}/>}
-            {list ? isStartPressed && <Start exe={list} workedMuscles={handleMuscles} worked={handleWorked}/> : <></>}
+            {list ? isStartPressed && <Start workedMuscles={handleMuscles} worked={handleWorked}/> : <></>}
             
         </div>
     );
