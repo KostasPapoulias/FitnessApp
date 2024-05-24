@@ -23,9 +23,10 @@ import quads from '../../../pictures/traps_files/Quads.png';
 import shoulders from '../../../pictures/traps_files/Shoulders.png';
 import lats from '../../../pictures/traps_files/Lats.png';
 import traps from '../../../pictures/traps_files/Traps.png';
-import Exersices from '../Exersices';
 import plus2 from '../../../pictures/traps_files/simple plus.png';
 import info from '../../../pictures/info.png';
+import { useSelector, useDispatch } from 'react-redux';
+
 
 export default function Add({ Exersices, onListChange, saveDate}) { 
  
@@ -81,7 +82,7 @@ export default function Add({ Exersices, onListChange, saveDate}) {
             {topNew? <AddCategoryMenu goBack={handleTopReturn} 
                                       chosenCategories={handleChosenCategories}/> 
                     : <TopPart topNew={handleTopNew}/>}
-            {!topNew? <DisplayDefault selectedCategory={returnCategorySelected} Exersice={ExersicesChosenToDisplay} returnItem={addItemToList} allCate={chosenCategories}/> : <></>}
+            {!topNew? <DisplayDefault selectedCategory={returnCategorySelected}/> : <></>}
             {!topNew && <ShowSelectedCategories categoriesArray={chosenCategories} returnSelectedCategory={handleReturnSelectedCategory}/>}
         </div>
     );
@@ -89,7 +90,7 @@ export default function Add({ Exersices, onListChange, saveDate}) {
 /**
  * displayes the default view
  */
-const DisplayDefault = ({selectedCategory, Exersice, returnItem, allCate}) => {
+const DisplayDefault = ({selectedCategory}) => {
 
 
     const [middleNew, setMiddleNew] = useState(false);
@@ -97,9 +98,6 @@ const DisplayDefault = ({selectedCategory, Exersice, returnItem, allCate}) => {
         setMiddleNew(!middleNew);
     }
 
-    const handleReturnExersice = (item) => {
-        returnItem(item);
-    }
     return(
         <div>
             {middleNew ? (
@@ -109,7 +107,8 @@ const DisplayDefault = ({selectedCategory, Exersice, returnItem, allCate}) => {
 
                         return
                     </div>
-                    <AddExerciseMenu category={selectedCategory} returnExersice={handleReturnExersice} allCategoriesSelected={allCate}/>
+
+                    <AddExerciseMenu category={selectedCategory} />
 
                 </div>
                 
@@ -120,7 +119,7 @@ const DisplayDefault = ({selectedCategory, Exersice, returnItem, allCate}) => {
 
                         add new exercise
                     </div>
-                    <ChosenExercises ExersicesList={Exersice}/>
+                    <ChosenExercises />
 
                 </div>
             )
@@ -136,8 +135,11 @@ const DisplayDefault = ({selectedCategory, Exersice, returnItem, allCate}) => {
  * @returns 
  */
 const TopPart = ({topNew}) =>{
+    const dispatch = useDispatch();
     const handleNew = () => {
         topNew(true);
+        dispatch({type: 'CLEAR_LIST'});
+        dispatch({type: 'CLEAR_CATEGORY'});
     }
     return(
         <div className='topPart'>
@@ -157,8 +159,7 @@ const TopPart = ({topNew}) =>{
  * @returns 
  */
 const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
-    
-    const [selection, setSelection] = useState(categoriesArray[0]);
+    const categories = useSelector(state => Array.isArray(state.categories.categoriesList) ? state.categories.categoriesList : []);    const [selection, setSelection] = useState(categoriesArray[0]);
     const handleSelection = (category) => {
         setSelection(prevSelection => category);
         returnSelectedCategory(prevSelection => category);
@@ -167,12 +168,13 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
     return (
         // <div className='selectedCategoriesContainer'>
             <div className='displayCateg'>
-                {categoriesArray.map((category) => (
+                {categories.map((category) => (
                     <div key={category} className='categ' onClick={() => handleSelection(category)}>
                         <div style={{fontFamily: "Copperplate, Fantasy"}}>{category}</div>
                         <img src={'../../../pictures/traps_files/'+category+'.png'} alt={category} style={{width: '80px'}}/>
                     </div>
                 ))}
+                
             </div>
         // </div>
     );
@@ -181,11 +183,13 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
  * 
  * @returns displayes the chosen exercises
  */
-const ChosenExercises = ({ExersicesList}) => {
+const ChosenExercises = () => {
+    const list = useSelector(state => Array.isArray(state.exercises.list) ? state.exercises.list : []);    
 
+    console.log(list);
     return(
         <div className='chosenExercises'>
-            {ExersicesList && ExersicesList.map(item => (
+            {list && list.map(item => (
                 <div className='exersice' key={item.id} itemID={item.cId}>
                     <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
                     {item.name}

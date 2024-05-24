@@ -12,6 +12,7 @@ import shoulders from '../../../pictures/traps_files/Shoulders.png';
 import lats from '../../../pictures/traps_files/Lats.png';
 import traps from '../../../pictures/traps_files/Traps.png';
 import './AddCategoryMenu.css';
+import { useDispatch } from 'react-redux';
 
 const AddCategoryMenu = ({ goBack,  chosenCategories}) => {
     const [selectedCategories, setSelectedCategories] = useState([]);
@@ -44,12 +45,15 @@ const AddCategoryMenu = ({ goBack,  chosenCategories}) => {
 };
 
 const Categories = ({ selectedCategories, setSelectedCategories }) => {
+    const dispatch = useDispatch();
+
     const handleCategoryClick = (category) => {
         if (selectedCategories.includes(category)) {
             setSelectedCategories(selectedCategories.filter((c) => c !== category));
         } else {
             setSelectedCategories([...selectedCategories, category]);
         }
+        dispatch({ type: 'ADD_CATEGORY', payload: category });
     };
 
     return (

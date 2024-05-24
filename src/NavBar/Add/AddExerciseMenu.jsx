@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import './AddExerciseMenu.css';
 import List from './List.jsx'
+import { useDispatch, useSelector } from 'react-redux';
 
-const AddExerciseMenu = ({ category, returnExersice, allCategoriesSelected }) => {
+const AddExerciseMenu = ({ category, returnExersice}) => {
 
     const [selectedCategories, setSelectedCategories] = useState([]);
 
@@ -17,23 +18,24 @@ const AddExerciseMenu = ({ category, returnExersice, allCategoriesSelected }) =>
     return (
         <div className='addExerciseMenu'>
             
-            {cate ? <ShowExersicesByCategory category={category} toList={handleToList} /> : <ShowExersices  category={allCategoriesSelected} toList={handleToList} />}
+            {cate ? <ShowExersicesByCategory category={category} /> : <ShowExersices />}
 
         </div>
     );
 };
 
 
-const ShowExersices = ({category, toList}) => {
-
+const ShowExersices = () => {
+    const dispatch = useDispatch();
+    const categories = useSelector(state => Array.isArray(state.categories.categoriesList) ? state.categories.categoriesList : []);   
     const handleAddItemToList = (item) => {
-        toList(item);
-    }
-    console.log(category);
+        dispatch({ type: 'ADD_ITEM', payload: item });
+    };
+
 
     return(
         <div className='pickExersiceContainer'>
-            {category.map(cat => (
+            {categories.map(cat => (
                 List.filter(item => item.category === cat).map(item => (
                     <div key={item.id} itemID={item.cId} className='pickExersice'>
                         <img src={item.image} alt={item.name} style={{width: '60px'}}/>
@@ -48,11 +50,14 @@ const ShowExersices = ({category, toList}) => {
 };
 
 
-const ShowExersicesByCategory = ({category, toList}) => {
+const ShowExersicesByCategory = ({category}) => {
+
+    const dispatch = useDispatch();
 
     const handleAddItemToList = (item) => {
-        toList(item);
-    }
+        dispatch({ type: 'ADD_ITEM', payload: item });
+
+    };
 
     return(
         <div className='pickExersiceContainer'>
