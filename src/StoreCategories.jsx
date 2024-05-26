@@ -28,7 +28,7 @@ function CategoriesReducer(state = initialState, action) {
         return {
           ...state,
           recovery: state.recovery.map(category =>
-            category.name === action.payload && category.count <= 2
+            category.name === action.payload && category.count < 2
               ? { ...category, count: category.count + 1 }
               : category
           )
