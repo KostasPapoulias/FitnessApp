@@ -1,0 +1,49 @@
+.WorkoutPanel {
+    position: absolute;
+    top: 0px;
+    left: -50px;
+    border: solid 1px black;
+    width: 125%;
+    height: 125%;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    z-index: 200;
+    border-radius: 20px;
+}
+
+.finish{
+    position: absolute;
+    top: 480px;
+    left: -10px;
+    border: solid 1px black;
+    cursor: pointer;
+    width: 30%;
+    height: 50px;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    box-shadow: 0 0 100px rgba(198, 188, 188, 0.2);
+    z-index: 2;
+    border-radius: 20px;
+    
+}
+.clock{
+    position: absolute;
+    top: -10%;
+    right: 10%;
+    font-size: 20px;
+    color: black;
+    border: solid 1px black;
+}
+
+.done{
+    position: absolute;
+    border: solid 1px black;
+    right: 10px;
+    width: 20%;
+    height: 50px;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 0 100px rgba(198, 188, 188, 0.2);
+    border-radius: 20px;
+}
