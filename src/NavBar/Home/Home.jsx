@@ -6,8 +6,8 @@ import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import { useState } from 'react';
 // import HomeList from './HomeList.jsx';
 import DatePicker from '../Date';
-import {Human} from './Human';
-import Test from './Test';
+import Human from './Human';
+// import Test from './Test';
 
 export default function({Exersices, Wmuscles}){
     
@@ -54,7 +54,7 @@ export default function({Exersices, Wmuscles}){
             
 
             {/* <Human /> */}
-            <Test WoMuscles={Wmuscles}/>
+            <Human WoMuscles={Wmuscles}/>
 
             {/* {showFirstLayer && <FirstLayer saveDate={handleDate} todayWorkout={handleTodayWorkout}/>} */}
 
