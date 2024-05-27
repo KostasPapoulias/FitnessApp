@@ -11,7 +11,7 @@
     top: -45%;
     right: 10%;
     background-color: #b2b2b2;
-    /* z-index: 5; */
+     /* z-index: 3;  */
 }
 
 .chosenExercisesStart{
@@ -28,14 +28,12 @@
 }
 
 .Start{
-
     position: absolute;
     width: 400px;
     height: 500px;
     /* border: solid rgb(237, 187, 187); */
     top:-680%;
     right: 10%;
-
     z-index: 2;
 
 }
@@ -55,9 +53,10 @@
     box-shadow: 0 0 100px rgba(198, 188, 188, 0.2);
     z-index: 2;
     border-radius: 20px;
-    
+    display: flex;
+    justify-content: center;
+    align-items: center;
 
-    
 }
 
 

@@ -18,7 +18,6 @@ const AddCategoryMenu = ({ goBack,  chosenCategories}) => {
     const [selectedCategories, setSelectedCategories] = useState([]);
 
     const handleSave = () => {
-        // Do something with the selected categories
         if(selectedCategories.length !== 0)
             setSavePressed(true);
         console.log(selectedCategories);
@@ -50,10 +49,12 @@ const Categories = ({ selectedCategories, setSelectedCategories }) => {
     const handleCategoryClick = (category) => {
         if (selectedCategories.includes(category)) {
             setSelectedCategories(selectedCategories.filter((c) => c !== category));
+            dispatch({ type: 'REMOVE_CATEGORY', payload: category });
         } else {
             setSelectedCategories([...selectedCategories, category]);
+            dispatch({ type: 'ADD_CATEGORY', payload: category });
+            dispatch({ type: 'TOGGLE_UP', payload: 'false' });
         }
-        dispatch({ type: 'ADD_CATEGORY', payload: category });
     };
 
     return (

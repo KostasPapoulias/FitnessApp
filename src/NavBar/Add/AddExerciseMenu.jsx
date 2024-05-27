@@ -28,8 +28,15 @@ const AddExerciseMenu = ({ category, returnExersice}) => {
 const ShowExersices = () => {
     const dispatch = useDispatch();
     const categories = useSelector(state => Array.isArray(state.categories.categoriesList) ? state.categories.categoriesList : []);   
+    const exercises = useSelector(state => state.exercises.list);
+
     const handleAddItemToList = (item) => {
-        dispatch({ type: 'ADD_ITEM', payload: item });
+        const isItemExists = exercises.some(Item => Item.id === item.id);
+        if (!isItemExists) {
+            dispatch({ type: 'ADD_ITEM', payload: item });
+            dispatch({ type: 'TOGGLE_DOWN', payload: 'false' });
+        }
+        
     };
 
 

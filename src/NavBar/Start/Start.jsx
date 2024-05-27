@@ -3,7 +3,6 @@ import React, {useState, useEffect} from 'react';
 import { useSelector } from 'react-redux';
 import { useDispatch } from 'react-redux';
 import './Start.css';
-import Timer from './Timer';
 import WorkoutPanel from './WorkoutPanel';
 
 
@@ -13,15 +12,12 @@ export default function Start({workedMuscles, worked}){
     const recovery = useSelector(state => state.categories.recovery);
     const [hasStarted, setHasStarted] = useState(false);
 
-
     const [isRunning, setIsRunning] = useState(false);
-
 
     const handleBegin = () => {
         setHasStarted(!hasStarted);
         setIsRunning(!isRunning);
     }
-
 
     const handleFinish = (executedExersices) => {
         console.log(executedExersices);
@@ -29,7 +25,6 @@ export default function Start({workedMuscles, worked}){
         setIsRunning(!isRunning);
         let workedCategories = Array.isArray(executedExersices) ? executedExersices.map(item => item.category) : [];
         console.log(workedCategories);
-
 
         recovery.forEach(recovery => {
             const match = workedCategories.some(item => item === recovery.name);
@@ -48,11 +43,7 @@ export default function Start({workedMuscles, worked}){
             {hasStarted ? (
                 <div className='Started'>
                     <WorkoutPanel onFinishPress={handleFinish} />
-                    {/* <ChosenExercises />
-                    <div className="finish" onClick={handleFinish}>Finish</div> 
-                    <div className="clock"><Timer isRunning={isRunning}/></div> */}
-
-            </div>
+                </div>
             ) : (
                 <div className='Default'>
                     <ChosenExercises />

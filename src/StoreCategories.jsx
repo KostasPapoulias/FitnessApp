@@ -24,6 +24,11 @@ function CategoriesReducer(state = initialState, action) {
         return { ...state, categoriesList: [...state.categoriesList, action.payload] };
       case 'CLEAR_CATEGORY':
         return { ...state, categoriesList: [] };
+      case 'REMOVE_CATEGORY':
+        return { 
+          ...state, 
+          categoriesList: state.categoriesList.filter(category => category !== action.payload) 
+        };
       case 'INCREMENT_CATEGORY_COUNT':
         return {
           ...state,

@@ -29,6 +29,7 @@
     width: 99%;
     height: 100px;
     border: solid rgb(193, 48, 48);
+    border-bottom: 0;
     border-left: 0;
     border-right: 0;
     border-radius: 2%;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Add.css';
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
@@ -26,6 +26,7 @@ import traps from '../../../pictures/traps_files/Traps.png';
 import plus2 from '../../../pictures/traps_files/simple plus.png';
 import info from '../../../pictures/info.png';
 import { useSelector, useDispatch } from 'react-redux';
+import CustomizedCheckbox from './CustomizedCheckBox';
 
 
 export default function Add({ Exersices, onListChange, saveDate}) { 
@@ -69,12 +70,18 @@ export default function Add({ Exersices, onListChange, saveDate}) {
     const handleTopNew = () => {
         setTopNew(true);
         setExersicesCopy([]);
+        setReturnCategorySelected('');
     }
     //to be given to addExerciseMenu
     const handleReturnSelectedCategory = (c) => {
         setReturnCategorySelected(c);
     }
 
+    const help = useSelector(state => state.help.help);
+
+    const catList = useSelector(state => state.categories.categoriesList);
+
+    
 
     return (
         
@@ -98,6 +105,10 @@ const DisplayDefault = ({selectedCategory}) => {
         setMiddleNew(!middleNew);
     }
 
+    const toggleUp = useSelector(state => state.help.toggleUp);
+    const toggleDown = useSelector(state => state.help.toggleDown);
+    const help = useSelector(state => state.help.help); 
+
     return(
         <div>
             {middleNew ? (
@@ -114,7 +125,9 @@ const DisplayDefault = ({selectedCategory}) => {
                 
             ):( 
                 <div>
-                    <div className='addExercise' onClick={handleMiddleNew}> 
+                    {/* <div className='addExercise' onClick={handleMiddleNew}>  */}
+                    <div className={`addExercise ${toggleDown[0]==='true' && toggleUp[0]==='false' && help=='true'? 'cheat' : ''}`} onClick={handleMiddleNew}> 
+
                         <img src={plus} alt="plus" style={{width: '35px'}}/>
 
                         add new exercise
@@ -140,26 +153,78 @@ const TopPart = ({topNew}) =>{
         topNew(true);
         dispatch({type: 'CLEAR_LIST'});
         dispatch({type: 'CLEAR_CATEGORY'});
+        dispatch({type: 'TOGGLE_DOWN', payload: 'true'});
     }
+    const toggleUp = useSelector(state => state.help.toggleUp);
+    const help = useSelector(state => state.help.help);
+    const [infoPress, setInfoPress] = useState(false);
+    const handleInfo = () => {
+        setInfoPress(!infoPress);
+        // console.log(help);
+    }
+    const isHelpTrue = help == 'true';
+
+
     return(
         <div className='topPart'>
-            <div className='newWorkout' onClick={handleNew}>
+            {/* <div className='newWorkout' onClick={handleNew}> */}
+            {/* {console.log("help: " + !help==='true')} */}
+            {console.log(help=='true')}
+            {console.log('Type of ishelp:' + isHelpTrue)}
+
+            <div className={`newWorkout ${toggleUp[0]==='true' && help=='true'? 'cheat' : ''}`} onClick={handleNew}> 
                 <img src={plus2} alt="plus2" style={{width: '10px'}}/>
 
                 new</div>
-            <div className='info'>
+            <div className='info' onClick={handleInfo}>
                 <img src={info} alt="info" style={{width: '20px'}}/>
+            </div>
+            {infoPress && <Info/>}
+
+        </div>
+    );
+}
+
+const Info = () => {
+    const dispatch = useDispatch();
+    const help = useSelector(state => state.help.help);
+
+    const handleCheckBox = (pressed) => {
+        dispatch({type: 'ADD_HELP', payload: pressed});
+        console.log("what return? "+pressed);
+        // if(pressed){
+        //     dispatch({type: 'ADD_HELP', payload: 'true'});
+        // } else {
+        //     dispatch({type: 'DELETE_HELP', payload: 'false'});
+        // }
+    }
+    
+    return(
+        <div className='infoBox'>
+            <div className='activateHelp'>
+                <label htmlFor="helpCheckbox">Activate help</label>
+                <CustomizedCheckbox checkBoxPressed={handleCheckBox}/>
             </div>
         </div>
     );
 }
+
 /**
  * displays the selected categories
  * @param {} param0 
  * @returns 
  */
 const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
-    const categories = useSelector(state => Array.isArray(state.categories.categoriesList) ? state.categories.categoriesList : []);    const [selection, setSelection] = useState(categoriesArray[0]);
+    const dispatch = useDispatch();
+    const categories = useSelector(state => Array.isArray(state.categories.categoriesList) ? state.categories.categoriesList : []);
+
+    useEffect(() => {
+        if (!categories.length) {
+            dispatch({ type: 'TOGGLE_UP', payload: 'true' });
+        }
+    }, [categories, dispatch]);
+
+    const [selection, setSelection] = useState(categoriesArray[0]);
     const handleSelection = (category) => {
         setSelection(prevSelection => category);
         returnSelectedCategory(prevSelection => category);
@@ -186,7 +251,7 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
 const ChosenExercises = () => {
     const list = useSelector(state => Array.isArray(state.exercises.list) ? state.exercises.list : []);    
 
-    console.log(list);
+    // console.log(list);
     return(
         <div className='chosenExercises'>
             {list && list.map(item => (

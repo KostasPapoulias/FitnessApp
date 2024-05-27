@@ -6,6 +6,10 @@ import { useSelector, useDispatch } from 'react-redux';
 export default function WorkoutPanel({onFinishPress}){
     const [isRunning, setIsRunning] = useState(true);
     const [completedExercises, setCompletedExercises] = useState([]);
+    const [pressTimer, setPressTimer] = useState(null);
+    const [isPressed, setIsPressed] = useState(false);
+
+
     const handleFinishPress = () => {
         setIsRunning(false);
         console.log(completedExercises);
@@ -14,10 +18,27 @@ export default function WorkoutPanel({onFinishPress}){
     const handleExecuted = (executedExercises) => {
         setCompletedExercises(prevExercises => [...prevExercises, executedExercises]);
     }
+    const handleButtonPress = () => {
+        setIsPressed(true);
+        setPressTimer(setTimeout(() => {
+            handleFinishPress();
+        }, 1200)); 
+    }
+
+    const handleButtonRelease = () => {
+        setIsPressed(false);
+        clearTimeout(pressTimer);
+    }
 
     return(
         <div className="WorkoutPanel">
-            <div className='finish' onClick={handleFinishPress}>Finish</div>
+            <div className={`finish ${isPressed ? 'pressed' : ''}`} 
+                onMouseDown={handleButtonPress} 
+                onMouseUp={handleButtonRelease}
+                onTouchStart={handleButtonPress} 
+                onTouchEnd={handleButtonRelease}>
+            Finish</div>
+
             <div className="clock"><Timer isRunning={isRunning}/></div> 
             <ChosenExercises executed={handleExecuted} />
         </div>
@@ -32,14 +53,13 @@ const ChosenExercises = ({executed}) => {
     const handleDone = (item) => {
         executed(item);
         dispatch({ type: 'REMOVE_ITEM', payload: item });
-        // dispatch({ type: 'UPDATE_LIST', payload: list.filter(exercise => exercise.id !== item.id) });
         console.log(list);
     }
 
     return(
         <div className='chosenExercisesStart'>
             {list && list.map(item => (
-                <div className='exersice' key={item.id} itemID={item.cId}>
+                <div className='exersicePanel' key={item.id} itemID={item.cId}>
                     <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
                     {item.name}
                     <div className='done' onClick={() => handleDone(item)}>Done</div>

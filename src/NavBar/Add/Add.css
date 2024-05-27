@@ -28,6 +28,32 @@
     /* gap: 100px; */ 
 
 }
+
+@keyframes sizing {
+    0% {scale: 1;}
+    50% {scale: 1.25;}
+    100% {scale: 1; }
+}
+  
+.cheat{
+    animation: sizing 2s infinite;
+}
+.infoBox{
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 150px;
+    height: 100px;
+    border: solid black;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: center;
+    background-color: #b2b2b2;
+    border-top-left-radius: 20px ;
+    border-top-right-radius: 20px ;
+    z-index: 2;
+}
 .topPart{
     width: auto;
     height: 60px;
@@ -54,6 +80,7 @@
     /* background-color: rgb(210, 29, 29); */
     text-align: center;
     cursor: pointer;
+    z-index: 3;
 }
 
 .categoriesProgress{
@@ -115,12 +142,12 @@
     width: 99%; 
     height: 100px;
     border: solid rgb(193, 48, 48);
+    border-bottom: 0;
     border-left: 0;
     border-right: 0;
     text-align: center;
     flex-shrink: 0; 
     justify-content: space-evenly;
-    cursor: pointer;
     justify-content: center; 
     align-items: center; 
     display: flex;
