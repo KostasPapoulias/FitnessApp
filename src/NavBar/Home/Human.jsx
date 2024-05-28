@@ -7,22 +7,9 @@ import human2 from '../../../pictures/back5.svg';
 import flip from '../../../pictures/flip.png';
 import { useSelector } from "react-redux";
 import "./Human.css";
-
-import { useEffect } from "react";
-
 import { useState } from "react";
-export default function Human({WoMuscles}){
 
-    const [muscles, setMuscles] = useState([]);
-    const uniqueMuscles = [...new Set(muscles)];
-
-    useEffect(() => {
-      console.log("workedMuscles: ", WoMuscles);
-      if (Array.isArray(WoMuscles)) {
-        console.log("workedMuscles: ", WoMuscles);
-          setMuscles(prevMuscles => [...prevMuscles, ...WoMuscles]);
-      }
-    }, [WoMuscles]);
+export default function Human(){
 
 
     const [isHuman1, setIsHuman1] = useState(true);
@@ -43,7 +30,7 @@ export default function Human({WoMuscles}){
     };
 
     const recovery = useSelector(state => Array.isArray(state.categories.recovery) ? state.categories.recovery : []); 
-    console.log(recovery);
+
     return(
         <div className='HumanContainer'>
 
@@ -107,9 +94,7 @@ export default function Human({WoMuscles}){
                 </div>
                 )}
                 
-                <button className='switchSide' onClick={handleClick}><img src={flip} alt="flip" style={{width: '50px'}}/></button>
-            
-          
+                <button className='switchSide' onClick={handleClick}><img src={flip} alt="flip" style={{width: '50px'}}/></button>   
         </div>
     );
 }

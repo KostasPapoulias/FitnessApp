@@ -41,17 +41,7 @@ export default function NavBar(){
         // setDate(newDate);
         // console.log(newDate);
     }
-    const [musclesNav, setMuscles] = useState([]);
-    const handleMuscles = (muscles) => {
-        setMuscles(muscles);
-        console.log("nav: "+muscles);
-    }
-
-    const handleWorked = (worked) => {
-        if(worked)
-            setListItems([]);
-    }
-
+    
     return(
         <div className="NavBar">
             <HomeIcon onHomePress={handleHomePress} isHomePressed={isHomePressed}/>
@@ -60,8 +50,8 @@ export default function NavBar(){
                       
             {isAddPressed && <Add Exersices={list} onListChange={handleListChange} saveDate={handleDate}/>}
 
-            {isHomePressed && <Home Exersices={list} Wmuscles={musclesNav}/>}
-            {list ? isStartPressed && <Start workedMuscles={handleMuscles} worked={handleWorked}/> : <></>}
+            {isHomePressed && <Home />}
+            {isStartPressed && <Start />}
             
         </div>
     );

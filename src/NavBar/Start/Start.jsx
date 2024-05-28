@@ -6,7 +6,7 @@ import './Start.css';
 import WorkoutPanel from './WorkoutPanel';
 
 
-export default function Start({workedMuscles, worked}){
+export default function Start(){
     const dispatch = useDispatch();
     const list = useSelector(state => state.exercises.list);
     const recovery = useSelector(state => state.categories.recovery);
@@ -20,14 +20,14 @@ export default function Start({workedMuscles, worked}){
     }
 
     const handleFinish = (executedExersices) => {
-        console.log(executedExersices);
         setHasStarted(!hasStarted);
         setIsRunning(!isRunning);
         let workedCategories = Array.isArray(executedExersices) ? executedExersices.map(item => item.category) : [];
+        console.log(executedExersices);
         console.log(workedCategories);
-
         recovery.forEach(recovery => {
             const match = workedCategories.some(item => item === recovery.name);
+
             match ? 
                 dispatch({ type: 'INCREMENT_CATEGORY_COUNT', payload: recovery.name })
             :
