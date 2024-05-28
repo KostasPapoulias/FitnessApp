@@ -1,9 +1,13 @@
 import './Add.css'
-import Box from '@mui/material/Box';
-import Fab from '@mui/material/Fab';
 import AddIcon from '@mui/icons-material/Add';
 import workout1 from '../../../pictures/workout1.png';
 import workout2 from '../../../pictures/workout2.png';
+
+/**
+ * 
+ * @param {onAddPress, isaAddPressed} param0 
+ * @returns one of two images depending on the state of isaAddPressed
+ */
 
 const Add_Icon = ({ onAddPress, isaAddPressed }) => {
 

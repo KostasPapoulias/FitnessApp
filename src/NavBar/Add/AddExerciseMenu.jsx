@@ -1,19 +1,16 @@
-import React, { useEffect, useState } from 'react';
 import './AddExerciseMenu.css';
 import List from './List.jsx'
 import { useDispatch, useSelector } from 'react-redux';
+import ButtonAdd from './ButtonAdd';
 
-const AddExerciseMenu = ({ category, returnExersice}) => {
+/**
+ * 
+ * @param {category} param0 is an object that contains the category
+ * @returns the exercises by the categories that have been chosen or only the exercises of the chosen param0
+ */
+const AddExerciseMenu = ({ category}) => {
 
-    const [selectedCategories, setSelectedCategories] = useState([]);
-
-     const cate = category;
-
-    const handleToList = (item) => {
-        returnExersice(item);
-    }
-
-    
+    const cate = category;  
 
     return (
         <div className='addExerciseMenu'>
@@ -24,7 +21,10 @@ const AddExerciseMenu = ({ category, returnExersice}) => {
     );
 };
 
-
+/**
+ * 
+ * @returns the exercises by the categories that have been chosen
+ */
 const ShowExersices = () => {
     const dispatch = useDispatch();
     const categories = useSelector(state => Array.isArray(state.categories.categoriesList) ? state.categories.categoriesList : []);   
@@ -48,22 +48,30 @@ const ShowExersices = () => {
                         <img src={item.image} alt={item.name} style={{width: '60px'}}/>
 
                         {item.name}
-                        <button onClick={() => handleAddItemToList(item)}>Add</button> 
-                    </div>
+                        <ButtonAdd AddPressed={() => handleAddItemToList(item)} />                        
+                   </div>
                 ))
             ))}
         </div>
     );
 };
 
-
+/**
+ * 
+ * @param {category} param0 is an object that contains the category
+ * @returns the exercises by the category that has been chosen
+ */
 const ShowExersicesByCategory = ({category}) => {
 
     const dispatch = useDispatch();
+    const exercises = useSelector(state => state.exercises.list);
 
     const handleAddItemToList = (item) => {
-        dispatch({ type: 'ADD_ITEM', payload: item });
-
+        const isItemExists = exercises.some(Item => Item.id === item.id);
+        if (!isItemExists) {
+            dispatch({ type: 'ADD_ITEM', payload: item });
+            dispatch({ type: 'TOGGLE_DOWN', payload: 'false' });
+        }
     };
 
     return(
@@ -74,7 +82,8 @@ const ShowExersicesByCategory = ({category}) => {
                     <img className ='im' src={item.image} alt={item.name} style={{width: '60px'}}/>
                     
                     {item.name}
-                    <button onClick={() => handleAddItemToList(item)}>Add</button> 
+                    <ButtonAdd AddPressed={() => handleAddItemToList(item)} />                        
+
                 </div>
             ))}
         </div>

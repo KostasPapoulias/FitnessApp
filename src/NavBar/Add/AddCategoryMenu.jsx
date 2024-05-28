@@ -43,6 +43,12 @@ const AddCategoryMenu = ({ goBack,  chosenCategories}) => {
     );
 };
 
+/**
+ * This function is a menu that allows the user to select the categories of the exercises
+ * You can select multiple categories at the same time and save them to the list of categories using dispatch
+ * @param {selectedCategories, setSelectedCategories} param0 are not usefull
+ * @returns a 4x3 grid with all the categories
+ */
 const Categories = ({ selectedCategories, setSelectedCategories }) => {
     const dispatch = useDispatch();
 
@@ -148,6 +154,12 @@ const Categories = ({ selectedCategories, setSelectedCategories }) => {
         </div>
     );
 };
+
+/**
+ * 
+ * @param {goBack, onSave} param0 
+ * @returns a top part menu with two buttons to return and save
+ */
 const TopPartMenu = ({ goBack, onSave }) => {
     const handleClick = () => {
         goBack(true);

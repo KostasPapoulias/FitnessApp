@@ -1,11 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import './Add.css';
-import Box from '@mui/material/Box';
-import Fab from '@mui/material/Fab';
-import AddIcon from '@mui/icons-material/Add';
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
-import List from './List';
 import DatePicker from '../Date';
 import {AddExerciseMenu} from './AddExerciseMenu';  
 import {AddCategoryMenu} from './AddCategoryMenu';
@@ -31,8 +25,6 @@ import CustomizedCheckbox from './CustomizedCheckBox';
 
 export default function Add({ Exersices, onListChange, saveDate}) { 
  
-    const [ExersicesChosenToDisplay, setExersicesChosenToDisplay] = useState();
-    const [exersicesCopy, setExersicesCopy] = useState(Exersices);
     const addItemToList = (newItem) => {
         // const updatedExercises = exercises.map(exercise => ({
         //     ...exercise,
@@ -69,7 +61,6 @@ export default function Add({ Exersices, onListChange, saveDate}) {
     }
     const handleTopNew = () => {
         setTopNew(true);
-        setExersicesCopy([]);
         setReturnCategorySelected('');
     }
     //to be given to addExerciseMenu
@@ -77,11 +68,6 @@ export default function Add({ Exersices, onListChange, saveDate}) {
         setReturnCategorySelected(c);
     }
 
-    const help = useSelector(state => state.help.help);
-
-    const catList = useSelector(state => state.categories.categoriesList);
-
-    
 
     return (
         
@@ -125,7 +111,6 @@ const DisplayDefault = ({selectedCategory}) => {
                 
             ):( 
                 <div>
-                    {/* <div className='addExercise' onClick={handleMiddleNew}>  */}
                     <div className={`addExercise ${toggleDown[0]==='true' && toggleUp[0]==='false' && help=='true'? 'cheat' : ''}`} onClick={handleMiddleNew}> 
 
                         <img src={plus} alt="plus" style={{width: '35px'}}/>
@@ -160,18 +145,11 @@ const TopPart = ({topNew}) =>{
     const [infoPress, setInfoPress] = useState(false);
     const handleInfo = () => {
         setInfoPress(!infoPress);
-        // console.log(help);
     }
-    const isHelpTrue = help == 'true';
-
 
     return(
         <div className='topPart'>
-            {/* <div className='newWorkout' onClick={handleNew}> */}
-            {/* {console.log("help: " + !help==='true')} */}
-            {console.log(help=='true')}
-            {console.log('Type of ishelp:' + isHelpTrue)}
-
+            
             <div className={`newWorkout ${toggleUp[0]==='true' && help=='true'? 'cheat' : ''}`} onClick={handleNew}> 
                 <img src={plus2} alt="plus2" style={{width: '10px'}}/>
 
@@ -187,16 +165,8 @@ const TopPart = ({topNew}) =>{
 
 const Info = () => {
     const dispatch = useDispatch();
-    const help = useSelector(state => state.help.help);
-
     const handleCheckBox = (pressed) => {
         dispatch({type: 'ADD_HELP', payload: pressed});
-        console.log("what return? "+pressed);
-        // if(pressed){
-        //     dispatch({type: 'ADD_HELP', payload: 'true'});
-        // } else {
-        //     dispatch({type: 'DELETE_HELP', payload: 'false'});
-        // }
     }
     
     return(
@@ -212,6 +182,12 @@ const Info = () => {
 /**
  * displays the selected categories
  * @param {} param0 
+ * @returns 
+ */
+
+/**
+ * 
+ * @param {*} param0 
  * @returns 
  */
 const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
@@ -251,7 +227,6 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
 const ChosenExercises = () => {
     const list = useSelector(state => Array.isArray(state.exercises.list) ? state.exercises.list : []);    
 
-    // console.log(list);
     return(
         <div className='chosenExercises'>
             {list && list.map(item => (

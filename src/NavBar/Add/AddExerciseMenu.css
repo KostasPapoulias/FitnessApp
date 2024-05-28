@@ -8,6 +8,16 @@
     border-top-right-radius: 20px ;
 }
 
+.buttonClick {
+    background-color: aqua;
+    /* animation: fillAnimation 3s forwards, revertAnimation 3s 3s forwards; Fill animation then revert animation */
+  }
+
+  @keyframes fillAnimation {
+    100% {
+      width: 100%;
+    }
+  }
 
 .pickExersiceContainer{
     position: absolute;
