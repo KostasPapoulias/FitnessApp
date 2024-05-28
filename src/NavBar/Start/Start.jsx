@@ -5,7 +5,10 @@ import { useDispatch } from 'react-redux';
 import './Start.css';
 import WorkoutPanel from './WorkoutPanel';
 
-
+/**
+ * the page will display the chosen exercises and will allow the user to start the workout
+ * @returns the start of the workout page of the application 
+ */
 export default function Start(){
     const dispatch = useDispatch();
     const list = useSelector(state => state.exercises.list);
@@ -15,8 +18,10 @@ export default function Start(){
     const [isRunning, setIsRunning] = useState(false);
 
     const handleBegin = () => {
-        setHasStarted(!hasStarted);
-        setIsRunning(!isRunning);
+        if(list.length > 0) {
+            setHasStarted(!hasStarted);
+            setIsRunning(!isRunning);
+        }
     }
 
     const handleFinish = (executedExersices) => {

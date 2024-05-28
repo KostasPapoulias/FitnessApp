@@ -9,6 +9,14 @@ import { useSelector } from "react-redux";
 import "./Human.css";
 import { useState } from "react";
 
+
+/**
+ * Manipulates the SVG image according to which exersices and category has been worked out
+ * An once trained muscle category colorized with pink and a two in a row trained colorized with red, else white
+ * In trained round, muscle category upgrades by 1 until 2
+ * In non trained round, muscle category downgrades by 1 until 0
+ * @returns one of two images displaying human according at flip button state
+ */
 export default function Human(){
 
 

@@ -81,7 +81,11 @@ export default function Add({ Exersices, onListChange, saveDate}) {
     );
 }
 /**
- * displayes the default view
+ * Displayes the part with the navigation buttons
+ * Displayes the exercises that have been selected or the available sexercises according to the categories
+ * @param {selectedCategory} param0 the one category that has been selected
+ * @returns a return button and the available exercises the user has to select
+ * @returns an add new exersices button and the exercises the user has selected
  */
 const DisplayDefault = ({selectedCategory}) => {
 
@@ -128,9 +132,9 @@ const DisplayDefault = ({selectedCategory}) => {
     
 }
 /**
- * displays the top section of the page with the new and info buttons
- * @param {*} param0 
- * @returns 
+ * handles the press on the new and info button
+ * @param {topNew} param0 represents the click on the new button
+ * @returns the top section of the page with the new and info buttons 
  */
 const TopPart = ({topNew}) =>{
     const dispatch = useDispatch();
@@ -162,7 +166,10 @@ const TopPart = ({topNew}) =>{
         </div>
     );
 }
-
+/**
+ * this function is responsble for the activation of help 
+ * @returns a text and a check button with the informations
+ */
 const Info = () => {
     const dispatch = useDispatch();
     const handleCheckBox = (pressed) => {
@@ -180,15 +187,9 @@ const Info = () => {
 }
 
 /**
- * displays the selected categories
- * @param {} param0 
- * @returns 
- */
-
-/**
  * 
- * @param {*} param0 
- * @returns 
+ * @param {returnCategorySelected} param0 category that has been selected
+ * @returns an horizontal list of the arrays that has been chosen
  */
 const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
     const dispatch = useDispatch();

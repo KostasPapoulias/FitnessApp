@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
+/**
+ * 
+ * @param {isRunning} param0 isRunning is a boolean that will determine if the timer is running or not
+ * @returns the time in hours, minutes, and seconds
+ */
 const Timer = ({ isRunning }) => {
     const [time, setTime] = useState({hours: 0, minutes: 0, seconds: 0});
 

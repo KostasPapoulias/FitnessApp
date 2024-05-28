@@ -2,7 +2,11 @@ import './Start.css'
 import start1 from '../../../pictures/start workout1.png';
 import start2 from '../../../pictures/start workout2.png';
 
-
+/**
+ * 
+ * @param {onStartPress, isStartPressed} param0 
+ * @returns one of two images depending on the state of isStartPressed
+ */
 const StartIcon = ({ onStartPress, isStartPressed }) => {
 
     return (

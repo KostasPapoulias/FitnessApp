@@ -3,6 +3,11 @@ import Timer from './Timer';
 import { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 
+/**
+ * the page will display the chosen exercises and will allow the user to finish the workout
+ * @param {onFinishPress} param0 onFinishPress is a function that will be called when the user finishes the workout
+ * @returns the workout panel of the application 
+ */
 export default function WorkoutPanel({onFinishPress}){
     const [isRunning, setIsRunning] = useState(true);
     const [completedExercises, setCompletedExercises] = useState([]);
@@ -46,6 +51,11 @@ export default function WorkoutPanel({onFinishPress}){
 
 }
 
+/**
+ * 
+ * @param {executed} param0 executed is a function that will be called when the user finishes an exercise
+ * @returns the chosen exercises
+ */
 const ChosenExercises = ({executed}) => {
     const list = useSelector(state => state.exercises.list);
     const dispatch = useDispatch();
