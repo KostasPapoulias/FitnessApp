@@ -1,0 +1,72 @@
+.goBack{
+    position: absolute;
+    top: -6.35%;
+    left: 3%;
+    border: solid 1px black;
+    background-color: rgb(207, 8, 8);
+    cursor: pointer;
+}
+
+.addSetButton{
+    position: absolute;
+    top: 5%;
+    left: 45%;
+    border: solid 1px black;
+    background-color: rgb(207, 8, 8);
+    cursor: pointer;
+}
+
+.setContainer{
+    position: absolute;
+    top: 12.2%;
+    left: 0%;
+    width: 100%;
+    height:560px;
+    border: solid 1px black;
+    border-radius: 0 0 20px 20px;
+    background-color: rgb(247, 103, 103);
+    overflow-y: scroll;
+    scrollbar-width: none;
+}
+.set{
+    position: relative;
+    top: 0%;
+    left: 0%;
+    width: 100%;
+    height: 100px;
+    border: solid 1px black;
+    background-color: rgb(207, 8, 8);
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+}
+.binButton{
+    position: absolute;
+    top: 35%;
+    right: 5%;
+    cursor: pointer;
+}
+.plusButton{
+    position: absolute;
+    top: 40%;
+    right: 25%;
+    cursor: pointer;
+}
+.minusButton{
+    position: absolute;
+    top: 40%;
+    right: 60%;
+    cursor: pointer;
+}
+.rep{
+    position: absolute;
+    top: 25%;
+    left: 54%;
+    font-size: 40px;
+}
+.setCounter{
+    position: absolute;
+    top: 25%;
+    left: 5%;
+    font-size: 40px;
+}

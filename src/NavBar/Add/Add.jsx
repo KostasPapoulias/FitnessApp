@@ -21,6 +21,7 @@ import plus2 from '../../../pictures/traps_files/simple plus.png';
 import info from '../../../pictures/info.png';
 import { useSelector, useDispatch } from 'react-redux';
 import CustomizedCheckbox from './CustomizedCheckBox';
+import SetRep from './SetRep';
 
 
 export default function Add({ Exersices, onListChange, saveDate}) { 
@@ -227,15 +228,30 @@ const ShowSelectedCategories = ({categoriesArray, returnSelectedCategory}) => {
  */
 const ChosenExercises = () => {
     const list = useSelector(state => Array.isArray(state.exercises.list) ? state.exercises.list : []);    
+    const [open, setOpen] = useState(false);
+    const [id, setid] = useState(0);
+    const handleClick = (id) => {
+        setid(id);
+        setOpen(!open);
+    }
+    const handleGoBack = () => {
+        setOpen(false);
+    }
 
     return(
-        <div className='chosenExercises'>
-            {list && list.map(item => (
-                <div className='exersice' key={item.id} itemID={item.cId}>
-                    <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
-                    {item.name}
-                </div>
-            ))}
-        </div>
+        !open ? (
+            <div className='chosenExercises'>
+                {list && list.map(item => (
+                    <div className='exersice' key={item.id} itemID={item.cId} onClick={() => handleClick(item.id)}>
+                        <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
+                        {item.name}
+                    </div>
+                ))}
+            </div>
+        ) : (
+            <div className='exersiceSetRep'>
+                <SetRep goBack={handleGoBack} id={id}/>
+            </div>
+        )
     );
 }

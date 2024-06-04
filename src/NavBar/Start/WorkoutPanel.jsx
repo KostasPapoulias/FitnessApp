@@ -63,15 +63,22 @@ const ChosenExercises = ({executed}) => {
     const handleDone = (item) => {
         executed(item);
         dispatch({ type: 'REMOVE_ITEM', payload: item });
-        console.log(list);
     }
 
     return(
         <div className='chosenExercisesStart'>
             {list && list.map(item => (
                 <div className='exersicePanel' key={item.id} itemID={item.cId}>
+                                       
                     <img className="im" src={item.image} alt={item.name} style={{width: '60px'}}/>
-                    {item.name}
+                    <div className='exersiceName'>    
+                        {item.name}
+                    </div>
+                    <div className='setsWorkout'>
+                        {Array.isArray(item.sets) && item.sets.map((set, index) => (
+                            <div key={index}>Set {index + 1}: {set.reps} reps</div>
+                        ))}
+                    </div>
                     <div className='done' onClick={() => handleDone(item)}>Done</div>
                 </div>
             ))}
