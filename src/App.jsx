@@ -1,6 +1,7 @@
 
 import './App.css'
 import NavBar from './NavBar/NavBar.jsx'
+import Introduction from './Introduction.jsx';
 
 function App() {
    
@@ -10,6 +11,7 @@ function App() {
       <div className='container' >
 
         <NavBar />
+        {/* <Introduction /> */}
       </div>
     </div>
   );
