@@ -1,0 +1,97 @@
+.WorkoutPanel {
+    position: absolute;
+    top: 0px;
+    left: -50px;
+    border: solid 1px black;
+    width: 125%;
+    height: 125%;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    z-index: 200;
+    border-radius: 20px;
+    overflow-y: scroll;
+    scrollbar-width: none;
+}
+
+.finish{
+    position: absolute;
+    top: 520px;
+    left: 175px;
+    border: solid 1px black;
+    cursor: pointer;
+    width: 30%;
+    height: 50px;
+    background-color: rgb(210, 29, 29);
+    text-align: center;
+    box-shadow: 0 0 100px rgba(198, 188, 188, 0.2);
+    z-index: 5;
+    border-radius: 20px;
+    transition: background-color 2s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.finish.pressed {
+    background-color: white;
+    color: black;
+}
+.clock{
+    position: absolute;
+    padding: 5px;
+    width: 50px;
+    top: 0%;
+    right: 0%;
+    font-size: 20px;
+    color: black;
+    border: solid 1px black;
+    z-index: 10;
+}
+
+.done{
+    position: absolute;
+    border: solid 1px black;
+    right: -3px;
+    width: 20%;
+    height: 50px;
+    background-color : white;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 0 100px rgba(198, 188, 188, 0.2);
+    border-radius: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.setsWorkout{
+    position: absolute;
+    top: 20%;
+    right: 15%;
+    width: 30%;
+    height: 100px;
+
+}
+.exersiceName{
+    position: absolute;
+    top: 40%;
+    left: -10%;
+    width: 99%; 
+    height: 100px;
+    font-weight: bold;
+}
+
+.exersicePanel{
+    position: relative;
+    width: 99%; 
+    height: 100px;
+    /* border: solid rgb(193, 48, 48); */
+    border-left: 0;
+    border-right: 0;
+    text-align: center;
+    flex-shrink: 0; 
+    justify-content: space-evenly;
+    justify-content: center; 
+    align-items: center; 
+    display: flex;
+    flex-direction: row;
+
+}

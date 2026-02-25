@@ -1,0 +1,24 @@
+.container{
+  width: 500px;
+  height: 700px;
+  border-radius: 20px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: solid rgb(0, 0, 0);
+  z-index: 1;
+  /* background-color: #F6FAF7; */
+  background-color: #706f6f;
+
+}
+
+.menuIcon{
+  position: absolute;
+  right: 20px;
+  top:30px;
+  transform: translateY(-50%);
+  z-index: 4;
+  background-color: transparent;
+
+}

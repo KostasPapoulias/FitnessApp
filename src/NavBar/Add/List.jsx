@@ -1,0 +1,51 @@
+const List = [
+    { id: 1, cId: "1", category: 'Chest', name: 'Bench Press', image: '../../../pictures/traps_files/bench press.png'},
+    { id: 2, cId: "2", category: 'Shoulders', name: 'Lateral Raise', image:'../../../pictures/traps_files/lateral raises.png'},
+    { id: 3, cId: "3", category: 'Chest', name: 'Incline Dumbell Press', image: '../../../pictures/traps_files/incline barbell press.png'},
+    { id: 4, cId: "4", category: 'Triceps', name: 'Tricep Extension', image: '../../../pictures/traps_files/tricep extension.png'},
+    { id: 5, cId: "5", category: 'Traps', name: 'Barbell Row' , image: '../../../pictures/traps_files/barbell rows.png'},
+    { id: 6, cId: "6", category: 'Lats', name: 'Lateral Pulldown' , image: '../../../pictures/traps_files/lat pulldown.png'},
+    { id: 7, cId: "7", category: 'Biceps', name: 'Bicep Barbell Curl' , image: '../../../pictures/traps_files/bicep barbell curls.png'},
+    { id: 8, cId: "8", category: 'Quads', name: 'Squat' , image: '../../../pictures/traps_files/squat.png'},
+    { id: 9, cId: "9", category: 'Hamstrings', name: 'DeadLift', image: '../../../pictures/traps_files/deadlift.png'},
+    { id: 10, cId: "10", category: 'Quads', name: 'Leg Extension' , image: '../../../pictures/traps_files/leg extension.png'},
+    { id: 11, cId: "11", category: 'Glutes', name: 'Hip Thrust' , image: '../../../pictures/traps_files/hip thrust.png'},
+    { id: 13, cId: "13", category: 'Abs', name: 'Crunch', image: '../../../pictures/traps_files/crunches.png'},
+    { id: 14, cId: "14", category: 'Forearms', name: 'Wrist Curl', image: '../../../pictures/traps_files/wrist curl.png'},
+    { id: 15, cId: "15", category: 'Shoulders', name: 'Shoulder Press', image: '../../../pictures/traps_files/shoulder press.png'},
+    { id: 16, cId: "16", category: 'Traps', name: 'Shrug' , image: '../../../pictures/traps_files/shrugs.png'},
+    { id: 17, cId: "17", category: 'Lats', name: 'Pull Up', image: '../../../pictures/traps_files/pull up.png'},
+    { id: 18, cId: "18", category: 'Forearms', name: 'Farmer Curries', image: '../../../pictures/traps_files/farmer curry.png'},
+    { id: 19, cId: "19", category: 'Triceps', name: 'Dips', image: '../../../pictures/traps_files/dips.png'},
+    { id: 20, cId: "20", category: 'Chest', name: 'Push Up', image: '../../../pictures/traps_files/push up.png'},
+    { id: 22, cId: "22", category: 'Shoulders', name: 'Front Press' , image: '../../../pictures/traps_files/front press.png'},
+    { id: 26, cId: "26", category: 'Quads', name: 'Leg Press', image: '../../../pictures/traps_files/leg press.png'},
+    { id: 27, cId: "27", category: 'Hamstrings', name: 'Leg Curl', image: '../../../pictures/traps_files/leg curl.png'},
+    { id: 28, cId: "28", category: 'Glutes', name: 'Glute Bridge' , image: '../../../pictures/traps_files/glute bridge.png'},
+    { id: 30, cId: "30", category: 'Abs', name: 'Leg Raise', image: '../../../pictures/traps_files/leg raises.png'},
+    { id: 37, cId: "37", category: 'Chest', name: 'Cable Fly', image: '../../../pictures/traps_files/chest fly.png'},
+    { id: 38, cId: "38", category: 'Shoulders', name: 'Front Raise' , image: '../../../pictures/traps_files/front raise.png'},
+    { id: 40, cId: "40", category: 'Traps', name: 'Dumbell Row' , image: '../../../pictures/traps_files/dumbell row.png'},
+    { id: 42, cId: "42", category: 'Biceps', name: 'Incline Curl' , image: '../../../pictures/traps_files/incline curl.png'},
+    { id: 43, cId: "43", category: 'Quads', name: 'Front Squat', image: '../../../pictures/traps_files/front squat.png'},
+    { id: 45, cId: "45", category: 'Glutes', name: 'Kickback', image: '../../../pictures/traps_files/cable kick back.png'},
+    { id: 46, cId: "46", category: 'Calves', name: 'Seated Calf Raise', image: '../../../pictures/traps_files/sitted calf raise.png'},
+    { id: 47, cId: "47", category: 'Abs', name: 'Plank' , image: '../../../pictures/traps_files/plank.png'},
+    { id: 52, cId: "52", category: 'Biceps', name: 'Sitted Curl', image: '../../../pictures/traps_files/sitted curls.png'},
+    { id: 53, cId: "53", category: 'Triceps', name: 'Tricep Pushdown' , image: '../../../pictures/traps_files/tricep pushdown.png'},
+    { id: 54, cId: "54", category: 'Chest', name: 'Pec Deck', image: '../../../pictures/traps_files/pec deck.png'},
+    { id: 57, cId: "57", category: 'Traps', name: 'T-Bar Row', image: '../../../pictures/traps_files/t bar row.png'},
+    { id: 62, cId: "62", category: 'Glutes', name: 'Hip Abduction' , image: '../../../pictures/traps_files/hip abduction.png'},
+    { id: 63, cId: "63", category: 'Calves', name: 'Standing Calf Raise' , image: '../../../pictures/traps_files/calf raises.png'},
+    { id: 64, cId: "64", category: 'Abs', name: 'Russian Twist' , image: '../../../pictures/traps_files/russian twists.png'},
+    { id: 67, cId: "67", category: 'Quads', name: 'Smith Squat' , image: '../../../pictures/traps_files/smith squat.png'},
+    { id: 68, cId: "68", category: 'Lats', name: 'Cable Row' , image: '../../../pictures/traps_files/cable row.png'},
+    { id: 69, cId: "69", category: 'Lats', name: 'Close Grip Pulldown' , image: '../../../pictures/traps_files/close grip.png'},
+
+
+
+
+    // Add more items as needed
+  ];
+  
+  export default List;

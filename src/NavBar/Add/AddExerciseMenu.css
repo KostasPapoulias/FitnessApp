@@ -1,0 +1,58 @@
+.topPartMenu{
+    width: auto;
+    height: 60px;
+   
+    border: solid 1px black;
+    background-color: #b2b2b2;
+    border-top-left-radius: 20px ;
+    border-top-right-radius: 20px ;
+}
+
+.buttonClick {
+    background-color: aqua;
+    /* animation: fillAnimation 3s forwards, revertAnimation 3s 3s forwards; Fill animation then revert animation */
+  }
+
+  @keyframes fillAnimation {
+    100% {
+      width: 100%;
+    }
+  }
+
+.pickExersiceContainer{
+    position: absolute;
+    top: 38%;
+    left: 5%;
+    width: 90%;
+    height: 60%;
+    /* border: solid black; */
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    overflow-y: scroll;
+    -ms-overflow-style: none;  
+    scrollbar-width: none;  
+}
+.pickExersice{
+    position: relative;
+    width: 99%;
+    height: 100px;
+    border: solid rgb(193, 48, 48);
+    border-bottom: 0;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 2%;
+    text-align: center;
+    flex-shrink: 0; 
+    justify-content: center; 
+    align-items: center; 
+    display: flex;
+    flex-direction: row;
+
+    /* cursor: pointer; */
+}
+
+
+
+

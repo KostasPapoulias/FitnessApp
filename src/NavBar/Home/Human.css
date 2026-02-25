@@ -1,0 +1,24 @@
+.HumanContainer{
+    width: 100%;
+    height: 100%;
+}
+
+
+.human {
+    position: absolute;
+    top: -5%;
+    left: 20%;
+}
+
+.switchSide {
+    
+    position: absolute;
+    top: 92%;
+    left: 41%;
+    width: 80px;
+    height: 50px;
+    border: solid black;
+    text-align: center;
+    background-color: red;
+    cursor: pointer;
+}

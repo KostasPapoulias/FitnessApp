@@ -1,0 +1,25 @@
+.previousButton{
+    border: solid 1px #000000;
+    position: absolute;
+    top: 0;
+}
+.nextButton{
+    border: solid 1px #000000;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+}
+.context{
+    position: absolute;
+    border: solid 1px #000000;
+    top: 10%;
+    align-items: center;
+    justify-content: center;
+}
+.options{
+
+    border: solid 1px #000000;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+}
