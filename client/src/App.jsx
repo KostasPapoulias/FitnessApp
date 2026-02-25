@@ -1,6 +1,6 @@
 import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
-import { Navigate, Route } from 'react-router-dom';
+import { Redirect, Route } from 'react-router-dom';
 
 import NavBar from './components/layout/NavBar';
 import Home from './pages/Home';
@@ -26,10 +26,12 @@ export default function App() {
       <IonReactRouter>
         <NavBar />
         <IonRouterOutlet id="main-content">
-          <Route path="/home" element={<Home />} />
-          <Route path="/add" element={<Add />} />
-          <Route path="/start" element={<Start />} />
-          <Route path="*" element={<Navigate to="/home" replace />} />
+          <Route exact path="/home" component={Home} />
+          <Route exact path="/add" component={Add} />
+          <Route exact path="/start" component={Start} />
+          <Route exact path="/">
+            <Redirect to="/home" />
+          </Route>
         </IonRouterOutlet>
       </IonReactRouter>
     </IonApp>
