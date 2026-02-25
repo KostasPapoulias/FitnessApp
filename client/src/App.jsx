@@ -17,6 +17,7 @@ import '@ionic/react/css/text-alignment.css';
 import '@ionic/react/css/text-transformation.css';
 import '@ionic/react/css/flex-utils.css';
 import '@ionic/react/css/display.css';
+import './styles/iosLayout.css';
 
 setupIonicReact();
 
@@ -24,15 +25,17 @@ export default function App() {
   return (
     <IonApp>
       <IonReactRouter>
-        <NavBar />
-        <IonRouterOutlet id="main-content">
-          <Route exact path="/home" component={Home} />
-          <Route exact path="/add" component={Add} />
-          <Route exact path="/start" component={Start} />
-          <Route exact path="/">
-            <Redirect to="/home" />
-          </Route>
-        </IonRouterOutlet>
+        <div className="app-shell">
+          <NavBar />
+          <IonRouterOutlet id="main-content">
+            <Route exact path="/home" component={Home} />
+            <Route exact path="/add" component={Add} />
+            <Route exact path="/start" component={Start} />
+            <Route exact path="/">
+              <Redirect to="/home" />
+            </Route>
+          </IonRouterOutlet>
+        </div>
       </IonReactRouter>
     </IonApp>
   );

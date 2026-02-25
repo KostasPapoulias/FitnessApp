@@ -1,0 +1,51 @@
+:root {
+  --app-max-width: 430px;
+}
+
+html,
+body,
+#root,
+ion-app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+.app-shell {
+  width: 100%;
+  max-width: var(--app-max-width);
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: var(--ion-background-color, #ffffff);
+}
+
+.app-header ion-toolbar {
+  --min-height: 56px;
+  --padding-start: 8px;
+  --padding-end: 8px;
+}
+
+.app-toolbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.app-nav-buttons ion-button {
+  --padding-start: 8px;
+  --padding-end: 8px;
+  margin-inline-start: 2px;
+  font-size: 0.78rem;
+}
+
+.page-content {
+  --padding-start: 16px;
+  --padding-end: 16px;
+  --padding-top: 12px;
+  --padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+}
+
+@media (min-width: 431px) {
+  .app-shell {
+    margin-inline: auto;
+  }
+}

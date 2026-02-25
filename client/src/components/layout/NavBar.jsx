@@ -13,10 +13,10 @@ export default function NavBar() {
   const ionRouter = useIonRouter();
 
   return (
-    <IonHeader>
-      <IonToolbar>
-        <IonTitle>Workout App</IonTitle>
-        <IonButtons slot="end">
+    <IonHeader className="app-header" translucent>
+      <IonToolbar className="app-toolbar">
+        <IonTitle className="app-toolbar-title">Workout App</IonTitle>
+        <IonButtons slot="end" className="app-nav-buttons">
           {links.map((link) => (
             <IonButton
               key={link.path}
