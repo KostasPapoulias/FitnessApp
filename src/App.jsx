@@ -1,4 +1,5 @@
 
+import React from 'react';
 import './App.css'
 import NavBar from './NavBar/NavBar.jsx'
 import Introduction from './Introduction.jsx';

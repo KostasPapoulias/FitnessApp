@@ -1,4 +1,5 @@
-import { IonButtons, IonButton, IonHeader, IonToolbar, IonTitle } from '@ionic/react';
+import React from 'react';
+import { IonButtons, IonButton } from '@ionic/react';
 import { useLocation } from 'react-router-dom';
 import { useIonRouter } from '@ionic/react';
 
@@ -13,21 +14,18 @@ export default function NavBar() {
   const ionRouter = useIonRouter();
 
   return (
-    <IonHeader className="app-header" translucent>
-      <IonToolbar className="app-toolbar">
-        <IonTitle className="app-toolbar-title">Workout App</IonTitle>
-        <IonButtons slot="end" className="app-nav-buttons">
-          {links.map((link) => (
-            <IonButton
-              key={link.path}
-              fill={location.pathname === link.path ? 'solid' : 'clear'}
-              onClick={() => ionRouter.push(link.path, 'forward')}
-            >
-              {link.label}
-            </IonButton>
-          ))}
-        </IonButtons>
-      </IonToolbar>
-    </IonHeader>
+    <div className="app-bottom-nav" role="navigation" aria-label="Primary navigation">
+      <IonButtons className="app-nav-buttons">
+        {links.map((link) => (
+          <IonButton
+            key={link.path}
+            fill={location.pathname === link.path ? 'solid' : 'clear'}
+            onClick={() => ionRouter.push(link.path, 'forward')}
+          >
+            {link.label}
+          </IonButton>
+        ))}
+      </IonButtons>
+    </div>
   );
 }

@@ -1,11 +1,26 @@
-import { IonContent, IonPage } from '@ionic/react';
-import TopPart from '../components/layout/TopPart';
+import {
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonBackButton,
+} from '@ionic/react';
 
 export default function Add() {
   return (
     <IonPage>
+      <IonHeader>
+        <IonToolbar>
+          <IonButtons slot="start">
+            <IonBackButton defaultHref="/home" />
+          </IonButtons>
+          <IonTitle>Add</IonTitle>
+        </IonToolbar>
+      </IonHeader>
       <IonContent className="page-content">
-        <TopPart title="Add" subtitle="Create workout templates and exercises" />
+        <div className="ion-padding">Create workout templates and exercises</div>
       </IonContent>
     </IonPage>
   );

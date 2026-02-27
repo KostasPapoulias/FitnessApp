@@ -1,11 +1,26 @@
-import { IonContent, IonPage } from '@ionic/react';
-import TopPart from '../components/layout/TopPart';
+import {
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonBackButton,
+} from '@ionic/react';
 
 export default function Start() {
   return (
     <IonPage>
+      <IonHeader>
+        <IonToolbar>
+          <IonButtons slot="start">
+            <IonBackButton defaultHref="/home" />
+          </IonButtons>
+          <IonTitle>Start Workout</IonTitle>
+        </IonToolbar>
+      </IonHeader>
       <IonContent className="page-content">
-        <TopPart title="Start" subtitle="Run your active workout session" />
+        <div className="ion-padding">Run your active workout session</div>
       </IonContent>
     </IonPage>
   );

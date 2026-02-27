@@ -1,12 +1,26 @@
-import { IonContent, IonPage } from '@ionic/react';
-import TopPart from '../components/layout/TopPart';
+import {
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonBackButton,
+} from '@ionic/react';
 import Human from '../components/ui/Human';
 
 export default function Home() {
   return (
     <IonPage>
+      <IonHeader>
+        <IonToolbar>
+          <IonButtons slot="start">
+            <IonBackButton defaultHref="/home" />
+          </IonButtons>
+          <IonTitle>Home</IonTitle>
+        </IonToolbar>
+      </IonHeader>
       <IonContent className="page-content">
-        <TopPart title="Home" subtitle="Overview of your workout progress" />
         <Human label="Muscle groups and body UI placeholder" />
       </IonContent>
     </IonPage>

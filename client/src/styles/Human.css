@@ -1,0 +1,34 @@
+.HumanContainer{
+    position: relative;
+    width: 100%;
+    min-height: 420px;
+}
+
+
+.human {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(90vw, 340px);
+}
+
+.human svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.switchSide {
+    
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 50px;
+    border: solid black;
+    text-align: center;
+    background-color: red;
+    cursor: pointer;
+}
