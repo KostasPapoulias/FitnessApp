@@ -1,0 +1,320 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String                  @id @default(uuid())
+  email                 String                  @unique
+  password              String
+  createdAt             DateTime                @default(now())
+  profile               UserProfile?
+  settings              Settings?
+  biometrics            Biometric[]
+  workoutSessions       WorkoutSession[]
+  muscleFatigueLogs     MuscleFatigueLog[]
+  muscleFatigueCurrent  MuscleFatigueCurrent[]
+  sleepLogs             SleepLog[]
+  nutritionLogs         NutritionLog[]
+  chatThreads           ChatThread[]
+  notifications         Notification[]
+  customExercises       Exercise[]              @relation("CustomExercises")
+}
+
+model UserProfile {
+  userId      String   @id
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  age         Int?
+  weight      Float?
+  height      Float?
+  gender      String?
+  phoneNumber String?
+  fitnessLevel String?
+  goal        String?
+}
+
+model Settings {
+  userId                  String   @id
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredUnit           String   @default("metric")
+  notificationEnabled     Boolean  @default(true)
+  inactivityDaysThreshold Int      @default(3)
+  theme                   String   @default("dark")
+  aiConsentEnabled        Boolean  @default(true)
+}
+
+model Biometric {
+  id         String        @id @default(uuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  measuredAt DateTime      @default(now())
+  type       BiometricType
+  value      Float
+  source     String        @default("manual")
+}
+
+enum BiometricType {
+  WEIGHT
+  BODY_FAT
+  LEAN_MASS
+  HEART_RATE
+  HRV
+  SLEEP_SCORE
+}
+
+model Muscle {
+  id               String                  @id @default(uuid())
+  name             String                  @unique
+  musclePaths      MusclePath[]
+  exerciseLinks    MuscleExercise[]
+  fatigueLogs      MuscleFatigueLog[]
+  fatigueCurrent   MuscleFatigueCurrent[]
+}
+
+model MusclePath {
+  id        String  @id @default(uuid())
+  muscleId  String
+  muscle    Muscle  @relation(fields: [muscleId], references: [id])
+  svgPathId String
+  pathData  String  @db.Text
+  side      String  @default("front")
+}
+
+model Modality {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  exercises Exercise[]
+}
+
+model ExerciseCategory {
+  id            String               @id @default(uuid())
+  name          String               @unique
+  exerciseLinks ExerciseCategoryMap[]
+}
+
+model Exercise {
+  id               String               @id @default(uuid())
+  name             String
+  modalityId       String
+  modality         Modality             @relation(fields: [modalityId], references: [id])
+  description      String?              @db.Text
+  createdByUserId  String?
+  createdByUser    User?                @relation("CustomExercises", fields: [createdByUserId], references: [id])
+  muscleLinks      MuscleExercise[]
+  categoryLinks    ExerciseCategoryMap[]
+  equipmentLinks   EquipmentExercise[]
+  media            Media[]
+  workoutExercises WorkoutExercise[]
+  @@unique([name])
+}
+
+model MuscleExercise {
+  muscleId     String
+  exerciseId   String
+  muscle       Muscle   @relation(fields: [muscleId], references: [id])
+  exercise     Exercise @relation(fields: [exerciseId], references: [id])
+  impactFactor Float    @default(1.0)
+
+  @@id([muscleId, exerciseId])
+}
+
+model ExerciseCategoryMap {
+  exerciseId String
+  categoryId String
+  exercise   Exercise         @relation(fields: [exerciseId], references: [id])
+  category   ExerciseCategory @relation(fields: [categoryId], references: [id])
+
+  @@id([exerciseId, categoryId])
+}
+
+model Equipment {
+  id            String              @id @default(uuid())
+  name          String              @unique
+  description   String?
+  exerciseLinks EquipmentExercise[]
+}
+
+model EquipmentExercise {
+  equipmentId String
+  exerciseId  String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+  exercise    Exercise  @relation(fields: [exerciseId], references: [id])
+  qtyOptional Int?
+  notes       String?
+
+  @@id([equipmentId, exerciseId])
+}
+
+model Media {
+  id           String   @id @default(uuid())
+  exerciseId   String
+  exercise     Exercise @relation(fields: [exerciseId], references: [id])
+  videoUrl     String?
+  thumbnailUrl String?
+}
+
+model WorkoutSession {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateTime         DateTime          @default(now())
+  duration         Int?
+  avgRpe           Float?
+  totalVolume      Float?
+  weatherCondition String?
+  notes            String?
+  workoutExercises WorkoutExercise[]
+  fatigueLogs      MuscleFatigueLog[]
+}
+
+model WorkoutExercise {
+  id        String         @id @default(uuid())
+  sessionId String
+  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise  Exercise       @relation(fields: [exerciseId], references: [id])
+  orderIndex Int
+  notes     String?
+  sets      WorkoutSet[]
+}
+
+model WorkoutSet {
+  id                 String            @id @default(uuid())
+  workoutExerciseId  String
+  workoutExercise    WorkoutExercise   @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+  setNumber          Int
+  setType            SetType
+  rpe                Float?
+  restSeconds        Int?
+  strength           SetStrength?
+  calisthenics       SetCalisthenics?
+  cardio             SetCardio?
+  wod                SetWOD?
+  mobility           SetMobility?
+}
+
+enum SetType {
+  STRENGTH
+  CALISTHENICS
+  CARDIO
+  WOD
+  MOBILITY
+}
+
+model SetStrength {
+  setId  String     @id
+  set    WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  reps   Int
+  weight Float
+}
+
+model SetCalisthenics {
+  setId       String     @id
+  set         WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  reps        Int
+  addedWeight Float      @default(0)
+}
+
+model SetCardio {
+  setId    String     @id
+  set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  distance Float?
+  time     Int?
+}
+
+model SetWOD {
+  setId    String     @id
+  set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  distance Float?
+  time     Int?
+}
+
+model SetMobility {
+  setId String     @id
+  set   WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  time  Int?
+}
+
+model MuscleFatigueCurrent {
+  userId           String
+  muscleId         String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  muscle           Muscle    @relation(fields: [muscleId], references: [id])
+  fatigueLevel     Float     @default(0)
+  updatedAt        DateTime  @updatedAt
+  recoveryTargetAt DateTime?
+
+  @@id([userId, muscleId])
+}
+
+model MuscleFatigueLog {
+  id               String         @id @default(uuid())
+  userId           String
+  muscleId         String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  muscle           Muscle         @relation(fields: [muscleId], references: [id])
+  source           String         @default("workout")
+  delta            Float
+  fatigueLevelAfter Float
+  createdAt        DateTime       @default(now())
+  workoutSessionId String?
+  workoutSession   WorkoutSession? @relation(fields: [workoutSessionId], references: [id])
+}
+
+model SleepLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sleepDate  DateTime
+  durationMin Int
+  sleepScore Float?
+  notes      String?
+}
+
+model NutritionLog {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logDate  DateTime
+  proteinG Float?
+  calories Float?
+  notes    String?
+}
+
+model ChatThread {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  messages  AIChat[]
+}
+
+model AIChat {
+  id        String     @id @default(uuid())
+  threadId  String
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  messageText String   @db.Text
+  sender    String
+  dateTime  DateTime   @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  status    String   @default("unread")
+  createdAt DateTime @default(now())
+  sentAt    DateTime?
+}

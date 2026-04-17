@@ -22,3 +22,48 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+.tsc-out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# OS
+Thumbs.db
+
+# Logs
+*.log
+
+# Capacitor
+/node_modules
+/www
+/android/app/build
+/ios/Pods
