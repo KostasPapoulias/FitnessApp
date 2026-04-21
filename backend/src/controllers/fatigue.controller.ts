@@ -1,21 +1,21 @@
 import { Response } from 'express';
 import { AuthRequest } from '../server';
 
-export const getCurrentFatigue = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getCurrentFatigue = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const updateFatigue = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateFatigue = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const recalculateFatigue = async (req: AuthRequest, res: Response): Promise<void> => {
+export const recalculateFatigue = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',

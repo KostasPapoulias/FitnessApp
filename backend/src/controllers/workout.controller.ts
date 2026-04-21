@@ -2,35 +2,35 @@ import { Response } from 'express';
 import { AuthRequest } from '../server';
 
 // Placeholder controllers for workout routes
-export const startSession = async (req: AuthRequest, res: Response): Promise<void> => {
+export const startSession = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const updateSession = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateSession = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const finishSession = async (req: AuthRequest, res: Response): Promise<void> => {
+export const finishSession = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const getSessions = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getSessions = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const getSession = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getSession = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
