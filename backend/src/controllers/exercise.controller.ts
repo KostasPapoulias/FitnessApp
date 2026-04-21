@@ -250,8 +250,9 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
 
 //    Get modalities 
 // GET /api/exercises/modalities
-export const getModalities = async (req: AuthRequest, res: Response) => {
+export const getModalities = async (_req: AuthRequest, res: Response) => {
   try {
+    void _req;
     const modalities = await prisma.modality.findMany({
       orderBy: { name: 'asc' }
     })
