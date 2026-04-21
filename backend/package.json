@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "SomaTrack backend - fitness tracking API",
   "main": "dist/server.js",
-  "type": "module",
+  "type": "commonjs",
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
