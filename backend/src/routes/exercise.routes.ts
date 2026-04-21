@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { getCategories, getModalities, getExerciseById, getExercises } from '../controllers/exercise.controller';
-import { optionalAuth } from '../middleware/auth.middleware';
+import { getCategories, getModalities, getExerciseById, getExercises } from '../controllers/exercise.controller.js';
+import { optionalAuth } from '../middleware/auth.middleware.js';
 
 const router = Router();
 

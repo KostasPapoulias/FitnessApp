@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import { prisma } from '../server';
-import { AuthRequest } from '../server';
+import { prisma } from '../server.js';
+import { AuthRequest } from '../server.js';
 
 // Get all exercises
 // GET /api/exercises?category=Legs&modality=Strength&search=squat

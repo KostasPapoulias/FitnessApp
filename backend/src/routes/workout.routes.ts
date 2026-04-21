@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { startSession, updateSession, finishSession, getSessions, getSession } from '../controllers/workout.controller';
-import { verifyToken } from '../middleware/auth.middleware';
+import { startSession, updateSession, finishSession, getSessions, getSession } from '../controllers/workout.controller.js';
+import { verifyToken } from '../middleware/auth.middleware.js';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { sendMessage, getWorkoutSuggestion } from '../controllers/ai.controller';
-import { verifyToken } from '../middleware/auth.middleware';
+import { sendMessage, getWorkoutSuggestion } from '../controllers/ai.controller.js';
+import { verifyToken } from '../middleware/auth.middleware.js';
 
 const router = Router();
 

@@ -6,13 +6,13 @@ import { PrismaClient } from '@prisma/client';
 
 dotenv.config();
 // Routes
-import authRoutes from './routes/auth.routes';
-import exerciseRoutes from './routes/exercise.routes';
-import workoutRoutes from './routes/workout.routes';
-import fatigueRoutes from './routes/fatigue.routes';
-import aiRoutes from './routes/ai.routes';
-import calendarRoutes from './routes/calendar.routes';
-import profileRoutes from './routes/profile.routes';
+import authRoutes from './routes/auth.routes.js';
+import exerciseRoutes from './routes/exercise.routes.js';
+import workoutRoutes from './routes/workout.routes.js';
+import fatigueRoutes from './routes/fatigue.routes.js';
+import aiRoutes from './routes/ai.routes.js';
+import calendarRoutes from './routes/calendar.routes.js';
+import profileRoutes from './routes/profile.routes.js';
 
 // Types
 export interface AuthRequest extends Request {
