@@ -1,6 +1,6 @@
 import { Response } from 'express';
-import { prisma } from '../server';
-import { AuthRequest } from '../server';
+import { prisma } from '../server.js';
+import { AuthRequest } from '../server.js';
 
 // Get all exercises
 // GET /api/exercises?category=Legs&modality=Strength&search=squat
@@ -250,7 +250,7 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
 
 //    Get modalities 
 // GET /api/exercises/modalities
-export const getModalities = async (req: AuthRequest, res: Response) => {
+export const getModalities = async (_req: AuthRequest, res: Response) => {
   try {
     const modalities = await prisma.modality.findMany({
       orderBy: { name: 'asc' }

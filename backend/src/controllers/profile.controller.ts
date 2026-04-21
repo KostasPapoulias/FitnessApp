@@ -1,35 +1,35 @@
 import { Response } from 'express';
-import { AuthRequest } from '../server';
+import { AuthRequest } from '../server.js';
 
-export const getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getProfile = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateProfile = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const logSleep = async (req: AuthRequest, res: Response): Promise<void> => {
+export const logSleep = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const logNutrition = async (req: AuthRequest, res: Response): Promise<void> => {
+export const logNutrition = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',
   });
 };
 
-export const deleteAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteAccount = async (_req: AuthRequest, res: Response): Promise<void> => {
   res.status(501).json({
     success: false,
     error: 'Not implemented',

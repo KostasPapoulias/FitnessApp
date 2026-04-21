@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { getProfile, updateProfile, logSleep, logNutrition, deleteAccount } from '../controllers/profile.controller';
-import { verifyToken } from '../middleware/auth.middleware';
+import { getProfile, updateProfile, logSleep, logNutrition, deleteAccount } from '../controllers/profile.controller.js';
+import { verifyToken } from '../middleware/auth.middleware.js';
 
 const router = Router();
 

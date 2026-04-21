@@ -6,13 +6,13 @@ import { PrismaClient } from '@prisma/client';
 
 dotenv.config();
 // Routes
-import authRoutes from './routes/auth.routes';
-import exerciseRoutes from './routes/exercise.routes';
-import workoutRoutes from './routes/workout.routes';
-import fatigueRoutes from './routes/fatigue.routes';
-import aiRoutes from './routes/ai.routes';
-import calendarRoutes from './routes/calendar.routes';
-import profileRoutes from './routes/profile.routes';
+import authRoutes from './routes/auth.routes.js';
+import exerciseRoutes from './routes/exercise.routes.js';
+import workoutRoutes from './routes/workout.routes.js';
+import fatigueRoutes from './routes/fatigue.routes.js';
+import aiRoutes from './routes/ai.routes.js';
+import calendarRoutes from './routes/calendar.routes.js';
+import profileRoutes from './routes/profile.routes.js';
 
 // Types
 export interface AuthRequest extends Request {
@@ -38,7 +38,7 @@ app.use(express.json());
 //app.use(express.urlencoded({ extended: true }));
 
 // Health check
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'SomaTrack API is running' });
 });
 
@@ -52,7 +52,7 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/profile', profileRoutes);
 
 // 404 handler
-app.use((req: Request, res: Response) => {
+app.use((_req: Request, res: Response) => {
   res.status(404).json({
     success: false,
     error: 'Route not found',
@@ -60,7 +60,7 @@ app.use((req: Request, res: Response) => {
 });
 
 // Error handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Error:', err);
   res.status(500).json({
     success: false,

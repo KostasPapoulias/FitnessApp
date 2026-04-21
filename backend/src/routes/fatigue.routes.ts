@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { getCurrentFatigue, updateFatigue, recalculateFatigue } from '../controllers/fatigue.controller';
-import { verifyToken } from '../middleware/auth.middleware';
+import { getCurrentFatigue, updateFatigue, recalculateFatigue } from '../controllers/fatigue.controller.js';
+import { verifyToken } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
