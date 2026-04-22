@@ -1,26 +1,63 @@
-import { BrowserRouter as Router } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
+import { useAuthStore } from './store/useAuthStore'
+
+// Pages
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Home from './pages/Home'
+import Calendar from './pages/Calendar'
+import AIChat from './pages/AIChat'
+import Profile from './pages/Profile'
+import BrowseCategories from './pages/Workout/BrowseCategories'
+import ExerciseList from './pages/Workout/ExerciseList'
+import ActiveWorkout from './pages/Workout/ActiveWorkout'
+
+// Layout
+import AppLayout from './components/layout/AppLayout'
+
+// Protected route wrapper
+const Protected = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = useAuthStore()
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
+}
 
 export default function App() {
+  const { fetchMe, isAuthenticated } = useAuthStore()
+
+  // On app load, verify token is still valid
   useEffect(() => {
-    // Initialize app
-    document.title = 'SomaTrack'
+    const token = localStorage.getItem('somatrack_token')
+    if (token) fetchMe()
   }, [])
 
   return (
-    <Router>
-      <div className="w-full h-screen bg-bg-primary text-text-primary">
-        <div className="max-w-sm mx-auto h-full flex flex-col">
-          {/* Routes will go here */}
-          <div className="flex-1 overflow-auto">
-            <div className="p-4">
-              <h1 className="text-2xl font-bold mb-4">SomaTrack</h1>
-              <p className="text-text-secondary mb-4">Mobile-first Fitness & Recovery Tracking</p>
-              <p className="text-text-muted text-sm">App initialization in progress...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Router>
+    <BrowserRouter>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={
+          isAuthenticated ? <Navigate to="/" replace /> : <Login />
+        } />
+        <Route path="/register" element={
+          isAuthenticated ? <Navigate to="/" replace /> : <Register />
+        } />
+
+        {/* Protected routes — all inside AppLayout (has BottomNav) */}
+        <Route path="/" element={
+          <Protected><AppLayout /></Protected>
+        }>
+          <Route index element={<Home />} />
+          <Route path="calendar" element={<Calendar />} />
+          <Route path="workout/browse" element={<BrowseCategories />} />
+          <Route path="workout/exercises" element={<ExerciseList />} />
+          <Route path="workout/active" element={<ActiveWorkout />} />
+          <Route path="ai" element={<AIChat />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
+
+        {/* Catch all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
