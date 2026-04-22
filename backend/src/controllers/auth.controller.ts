@@ -15,6 +15,7 @@ interface LoginBody {
   password: string;
 }
 
+// POST /api/auth/register
 export const register = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { email, password, name } = req.body as RegisterBody;
@@ -89,6 +90,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
   }
 };
 
+// POST /api/auth/login
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body as LoginBody;
@@ -158,6 +160,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 };
 
+// GET /api/auth/me
 export const me = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.userId) {
