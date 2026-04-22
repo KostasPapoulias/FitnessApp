@@ -30,9 +30,9 @@ export const prisma = new PrismaClient();
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-  ? 'https://somatrack.netlify.app' 
-  : 'http://localhost:3000'
+  origin: process.env.NODE_ENV === 'production'
+    ? 'https://somatrack.netlify.app'
+    : ['http://localhost:3000', 'http://localhost:5173']
 }));
 app.use(express.json());
 //app.use(express.urlencoded({ extended: true }));
