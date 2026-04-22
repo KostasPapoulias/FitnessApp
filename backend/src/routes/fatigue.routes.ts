@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getCurrentFatigue, updateFatigue, recalculateFatigue } from '../controllers/fatigue.controller';
+import { getCurrentFatigue, overrideFatigue } from '../controllers/fatigue.controller';
 import { verifyToken } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -18,13 +18,7 @@ router.get('/current', getCurrentFatigue);
  * @protected
  * @returns updated fatigue
  */
-router.put('/:muscleId', updateFatigue);
+router.put('/:muscleId', overrideFatigue);
 
-/**
- * @route POST /api/fatigue/recalculate
- * @protected
- * @returns recalculated fatigue with recovery
- */
-router.post('/recalculate', recalculateFatigue);
 
 export default router;

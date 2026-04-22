@@ -51,6 +51,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/profile', profileRoutes);
 
+
 // 404 handler
 app.use((_req: Request, res: Response) => {
   res.status(404).json({
