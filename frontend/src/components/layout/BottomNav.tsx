@@ -23,7 +23,7 @@ export default function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] 
-                    bg-dark-800 border-t border-dark-600 px-4 pb-8 pt-3
+                    bg-dark-800 border-t border-dark-600 px-4 pb-2 pt-3
                     flex items-center justify-around z-50">
 
       {/* Home */}
