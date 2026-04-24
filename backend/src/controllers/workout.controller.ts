@@ -228,7 +228,7 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
         //  Calculate fatigue delta per muscle 
         // Formula: intensity × impact_factor × normalisation_constant
         for (const muscleLink of muscleLinks) {
-          const fatigueDelta = setIntensity * muscleLink.impactFactor * 0.001
+          const fatigueDelta = setIntensity * muscleLink.impactFactor * 0.1
 
           const existing = muscleDeltas.get(muscleLink.muscleId)
           if (existing) {
