@@ -255,7 +255,7 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
       })
 
       //  Update fatigue for each muscle involved
-      for (const [muscleId, { delta, muscleName }] of muscleDeltas) {
+      for (const [muscleId, { delta }] of muscleDeltas) {
 
         // Get current fatigue level
         const current = await tx.muscleFatigueCurrent.findUnique({
