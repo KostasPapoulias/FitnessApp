@@ -9,8 +9,7 @@ export default function ActiveWorkout() {
   const {
     selectedExercises, sessionId, sessionStartTime,
     currentExerciseIndex, currentSetIndex,
-    completedSets, startSession, completeSet, finishSession,
-    updateSets
+    completedSets, startSession, completeSet, finishSession
   } = useWorkoutStore()
 
   const { fetchFatigue } = useFatigueStore()

@@ -15,7 +15,7 @@ const MODALITIES = ['Strength', 'Calisthenics', 'WOD', 'Cardio', 'Mobility']
 
 export default function StartWorkout() {
   const navigate = useNavigate()
-  const { muscles, readinessScore } = useFatigueStore()
+  const { muscles } = useFatigueStore()
   const { clearExercises } = useWorkoutStore()
 
   const [selectedMood, setSelectedMood] = useState(2)

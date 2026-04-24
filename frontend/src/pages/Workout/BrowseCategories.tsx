@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
-import { useFatigueStore } from '../../store/useFatigueStore'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { ExerciseCategory } from '../../types'
 import coreImg from '../../assets/core.png'
@@ -9,7 +8,7 @@ import armsImg from '../../assets/arms.png'
 import backImg from '../../assets/back.png'
 import chestImg from '../../assets/Chest.png'
 import quadsImg from '../../assets/quads.png'
-import shouldersImg from '../../assets/shoulders.png'
+import shouldersImg from '../../assets/Shoulders.png'
 
 const CATEGORY_IMAGES: Record<string, string> = {
   Legs: quadsImg,
@@ -25,7 +24,6 @@ export default function BrowseCategories() {
   const location = useLocation()
   const modality = location.state?.modality ?? 'Strength'
 
-  const { muscles } = useFatigueStore()
   const { selectedExercises } = useWorkoutStore()
 
   const [categories, setCategories] = useState<ExerciseCategory[]>([])
