@@ -16,7 +16,7 @@ export default function BottomNav() {
     if (selectedExercises.length > 0) {
       return { label: `Start (${selectedExercises.length})`, path: '/workout/active', bg: 'bg-brand-teal' }
     }
-    return { label: 'Plan', path: '/workout/browse', bg: 'bg-brand-teal' }
+    return { label: 'Plan', path: '/workout/start', bg: 'bg-brand-teal' }
   }
 
   const center = centerButton()
@@ -102,7 +102,6 @@ function NavBtn({ icon, label, active, onClick }: {
   )
 }
 
-// SVG Icons — inline so no extra library needed
 const HomeIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="1.8">
