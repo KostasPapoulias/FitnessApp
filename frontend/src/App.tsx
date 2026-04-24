@@ -15,6 +15,8 @@ import ActiveWorkout from './pages/Workout/ActiveWorkout'
 
 // Layout
 import AppLayout from './components/layout/AppLayout'
+import StartWorkout from './pages/Workout/StartWorkout'
+import ExerciseDetail from './pages/Workout/ExerciseDetail'
 
 // Protected route wrapper
 const Protected = ({ children }: { children: React.ReactNode }) => {
@@ -48,8 +50,10 @@ export default function App() {
         }>
           <Route index element={<Home />} />
           <Route path="calendar" element={<Calendar />} />
+          <Route path="workout/start" element={<StartWorkout />} />
           <Route path="workout/browse" element={<BrowseCategories />} />
           <Route path="workout/exercises" element={<ExerciseList />} />
+          <Route path="exercise-detail" element={<ExerciseDetail />} />
           <Route path="workout/active" element={<ActiveWorkout />} />
           <Route path="ai" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
