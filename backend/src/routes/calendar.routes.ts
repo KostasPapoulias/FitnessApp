@@ -1,20 +1,20 @@
 import { Router } from 'express';
-import { getCalendarData, getDayDetail } from '../controllers/calendar.controller';
+import { getCalendarMonth, getCalendarDay } from '../controllers/calendar.controller';
 import { verifyToken } from '../middleware/auth.middleware';
 const router = Router();
 
 router.use(verifyToken);
 
-/** * @route GET /api/calendar
+/** * @route GET /api/calendar?month=4&year=2026
  * @private
  * @returns user's calendar
  */
-router.get('/', getCalendarData);
+router.get('/', getCalendarMonth);
 
-/** * @route GET /api/calendar/day/:date
+/** * @route GET /api/calendar/:date  date = "2026-04-25"
  * @private
  * @returns details of a specific day in the calendar
  */
-router.get('/day/:date', getDayDetail); 
+router.get('/day/:date', getCalendarDay); 
 
 export default router;
