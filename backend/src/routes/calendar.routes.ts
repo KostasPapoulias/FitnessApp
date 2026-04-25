@@ -15,6 +15,6 @@ router.get('/', getCalendarMonth);
  * @private
  * @returns details of a specific day in the calendar
  */
-router.get('/day/:date', getCalendarDay); 
+router.get('/:date', getCalendarDay); 
 
 export default router;
