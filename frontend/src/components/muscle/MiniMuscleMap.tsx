@@ -31,7 +31,7 @@ interface MiniMuscleMapProps {
 }
 
 const decorateSvg = (svg: string, css: string) => {
-  const withClass = svg.replace(/<svg\b([^>]*)>/, (match, attrs) => {
+  const withClass = svg.replace(/<svg\b([^>]*)>/, (attrs) => {
     if (/\bclass=/.test(attrs)) {
       return `<svg${attrs.replace(/\bclass="([^"]*)"/, ' class="$1 w-full h-full"')}>`
     }
