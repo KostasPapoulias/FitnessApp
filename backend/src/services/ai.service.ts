@@ -116,7 +116,10 @@ export const sendMessage = async ({
   const geminiApiKey = process.env.GEMINI_API_KEY
   if (geminiApiKey) {
     const genAI = new GoogleGenerativeAI(geminiApiKey)
-    const modelName = (process.env.GEMINI_MODEL ?? 'gemini-1.5-flash').trim()
+    const rawModelName = (process.env.GEMINI_MODEL ?? 'models/gemini-2.5-flash').trim()
+    const modelName = rawModelName.startsWith('models/')
+      ? rawModelName
+      : `models/${rawModelName}`
     const model = genAI.getGenerativeModel(
       { model: modelName },
       { apiVersion: 'v1' }
