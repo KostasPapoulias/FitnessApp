@@ -1,9 +1,15 @@
 import OpenAi from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
 
-const openai = new OpenAi({
-  apiKey: process.env.OPENAI_API_KEY
-})
+const getOpenAiClient = () => {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) {
+    return null
+  }
+
+  return new OpenAi({ apiKey })
+}
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
@@ -116,6 +122,55 @@ export const sendMessage = async ({
 }) => {
   // Build the full context
   const systemContext = await buildUserContext(userId)
+
+  const geminiApiKey = process.env.GEMINI_API_KEY
+  if (geminiApiKey) {
+    const genAI = new GoogleGenerativeAI(geminiApiKey)
+    const modelName = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash'
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: systemContext
+    })
+
+    const contents = [
+      ...history.map(item => ({
+        role: item.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: item.content }]
+      })),
+      { role: 'user', parts: [{ text: message }] }
+    ]
+
+    const response = await model.generateContent({ contents })
+    const replyText = response.response.text().trim()
+      ? response.response.text().trim()
+      : 'Sorry, I could not generate a response.'
+
+    await prisma.aIChat.createMany({
+      data: [
+        {
+          threadId,
+          userId,
+          messageText: message,
+          sender: 'user',
+          dateTime: new Date()
+        },
+        {
+          threadId,
+          userId,
+          messageText: replyText,
+          sender: 'assistant',
+          dateTime: new Date()
+        }
+      ]
+    })
+
+    return replyText
+  }
+
+  const openai = getOpenAiClient()
+  if (!openai) {
+    throw new Error('No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.')
+  }
 
   // Call OpenAI API
   const response = await openai.chat.completions.create({
