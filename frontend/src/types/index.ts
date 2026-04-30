@@ -99,3 +99,11 @@ export interface ApiResponse<T> {
   data: T
   error?: string
 }
+
+// AI Chat
+export interface Message {
+  id: string
+  sender: 'user' | 'assistant'
+  messageText: string
+  dateTime: string
+}

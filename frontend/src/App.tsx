@@ -8,6 +8,7 @@ import Register from './pages/Register'
 import Home from './pages/Home'
 import Calendar from './pages/Calendar'
 import AIChat from './pages/AIChat'
+import AIChatHub from './pages/AIChatHub'
 import Profile from './pages/Profile'
 import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
@@ -55,7 +56,8 @@ export default function App() {
           <Route path="workout/exercises" element={<ExerciseList />} />
           <Route path="exercise-detail" element={<ExerciseDetail />} />
           <Route path="workout/active" element={<ActiveWorkout />} />
-          <Route path="ai" element={<AIChat />} />
+          <Route path="ai" element={<AIChatHub />} />
+          <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
         </Route>
 
