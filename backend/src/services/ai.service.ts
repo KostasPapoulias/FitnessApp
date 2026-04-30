@@ -1,15 +1,5 @@
-import OpenAi from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
-
-const getOpenAiClient = () => {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    return null
-  }
-
-  return new OpenAi({ apiKey })
-}
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
@@ -167,47 +157,7 @@ export const sendMessage = async ({
     return replyText
   }
 
-  const openai = getOpenAiClient()
-  if (!openai) {
-    throw new Error('No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.')
-  }
-
-  // Call OpenAI API
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
-    max_tokens: 1024,
-    messages: [
-      { role: 'system', content: systemContext },
-      ...history,
-      { role: 'user', content: message }
-    ]
-  })
-
-  const replyText = response.choices[0].message.content
-    ? response.choices[0].message.content
-    : 'Sorry, I could not generate a response.'
-
-  // Save both messages to database
-  await prisma.aIChat.createMany({
-    data: [
-      {
-        threadId,
-        userId,
-        messageText: message,
-        sender: 'user',
-        dateTime: new Date()
-      },
-      {
-        threadId,
-        userId,
-        messageText: replyText,
-        sender: 'assistant',
-        dateTime: new Date()
-      }
-    ]
-  })
-
-  return replyText
+  throw new Error('Gemini is not configured. Set GEMINI_API_KEY.')
 }
 
 // Get or create a thread for the user

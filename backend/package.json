@@ -24,7 +24,6 @@
     "generative-ai": "^0.1.4",
     "google": "^2.1.0",
     "jsonwebtoken": "^9.0.2",
-    "openai": "^6.35.0",
     "prisma": "^6.19.2",
     "router": "^2.2.0"
   },
