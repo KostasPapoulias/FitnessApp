@@ -165,7 +165,7 @@ export const getOrCreateThread = async (userId: string) => {
 
   if (!thread) {
     thread = await prisma.chatThread.create({
-      data: { userId, title: 'My Coach' }
+      data: { userId }
     })
   }
 
