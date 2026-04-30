@@ -19,7 +19,6 @@ router.get('threads', getThreads);
 /**
  * @route POST /api/ai/threads
  * @protected
- * @body title
  * @returns Created chat thread
  */
 router.post('threads', createThread);

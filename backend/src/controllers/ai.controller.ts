@@ -74,12 +74,9 @@ export const getThreads = async (req: AuthRequest, res: Response) => {
 // Creates a new thread
 export const createThread = async (req: AuthRequest, res: Response) => {
   try {
-    const { title } = req.body
-
     const thread = await prisma.chatThread.create({
       data: {
-        userId: req.userId!,
-        title: title ?? 'New Chat'
+        userId: req.userId!
       }
     })
 
