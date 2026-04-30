@@ -7,6 +7,10 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* html, body {
+  height: 100%;
+} */
+
 body {
   background-color: #111111;
   color: #FFFFFF;
@@ -16,6 +20,7 @@ body {
   padding: 0;
   /* Prevent overscroll bounce on iOS */
   overscroll-behavior: none;
+ /* overflow: hidden;*/
 }
 
 /* Mobile-first max width — centers on desktop */

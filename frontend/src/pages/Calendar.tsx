@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { calendarService } from '../services/calendar.service'
+import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
 //import { useFatigueStore } from '../store/useFatigueStore'
 
 const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -88,17 +89,17 @@ export default function Calendar() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 flex flex-col">
+    <div className="min-h-853 bg-dark-900 flex flex-col">
 
       {/* Header */}
-      <div className="px-5 pt-14 pb-4">
+      <div className="px-5 pt-4 pb-1">
         <h1 className="text-white text-2xl font-bold">Calendar</h1>
       </div>
 
       {/* Month navigator */}
-      <div className="flex items-center justify-between px-5 mb-4">
+      <div className="flex items-center justify-between px-5 mb-1">
         <button onClick={prevMonth}
-          className="w-9 h-9 bg-dark-800 border border-dark-600 rounded-full
+          className="w-1 h-1 bg-dark-800 border border-dark-600 rounded-full
                      flex items-center justify-center text-white
                      active:scale-90 transition-transform">
           ‹
@@ -107,7 +108,7 @@ export default function Calendar() {
           {MONTHS[month - 1]} {year}
         </h2>
         <button onClick={nextMonth}
-          className="w-9 h-9 bg-dark-800 border border-dark-600 rounded-full
+          className="w-1 h-1 bg-dark-800 border border-dark-600 rounded-full
                      flex items-center justify-center text-white
                      active:scale-90 transition-transform">
           ›
@@ -115,7 +116,7 @@ export default function Calendar() {
       </div>
 
       {/* Day headers */}
-      <div className="grid grid-cols-7 px-3 mb-2">
+      <div className="grid grid-cols-7 px-1 mb-1">
         {DAYS.map(d => (
           <div key={d} className="text-center text-dark-400 text-xs font-medium py-1">
             {d}
@@ -124,10 +125,10 @@ export default function Calendar() {
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 px-3 gap-y-1 mb-2">
+      <div className="grid grid-cols-7 px-2 gap-1 mb-0">
         {isLoadingMonth
           ? Array(35).fill(null).map((_, i) => (
-              <div key={i} className="aspect-square m-0.5 bg-dark-800 rounded-xl animate-pulse" />
+              <div key={i} className="h-9 w-full bg-dark-800 rounded-lg animate-pulse" />
             ))
           : cells.map((day, i) => {
               if (!day) return <div key={i} />
@@ -141,7 +142,7 @@ export default function Calendar() {
                 <button
                   key={i}
                   onClick={() => setSelectedDate(selected ? null : key)}
-                  className={`aspect-square m-0.5 rounded-xl flex flex-col
+                  className={`h-9 w-full rounded-lg flex flex-col
                              items-center justify-center transition-all
                              active:scale-90 relative
                              ${selected
@@ -175,7 +176,7 @@ export default function Calendar() {
       </div>
 
       {/* Intensity legend */}
-      <div className="flex items-center justify-center gap-4 mb-4 px-5">
+      <div className="flex items-center justify-center gap-4 mb-4 px-2">
         <span className="text-dark-500 text-xs">rest</span>
         <div className="flex-1 h-1.5 rounded-full"
           style={{ background: 'linear-gradient(to right, #2A2A2A, #4ADE80, #FACC15, #EF4444)' }} />
@@ -183,7 +184,7 @@ export default function Calendar() {
       </div>
 
       {/* Day detail panel */}
-      <div className="flex-1 overflow-y-auto px-5 pb-24">
+      <div className="flex-1 overflow-y-auto px-2 pb-24">
 
         {!selectedDate && (
           <div className="text-center py-12">
@@ -209,70 +210,77 @@ export default function Calendar() {
         {selectedDate && !isLoadingDay && dayDetail && (
           <div className="flex flex-col gap-4">
 
-            {/* Session summary */}
-            <div className="bg-dark-800 rounded-card border border-dark-600 p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="text-dark-300 text-xs uppercase tracking-wider mb-1">
-                    {new Date(selectedDate).toLocaleDateString('en-US', {
-                      weekday: 'long', day: 'numeric', month: 'long'
-                    })}
-                  </p>
-                  <p className="text-white text-lg font-bold">
-                    {dayDetail.exercises.length} exercise workout
-                  </p>
-                </div>
-              </div>
+            {/* Session summary — two column with mini SVG */}
+<div className="bg-dark-800 rounded-card border border-dark-600 p-4">
+  <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
+    {new Date(selectedDate).toLocaleDateString('en-US', {
+      weekday: 'long', day: 'numeric', month: 'long'
+    })}
+  </p>
 
-              {/* Stats row */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-dark-700 rounded-xl p-3 text-center">
-                  <p className="text-brand-teal font-bold text-base">
-                    {dayDetail.session.totalVolume
-                      ? `${Math.round(dayDetail.session.totalVolume).toLocaleString()}`
-                      : '—'}
-                  </p>
-                  <p className="text-dark-400 text-xs mt-0.5">Volume kg</p>
-                </div>
-                <div className="bg-dark-700 rounded-xl p-3 text-center">
-                  <p className="text-brand-yellow font-bold text-base">
-                    {dayDetail.session.avgRpe?.toFixed(1) ?? '—'}
-                  </p>
-                  <p className="text-dark-400 text-xs mt-0.5">Avg RPE</p>
-                </div>
-                <div className="bg-dark-700 rounded-xl p-3 text-center">
-                  <p className="text-white font-bold text-base">
-                    {dayDetail.session.duration
-                      ? formatDuration(dayDetail.session.duration)
-                      : '—'}
-                  </p>
-                  <p className="text-dark-400 text-xs mt-0.5">Duration</p>
-                </div>
-              </div>
-            </div>
+  <div className="flex gap-3 mb-3">
 
-            {/* Fatigue snapshot */}
-            {dayDetail.fatigueSnapshot.length > 0 && (
-              <div className="bg-dark-800 rounded-card border border-dark-600 p-4">
-                <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-                  🔥 Fatigue Snapshot
-                </p>
-                <div className="flex gap-2 flex-wrap">
-                  {dayDetail.fatigueSnapshot.map((f: any) => (
-                    <div key={f.muscleName}
-                      className="flex items-center gap-1.5 bg-dark-700
-                                 rounded-lg px-2.5 py-1.5 border border-dark-600">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: f.color }} />
-                      <span className="text-dark-200 text-xs">{f.muscleName}</span>
-                      <span className="text-dark-400 text-xs">
-                        {Math.round(f.fatigueLevelAfter)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+    {/* Mini SVG fatigue snapshot */}
+    <div className="w-25 flex-shrink-0">
+      <MiniMuscleMap fatigueSnapshot={dayDetail.fatigueSnapshot} />
+    </div>
+
+    {/* Stats */}
+    <div className="flex-1 flex flex-col justify-between">
+      <p className="text-white font-bold text-base ">
+        {dayDetail.exercises.length} exercise workout
+      </p>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between">
+          <span className="text-dark-400 text-xs">Volume</span>
+          <span className="text-brand-teal text-xs font-bold">
+            {dayDetail.session.totalVolume
+              ? `${Math.round(dayDetail.session.totalVolume).toLocaleString()} kg`
+              : '—'}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-dark-400 text-xs">Avg RPE</span>
+          <span className="text-brand-yellow text-xs font-bold">
+            {dayDetail.session.avgRpe?.toFixed(1) ?? '—'}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-dark-400 text-xs">Duration</span>
+          <span className="text-white text-xs font-semibold">
+            {dayDetail.session.duration
+              ? formatDuration(dayDetail.session.duration)
+              : '—'}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-dark-400 text-xs">Time</span>
+          <span className="text-white text-xs">
+            {new Date(dayDetail.session.dateTime)
+              .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+        
+      </div>
+    </div>
+    
+  </div>
+  {/* Optional small legend below the SVG */}
+<div className="flex gap-2 flex-wrap mt-1">
+  {dayDetail.fatigueSnapshot.slice(0, 3).map((f: any) => (
+    <span key={f.muscleName}
+      className="text-[10px] text-dark-400">
+      <span style={{ color: f.color }}>●</span> {f.muscleName}
+    </span>
+  ))}
+  {dayDetail.fatigueSnapshot.length > 3 && (
+    <span className="text-[10px] text-dark-500">
+      +{dayDetail.fatigueSnapshot.length - 3} more
+    </span>
+  )}
+</div>
+</div>
+
 
             {/* Exercises list */}
             <div>
@@ -317,10 +325,10 @@ export default function Calendar() {
 
                       {/* Expanded set table */}
                       {isExpanded && (
-                        <div className="border-t border-dark-700 px-4 pb-4">
+                        <div className="border-t border-dark-700 px-4 pb-1">
 
                           {/* Table header */}
-                          <div className="grid grid-cols-4 gap-2 py-2 mb-1">
+                          <div className="grid grid-cols-4 gap-1 py-2 mb-1">
                             {['Set', 'Reps', 'Weight', 'RPE'].map(h => (
                               <p key={h}
                                 className="text-dark-500 text-xs uppercase
@@ -333,7 +341,7 @@ export default function Calendar() {
                           {/* Set rows */}
                           {ex.sets.map((s: any, si: number) => (
                             <div key={si}
-                              className="grid grid-cols-4 gap-2 mb-1.5">
+                              className="grid grid-cols-4 gap-1 mb-0.5">
                               <div className="bg-dark-700 rounded-lg py-2 text-center">
                                 <span className="text-dark-300 text-xs font-semibold">
                                   {s.setNumber}
