@@ -10,20 +10,29 @@ import prisma from '../lib/prisma'
 // POST /api/ai/chat
 export const chat = async (req: AuthRequest, res: Response) => {
   try {
-    const { message } = req.body
+    const { message, threadId: existingThreadId } = req.body
 
     if (!message?.trim()) {
       res.status(400).json({ success: false, error: 'Message is required' })
       return
     }
 
-    // Get or create thread
-    const thread = await getOrCreateThread(req.userId!)
+    // provided threadId or get/create default
+    let thread
+    if (existingThreadId) {
+      thread = await prisma.chatThread.findFirst({
+        where: { id: existingThreadId, userId: req.userId! }
+      })
+      if (!thread) {
+        res.status(404).json({ success: false, error: 'Thread not found' })
+        return
+      }
+    } else {
+      thread = await getOrCreateThread(req.userId!)
+    }
 
-    // Get conversation history
     const history = await getThreadHistory(thread.id)
 
-    // Send to Claude and save
     const reply = await sendMessage({
       userId:   req.userId!,
       threadId: thread.id,
@@ -36,6 +45,62 @@ export const chat = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('AI chat error:', error)
     res.status(500).json({ success: false, error: 'AI service error' })
+  }
+}
+
+// GET /api/ai/threads
+// Returns all chat threads for the user
+export const getThreads = async (req: AuthRequest, res: Response) => {
+  try {
+    const threads = await prisma.chatThread.findMany({
+      where: { userId: req.userId! },
+      include: {
+        messages: {
+          orderBy: { dateTime: 'desc' },
+          take: 1 // just the last message for preview
+        },
+        _count: { select: { messages: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    res.json({ success: true, data: threads })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+// POST /api/ai/threads
+// Creates a new thread
+export const createThread = async (req: AuthRequest, res: Response) => {
+  try {
+    const { title } = req.body
+
+    const thread = await prisma.chatThread.create({
+      data: {
+        userId: req.userId!,
+        title: title ?? 'New Chat'
+      }
+    })
+
+    res.status(201).json({ success: true, data: thread })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+// DELETE /api/ai/threads/:id
+export const deleteThread = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    await prisma.chatThread.delete({
+      where: { id, userId: req.userId! }
+    })
+
+    res.json({ success: true, data: { deleted: true } })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Server error' })
   }
 }
 

@@ -1,11 +1,34 @@
 import { Router } from 'express';
-import { chat, getHistory, suggestWorkout } from '../controllers/ai.controller';
+import {
+  chat, getHistory, suggestWorkout,
+  getThreads, createThread, deleteThread
+} from '../controllers/ai.controller'
 import { verifyToken } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(verifyToken);
 
+
+/**
+ * @route GET /api/ai/threads
+ * @protected
+ * @returns List of user's chat threads with last message preview
+ */
+router.get('threads', getThreads);
+/**
+ * @route POST /api/ai/threads
+ * @protected
+ * @body title
+ * @returns Created chat thread
+ */
+router.post('threads', createThread);
+/**
+ * @route DELETE /api/ai/threads/:id
+ * @protected
+ * @returns Deletion confirmation
+ */
+router.delete('threads/:id', deleteThread);
 /**
  * @route POST /api/ai/chat
  * @protected
