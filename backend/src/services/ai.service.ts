@@ -119,7 +119,7 @@ export const sendMessage = async ({
 
   // Call OpenAI API
   const response = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
+    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
     max_tokens: 1024,
     messages: [
       { role: 'system', content: systemContext },
