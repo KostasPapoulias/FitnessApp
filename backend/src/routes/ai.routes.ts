@@ -15,19 +15,19 @@ router.use(verifyToken);
  * @protected
  * @returns List of user's chat threads with last message preview
  */
-router.get('threads', getThreads);
+router.get('/threads', getThreads);
 /**
  * @route POST /api/ai/threads
  * @protected
  * @returns Created chat thread
  */
-router.post('threads', createThread);
+router.post('/threads', createThread);
 /**
  * @route DELETE /api/ai/threads/:id
  * @protected
  * @returns Deletion confirmation
  */
-router.delete('threads/:id', deleteThread);
+router.delete('/threads/:id', deleteThread);
 /**
  * @route POST /api/ai/chat
  * @protected
