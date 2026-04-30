@@ -116,11 +116,12 @@ export const sendMessage = async ({
   const geminiApiKey = process.env.GEMINI_API_KEY
   if (geminiApiKey) {
     const genAI = new GoogleGenerativeAI(geminiApiKey)
-    const modelName = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash'
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: systemContext
-    })
+    const modelName = (process.env.GEMINI_MODEL || 'gemini-1.5-flash').trim();    
+    const model = genAI.getGenerativeModel(
+      {model: modelName,
+      systemInstruction: systemContext},
+      { apiVersion: 'v1' }
+    )
 
     const contents = [
       ...history.map(item => ({
