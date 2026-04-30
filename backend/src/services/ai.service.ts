@@ -117,7 +117,10 @@ export const sendMessage = async ({
   if (geminiApiKey) {
     const genAI = new GoogleGenerativeAI(geminiApiKey)
     const modelName = (process.env.GEMINI_MODEL ?? 'gemini-1.5-flash').trim()
-    const model = genAI.getGenerativeModel({ model: modelName })
+    const model = genAI.getGenerativeModel(
+      { model: modelName },
+      { apiVersion: 'v1' }
+    )
 
     const contents = [
       { role: 'user', parts: [{ text: systemContext }] },
