@@ -67,9 +67,9 @@ export default function MiniMuscleMap({ fatigueSnapshot }: MiniMuscleMapProps) {
   const backSvg = useMemo(() => decorateSvg(back5, svgCss), [svgCss])
 
   return (
-    <div className="flex  gap-1">
-      <div className="w-34 h-40" aria-label="Front muscle map" dangerouslySetInnerHTML={{ __html: frontSvg }} />
-      <div className="w-34 h-40" aria-label="Back muscle map" dangerouslySetInnerHTML={{ __html: backSvg }} />
+    <div className="flex gap-0.5 max-w-full overflow-hidden">
+      <div className="w-24 h-32" aria-label="Front muscle map" dangerouslySetInnerHTML={{ __html: frontSvg }} />
+      <div className="w-24 h-32" aria-label="Back muscle map" dangerouslySetInnerHTML={{ __html: backSvg }} />
     </div>
   )
 }
