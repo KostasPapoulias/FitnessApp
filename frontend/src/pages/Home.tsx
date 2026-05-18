@@ -34,7 +34,7 @@ export default function Home() {
       : 'High fatigue. Rest or do mobility work today to recover.'
 
   return (
-    <div className="relative flex flex-col h-full bg-dark-800">
+    <div className="relative flex flex-col flex-1 min-h-full bg-dark-800">
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-6 pb-2">
@@ -115,7 +115,7 @@ export default function Home() {
 
       {/* AI suggestion strip */}
       {aiVisible && (
-        <div className="mx-1 mt-7 mb-1 bg-dark-800 border border-brand-teal/30
+        <div className="mx-1 mt-auto mb-1 bg-dark-800 border border-brand-teal/30
                         rounded-card px-2 py-3 flex items-start gap-3">
           <span className="text-lg mt-0.5">🤖</span>
           <p className="text-dark-200 text-sm flex-1 leading-relaxed">

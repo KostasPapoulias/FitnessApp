@@ -251,7 +251,12 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
       //  Update the session with final stats
       await tx.workoutSession.update({
         where: { id: sessionId },
-        data: { duration, totalVolume, avgRpe }
+        data: {
+          duration,
+          totalVolume,
+          avgRpe,
+          dateTime: new Date()
+        }
       })
 
       //  Update fatigue for each muscle involved
