@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { prisma } from '../server';
+import { buildEffectiveFatigueMap } from '../services/fatigue.service';
 import { AuthRequest } from '../server';
 
 // Get all exercises
@@ -51,9 +52,7 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
     const fatigueCurrent = await prisma.muscleFatigueCurrent.findMany({
       where: { userId: req.userId! }
     })
-    const fatigueMap = new Map(
-      fatigueCurrent.map(f => [f.muscleId, f.fatigueLevel])
-    )
+    const fatigueMap = buildEffectiveFatigueMap(fatigueCurrent)
 
     // Add fatigue warning to each exercise
     const exercisesWithFatigue = exercises.map(exercise => {
@@ -202,9 +201,7 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
     })
 
     // Build a map of muscleId -> fatigueLevel for fast lookup
-    const fatigueMap = new Map(
-      fatigueCurrent.map(f => [f.muscleId, f.fatigueLevel])
-    )
+    const fatigueMap = buildEffectiveFatigueMap(fatigueCurrent)
 
     // For each category calculate its overall fatigue
     // based on the muscles of exercises in that category

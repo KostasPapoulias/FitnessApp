@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
+import { getEffectiveFatigueLevel } from './fatigue.service'
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
@@ -8,6 +9,11 @@ export const buildUserContext = async (userId: string): Promise<string> => {
     where: { userId },
     include: { muscle: true }
   })
+  const now = new Date()
+  const effectiveFatigue = fatigue.map(record => ({
+    ...record,
+    effectiveLevel: getEffectiveFatigueLevel(record, now)
+  }))
 
   // Get latest sleep
   const sleep = await prisma.sleepLog.findFirst({
@@ -39,15 +45,15 @@ export const buildUserContext = async (userId: string): Promise<string> => {
   })
 
   // Build readiness score
-  const avgFatigue = fatigue.length > 0
-    ? fatigue.reduce((sum, f) => sum + f.fatigueLevel, 0) / fatigue.length
+  const avgFatigue = effectiveFatigue.length > 0
+    ? effectiveFatigue.reduce((sum, f) => sum + f.effectiveLevel, 0) / effectiveFatigue.length
     : 0
   const readiness = Math.round(Math.max(0, 100 - avgFatigue))
 
   // Format fatigue by status
-  const highFatigue   = fatigue.filter(f => f.fatigueLevel >= 70)
-  const modFatigue    = fatigue.filter(f => f.fatigueLevel >= 35 && f.fatigueLevel < 70)
-  const recovered     = fatigue.filter(f => f.fatigueLevel < 35)
+  const highFatigue   = effectiveFatigue.filter(f => f.effectiveLevel >= 70)
+  const modFatigue    = effectiveFatigue.filter(f => f.effectiveLevel >= 35 && f.effectiveLevel < 70)
+  const recovered     = effectiveFatigue.filter(f => f.effectiveLevel < 35)
 
   const context = `
 You are SomaTrack AI — a personal fitness and recovery coach assistant.
@@ -65,17 +71,17 @@ Overall readiness score: ${readiness}%
 
 High fatigue muscles (🔴 need rest):
 ${highFatigue.length > 0
-  ? highFatigue.map(f => `  - ${f.muscle.name}: ${Math.round(f.fatigueLevel)}% fatigued`).join('\n')
+  ? highFatigue.map(f => `  - ${f.muscle.name}: ${Math.round(f.effectiveLevel)}% fatigued`).join('\n')
   : '  None'}
 
 Moderate fatigue muscles (🟡 train light):
 ${modFatigue.length > 0
-  ? modFatigue.map(f => `  - ${f.muscle.name}: ${Math.round(f.fatigueLevel)}% fatigued`).join('\n')
+  ? modFatigue.map(f => `  - ${f.muscle.name}: ${Math.round(f.effectiveLevel)}% fatigued`).join('\n')
   : '  None'}
 
 Recovered muscles (🟢 ready to train):
 ${recovered.length > 0
-  ? recovered.map(f => `  - ${f.muscle.name}: ${Math.round(f.fatigueLevel)}% fatigued`).join('\n')
+  ? recovered.map(f => `  - ${f.muscle.name}: ${Math.round(f.effectiveLevel)}% fatigued`).join('\n')
   : '  All muscles need more data'}
 
 ## Today's Health Data

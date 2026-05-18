@@ -1,5 +1,6 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
+import { getEffectiveFatigueLevel } from '../services/fatigue.service'
 import { AuthRequest } from '../server'
 
 // GET /api/fatigue/current
@@ -26,30 +27,8 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
     const muscles = allMuscles.map(muscle => {
       const record = fatigueMap.get(muscle.id)
 
-      let fatigueLevel = record?.fatigueLevel ?? 0
-      let recoveryTargetAt = record?.recoveryTargetAt ?? null
-
-      // Apply real-time recovery interpolation
-      // If recovery target exists and is in the future,
-      // calculate how much has already recovered
-      if (record && recoveryTargetAt && record.updatedAt) {
-        const totalDuration =
-          recoveryTargetAt.getTime() - record.updatedAt.getTime()
-        const elapsed = now.getTime() - record.updatedAt.getTime()
-
-        if (elapsed > 0 && totalDuration > 0) {
-          const recoveryRatio = Math.min(elapsed / totalDuration, 1)
-          fatigueLevel = Math.max(
-            0,
-            record.fatigueLevel * (1 - recoveryRatio)
-          )
-        }
-
-        // Fully recovered
-        if (now >= recoveryTargetAt) {
-          fatigueLevel = 0
-        }
-      }
+      const fatigueLevel = getEffectiveFatigueLevel(record ?? null, now)
+      const recoveryTargetAt = record?.recoveryTargetAt ?? null
 
       const rounded = Math.round(fatigueLevel)
 
