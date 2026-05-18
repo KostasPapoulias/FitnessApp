@@ -85,11 +85,12 @@ export default function AIChat() {
     readinessScore >= 40 ? '#FACC15' : '#EF4444'
 
   return (
-    <div className="min-h-853 bg-dark-900 flex flex-col">
+    <div className="min-h-853 bg-dark-900 overflow-hidden">
 
       {/* Header with back button */}
-      <div className="px-5 pt-4 pb-3 border-b border-dark-700
-                      flex items-center gap-3">
+      <div className="fixed top-0 left-0 right-0 z-10 bg-dark-900
+              px-5 pt-4 pb-3 border-b border-dark-700
+              flex items-center gap-3">
         <button
           onClick={() => navigate('/ai')}
           className="w-9 h-9 bg-dark-800 border border-dark-600 rounded-full
@@ -121,7 +122,7 @@ export default function AIChat() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-853 overflow-y-auto px-4 pt-24 pb-[80px]">
         {isLoadingHistory ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-dark-400 text-sm">Loading...</div>
@@ -167,7 +168,8 @@ export default function AIChat() {
       </div>
 
       {/* Input */}
-      <div className="px-4 pb-8 pt-3 border-t border-dark-700">
+            <div className="fixed bottom-[60px] left-0 right-0 z-10 bg-dark-900
+              px-4 pb-8 pt-3 border-t border-dark-700">
         <div className="flex gap-3 items-end">
           <div className="flex-1 bg-dark-800 border border-dark-600
                           rounded-2xl px-4 py-3
