@@ -29,7 +29,41 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
       },
       orderBy: { dateTime: 'asc' }
     });
-    // Build a map of date string -> session summary
+    // Build a map of date string -> aggregated session summary
+    const dayAgg: Record<string, {
+      sessionId: string
+      totalVolume: number
+      duration: number
+      exerciseCount: number
+      rpeWeightedSum: number
+      rpeWeight: number
+    }> = {}
+
+    for (const session of sessions) {
+      const dateKey = session.dateTime.toISOString().split('T')[0]
+      const totalVolume = session.totalVolume ?? 0
+      const avgRpe = session.avgRpe ?? 0
+      const rpeWeight = totalVolume > 0 ? totalVolume : (avgRpe > 0 ? 1 : 0)
+
+      if (!dayAgg[dateKey]) {
+        dayAgg[dateKey] = {
+          sessionId: session.id,
+          totalVolume: 0,
+          duration: 0,
+          exerciseCount: 0,
+          rpeWeightedSum: 0,
+          rpeWeight: 0
+        }
+      }
+
+      dayAgg[dateKey].sessionId = session.id
+      dayAgg[dateKey].totalVolume += totalVolume
+      dayAgg[dateKey].duration += session.duration ?? 0
+      dayAgg[dateKey].exerciseCount += session.workoutExercises.length
+      dayAgg[dateKey].rpeWeightedSum += avgRpe * rpeWeight
+      dayAgg[dateKey].rpeWeight += rpeWeight
+    }
+
     const dayMap: Record<string, {
       sessionId: string
       totalVolume: number
@@ -40,13 +74,12 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
       exerciseCount: number
     }> = {}
 
-    for (const session of sessions) {
-      const dateKey = session.dateTime.toISOString().split('T')[0]
-      const rpe = session.avgRpe ?? 0
+    for (const [dateKey, agg] of Object.entries(dayAgg)) {
+      const avgRpe = agg.rpeWeight > 0 ? agg.rpeWeightedSum / agg.rpeWeight : 0
       const intensity =
-        rpe === 0    ? 'rest'   :
-        rpe <= 5     ? 'low'    :
-        rpe <= 7.5   ? 'medium' : 'high'
+        avgRpe === 0  ? 'rest'   :
+        avgRpe <= 5   ? 'low'    :
+        avgRpe <= 7.5 ? 'medium' : 'high'
 
       const color =
         intensity === 'high'   ? '#EF4444' :
@@ -54,11 +87,11 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
         intensity === 'low'    ? '#4ADE80' : '#2A2A2A'
 
       dayMap[dateKey] = {
-        sessionId:     session.id,
-        totalVolume:   session.totalVolume ?? 0,
-        avgRpe:        rpe,
-        duration:      session.duration ?? 0,
-        exerciseCount: session.workoutExercises.length,
+        sessionId: agg.sessionId,
+        totalVolume: agg.totalVolume,
+        avgRpe,
+        duration: agg.duration,
+        exerciseCount: agg.exerciseCount,
         intensity,
         color
       }
@@ -81,7 +114,7 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
     const dayEnd   = new Date(date)
     dayEnd.setDate(dayEnd.getDate() + 1)
 
-    const session = await prisma.workoutSession.findFirst({
+    const sessions = await prisma.workoutSession.findMany({
       where: {
         userId: req.userId!,
         dateTime: { gte: dayStart, lt: dayEnd }
@@ -102,47 +135,86 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
           },
           orderBy: { orderIndex: 'asc' }
         }
-      }
+      },
+      orderBy: { dateTime: 'asc' }
     })
 
-    if (!session) {
+    if (!sessions.length) {
       res.json({ success: true, data: null })
       return
     }
 
-    // Get the fatigue snapshot for that day from the log
-    const fatigueSnapshot = await prisma.muscleFatigueLog.findMany({
+    const sessionIds = sessions.map(s => s.id)
+
+    // Get the fatigue snapshot for that day from the logs
+    const fatigueLogs = await prisma.muscleFatigueLog.findMany({
       where: {
         userId: req.userId!,
-        workoutSessionId: session.id
+        workoutSessionId: { in: sessionIds }
       },
-      include: { muscle: true }
+      include: { muscle: true },
+      orderBy: { createdAt: 'asc' }
     })
+
+    const fatigueByMuscle = new Map<string, typeof fatigueLogs[number]>()
+    for (const log of fatigueLogs) {
+      fatigueByMuscle.set(log.muscleId, log)
+    }
+
+    const totalVolume = sessions.reduce(
+      (sum, s) => sum + (s.totalVolume ?? 0), 0
+    )
+    const duration = sessions.reduce(
+      (sum, s) => sum + (s.duration ?? 0), 0
+    )
+    const rpeWeightedSum = sessions.reduce((sum, s) => {
+      const avgRpe = s.avgRpe ?? 0
+      const weight = (s.totalVolume ?? 0) > 0 ? (s.totalVolume ?? 0) : (avgRpe > 0 ? 1 : 0)
+      return sum + (avgRpe * weight)
+    }, 0)
+    const rpeWeight = sessions.reduce((sum, s) => {
+      const avgRpe = s.avgRpe ?? 0
+      const weight = (s.totalVolume ?? 0) > 0 ? (s.totalVolume ?? 0) : (avgRpe > 0 ? 1 : 0)
+      return sum + weight
+    }, 0)
+    const avgRpe = rpeWeight > 0 ? rpeWeightedSum / rpeWeight : 0
 
     res.json({
       success: true,
       data: {
         session: {
+          dateTime:     dayStart,
+          duration,
+          totalVolume,
+          avgRpe,
+          sessionCount: sessions.length,
+          exerciseCount: sessions.reduce(
+            (sum, s) => sum + s.workoutExercises.length, 0
+          )
+        },
+        sessions: sessions.map(session => ({
           id:           session.id,
           dateTime:     session.dateTime,
           duration:     session.duration,
           totalVolume:  session.totalVolume,
           avgRpe:       session.avgRpe,
-          notes:        session.notes
-        },
-        exercises: session.workoutExercises.map(we => ({
-          name:       we.exercise.name,
-          categories: we.exercise.categoryLinks.map(cl => cl.category.name),
-          muscles:    we.exercise.muscleLinks.map(ml => ml.muscle.name),
-          sets:       we.sets.map(s => ({
-            setNumber: s.setNumber,
-            rpe:       s.rpe,
-            strength:  s.strength,
-            cardio:    s.cardio,
-            calisthenics: s.calisthenics
+          notes:        session.notes,
+          exercises: session.workoutExercises.map(we => ({
+            name:       we.exercise.name,
+            categories: we.exercise.categoryLinks.map(cl => cl.category.name),
+            muscles:    we.exercise.muscleLinks.map(ml => ml.muscle.name),
+            sets:       we.sets.map(s => ({
+              setNumber: s.setNumber,
+              rpe:       s.rpe,
+              strength:  s.strength,
+              cardio:    s.cardio,
+              calisthenics: s.calisthenics,
+              // wod:       s.wod,
+              // mobility:  s.mobility
+            }))
           }))
         })),
-        fatigueSnapshot: fatigueSnapshot.map(f => ({
+        fatigueSnapshot: Array.from(fatigueByMuscle.values()).map(f => ({
           muscleName:       f.muscle.name,
           fatigueLevelAfter: f.fatigueLevelAfter,
           delta:            f.delta,

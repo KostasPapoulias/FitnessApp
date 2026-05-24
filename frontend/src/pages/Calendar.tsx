@@ -19,9 +19,26 @@ interface DaySummary {
   exerciseCount: number
 }
 
-interface DayDetail {
-  session: any
+interface DaySession {
+  id: string
+  dateTime: string
+  duration: number | null
+  totalVolume: number | null
+  avgRpe: number | null
+  notes?: string | null
   exercises: any[]
+}
+
+interface DayDetail {
+  session: {
+    dateTime: string
+    duration: number
+    totalVolume: number
+    avgRpe: number
+    sessionCount: number
+    exerciseCount: number
+  }
+  sessions: DaySession[]
   fatigueSnapshot: any[]
 }
 
@@ -84,9 +101,26 @@ export default function Calendar() {
     year === today.getFullYear()
 
   const formatDuration = (seconds: number) => {
+    if (seconds < 60) return '<1 min'
     const m = Math.floor(seconds / 60)
     return m < 60 ? `${m} min` : `${Math.floor(m/60)}h ${m%60}m`
   }
+
+  const legacyExercises = (dayDetail as any)?.exercises ?? []
+  const effectiveSessions = dayDetail?.sessions
+    ?? (dayDetail?.session
+      ? [{
+          id: 'legacy',
+          dateTime: dayDetail.session.dateTime,
+          duration: dayDetail.session.duration,
+          totalVolume: dayDetail.session.totalVolume,
+          avgRpe: dayDetail.session.avgRpe,
+          exercises: legacyExercises
+        }]
+      : [])
+  const sessionCount = dayDetail?.session?.sessionCount ?? effectiveSessions.length
+  const exerciseCount = dayDetail?.session?.exerciseCount
+    ?? effectiveSessions.reduce((sum, s) => sum + (s.exercises?.length ?? 0), 0)
 
   return (
     <div className="min-h-853 bg-dark-900 flex flex-col">
@@ -228,7 +262,7 @@ export default function Calendar() {
     {/* Stats */}
     <div className="flex-1 flex flex-col justify-between">
       <p className="text-white font-bold text-base ">
-        {dayDetail.exercises.length} exercise workout
+        {exerciseCount} exercise workout
       </p>
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between">
@@ -242,7 +276,7 @@ export default function Calendar() {
         <div className="flex justify-between">
           <span className="text-dark-400 text-xs">Avg RPE</span>
           <span className="text-brand-yellow text-xs font-bold">
-            {dayDetail.session.avgRpe?.toFixed(1) ?? '—'}
+            {dayDetail.session.avgRpe ? dayDetail.session.avgRpe.toFixed(1) : '—'}
           </span>
         </div>
         <div className="flex justify-between">
@@ -254,10 +288,9 @@ export default function Calendar() {
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-dark-400 text-xs">Time</span>
+          <span className="text-dark-400 text-xs">Sessions</span>
           <span className="text-white text-xs">
-            {new Date(dayDetail.session.dateTime)
-              .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            {sessionCount}
           </span>
         </div>
         
@@ -267,15 +300,15 @@ export default function Calendar() {
   </div>
   {/* Optional small legend below the SVG */}
 <div className="flex gap-2 flex-wrap mt-1">
-  {dayDetail.fatigueSnapshot.slice(0, 3).map((f: any) => (
+  {(dayDetail.fatigueSnapshot ?? []).slice(0, 3).map((f: any) => (
     <span key={f.muscleName}
       className="text-[10px] text-dark-400">
       <span style={{ color: f.color }}>●</span> {f.muscleName}
     </span>
   ))}
-  {dayDetail.fatigueSnapshot.length > 3 && (
+  {(dayDetail.fatigueSnapshot?.length ?? 0) > 3 && (
     <span className="text-[10px] text-dark-500">
-      +{dayDetail.fatigueSnapshot.length - 3} more
+      +{(dayDetail.fatigueSnapshot?.length ?? 0) - 3} more
     </span>
   )}
 </div>
@@ -285,111 +318,132 @@ export default function Calendar() {
             {/* Exercises list */}
             <div>
               <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-                Exercises ({dayDetail.exercises.length})
+                Exercises ({exerciseCount})
               </p>
 
-              <div className="flex flex-col gap-3">
-                {dayDetail.exercises.map((ex: any, idx: number) => {
-                  const isExpanded = expandedExercise === `${ex.name}-${idx}`
-                  const totalSets  = ex.sets.length
-                  const totalVol   = ex.sets.reduce((sum: number, s: any) =>
-                    sum + (s.strength ? s.strength.reps * s.strength.weight : 0), 0)
+              <div className="flex flex-col gap-4">
+                {effectiveSessions.map((session, sIdx) => (
+                  <div key={session.id} className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between px-1">
+                      <p className="text-dark-400 text-xs uppercase tracking-wider">
+                        Session {sIdx + 1} · {new Date(session.dateTime)
+                          .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <span className="text-dark-500 text-xs">
+                        {session.totalVolume
+                          ? `${Math.round(session.totalVolume).toLocaleString()} kg`
+                          : '—'}
+                      </span>
+                    </div>
 
-                  return (
-                    <div key={idx}
-                      className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden">
+                    {session.exercises.length === 0 && (
+                      <div className="bg-dark-800 border border-dark-600 rounded-card p-4">
+                        <p className="text-dark-400 text-sm">No sets logged in this session</p>
+                      </div>
+                    )}
 
-                      {/* Exercise header — tap to expand */}
-                      <button
-                        onClick={() => setExpandedExercise(
-                          isExpanded ? null : `${ex.name}-${idx}`
-                        )}
-                        className="w-full flex items-center gap-3 p-4 text-left"
-                      >
-                        <div className="w-10 h-10 bg-dark-700 rounded-xl
-                                        flex items-center justify-center text-lg flex-shrink-0">
-                          💪
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-semibold text-sm">{ex.name}</p>
-                          <p className="text-dark-400 text-xs mt-0.5">
-                            {totalSets} sets
-                            {totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString()} kg` : ''}
-                          </p>
-                        </div>
-                        <span className={`text-dark-400 text-sm transition-transform
-                          ${isExpanded ? 'rotate-180' : ''}`}>
-                          ▾
-                        </span>
-                      </button>
+                    {session.exercises.map((ex: any, idx: number) => {
+                      const key = `${session.id}-${ex.name}-${idx}`
+                      const isExpanded = expandedExercise === key
+                      const totalSets  = ex.sets.length
+                      const totalVol   = ex.sets.reduce((sum: number, s: any) =>
+                        sum + (s.strength ? s.strength.reps * s.strength.weight : 0), 0)
 
-                      {/* Expanded set table */}
-                      {isExpanded && (
-                        <div className="border-t border-dark-700 px-4 pb-1">
+                      return (
+                        <div key={key}
+                          className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden">
 
-                          {/* Table header */}
-                          <div className="grid grid-cols-4 gap-1 py-2 mb-1">
-                            {['Set', 'Reps', 'Weight', 'RPE'].map(h => (
-                              <p key={h}
-                                className="text-dark-500 text-xs uppercase
-                                           text-center">
-                                {h}
-                              </p>
-                            ))}
-                          </div>
-
-                          {/* Set rows */}
-                          {ex.sets.map((s: any, si: number) => (
-                            <div key={si}
-                              className="grid grid-cols-4 gap-1 mb-0.5">
-                              <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                <span className="text-dark-300 text-xs font-semibold">
-                                  {s.setNumber}
-                                </span>
-                              </div>
-                              <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                <span className="text-white text-xs">
-                                  {s.strength?.reps ?? s.calisthenics?.reps ?? '—'}
-                                </span>
-                              </div>
-                              <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                <span className="text-white text-xs">
-                                  {s.strength?.weight
-                                    ? `${s.strength.weight}kg`
-                                    : s.cardio?.distance
-                                    ? `${s.cardio.distance}km`
-                                    : '—'}
-                                </span>
-                              </div>
-                              <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                <span className="text-xs font-semibold"
-                                  style={{
-                                    color: s.rpe >= 9 ? '#EF4444'
-                                      : s.rpe >= 7 ? '#FACC15'
-                                      : '#4ADE80'
-                                  }}>
-                                  {s.rpe ?? '—'}
-                                </span>
-                              </div>
+                          {/* Exercise header — tap to expand */}
+                          <button
+                            onClick={() => setExpandedExercise(isExpanded ? null : key)}
+                            className="w-full flex items-center gap-3 p-4 text-left"
+                          >
+                            <div className="w-10 h-10 bg-dark-700 rounded-xl
+                                            flex items-center justify-center text-lg flex-shrink-0">
+                              💪
                             </div>
-                          ))}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-semibold text-sm">{ex.name}</p>
+                              <p className="text-dark-400 text-xs mt-0.5">
+                                {totalSets} sets
+                                {totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString()} kg` : ''}
+                              </p>
+                            </div>
+                            <span className={`text-dark-400 text-sm transition-transform
+                              ${isExpanded ? 'rotate-180' : ''}`}>
+                              ▾
+                            </span>
+                          </button>
 
-                          {/* Exercise volume total */}
-                          {totalVol > 0 && (
-                            <div className="mt-2 flex justify-between
-                                            bg-[#0d2218] rounded-lg px-3 py-2
-                                            border border-brand-teal/20">
-                              <span className="text-dark-400 text-xs">Total volume</span>
-                              <span className="text-brand-teal text-xs font-bold">
-                                {Math.round(totalVol).toLocaleString()} kg
-                              </span>
+                          {/* Expanded set table */}
+                          {isExpanded && (
+                            <div className="border-t border-dark-700 px-4 pb-1">
+
+                              {/* Table header */}
+                              <div className="grid grid-cols-4 gap-1 py-2 mb-1">
+                                {['Set', 'Reps', 'Weight', 'RPE'].map(h => (
+                                  <p key={h}
+                                    className="text-dark-500 text-xs uppercase
+                                               text-center">
+                                    {h}
+                                  </p>
+                                ))}
+                              </div>
+
+                              {/* Set rows */}
+                              {ex.sets.map((s: any, si: number) => (
+                                <div key={si}
+                                  className="grid grid-cols-4 gap-1 mb-0.5">
+                                  <div className="bg-dark-700 rounded-lg py-2 text-center">
+                                    <span className="text-dark-300 text-xs font-semibold">
+                                      {s.setNumber}
+                                    </span>
+                                  </div>
+                                  <div className="bg-dark-700 rounded-lg py-2 text-center">
+                                    <span className="text-white text-xs">
+                                      {s.strength?.reps ?? s.calisthenics?.reps ?? '—'}
+                                    </span>
+                                  </div>
+                                  <div className="bg-dark-700 rounded-lg py-2 text-center">
+                                    <span className="text-white text-xs">
+                                      {s.strength?.weight
+                                        ? `${s.strength.weight}kg`
+                                        : s.cardio?.distance
+                                        ? `${s.cardio.distance}km`
+                                        : '—'}
+                                    </span>
+                                  </div>
+                                  <div className="bg-dark-700 rounded-lg py-2 text-center">
+                                    <span className="text-xs font-semibold"
+                                      style={{
+                                        color: s.rpe >= 9 ? '#EF4444'
+                                          : s.rpe >= 7 ? '#FACC15'
+                                          : '#4ADE80'
+                                      }}>
+                                      {s.rpe ?? '—'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Exercise volume total */}
+                              {totalVol > 0 && (
+                                <div className="mt-2 flex justify-between
+                                                bg-[#0d2218] rounded-lg px-3 py-2
+                                                border border-brand-teal/20">
+                                  <span className="text-dark-400 text-xs">Total volume</span>
+                                  <span className="text-brand-teal text-xs font-bold">
+                                    {Math.round(totalVol).toLocaleString()} kg
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
