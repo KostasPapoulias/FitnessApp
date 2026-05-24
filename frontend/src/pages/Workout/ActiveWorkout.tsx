@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useFatigueStore } from '../../store/useFatigueStore'
+import { useNotifications } from '../../hooks/useNotifcations'
 import RestTimer from './RestTimer'
 
 export default function ActiveWorkout() {
@@ -33,6 +34,9 @@ export default function ActiveWorkout() {
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Notifications
+  const { notifyRestComplete, rescheduleAfterWorkout } = useNotifications()
+  
   useEffect(() => {
     // Start session on mount if not already started
     if (!sessionId && selectedExercises.length > 0) {
@@ -108,6 +112,7 @@ export default function ActiveWorkout() {
     try {
       const result = await finishSession()
       await fetchFatigue() // refresh muscle map
+      await rescheduleAfterWorkout(3)
       setFinishData(result)
     } catch (err) {
       console.error('finish error:', err)
@@ -230,7 +235,11 @@ export default function ActiveWorkout() {
           rpe: rpe
         }}
         workoutTime={formatTime(elapsed)}
-        onDone={handleRestDone}
+        onDone={() => {
+          notifyRestComplete(`Set ${currentSetIndex + 2}`)
+          handleRestDone()
+        }}
+    
         onSkip={handleRestDone}
       />
     )

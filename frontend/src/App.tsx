@@ -18,7 +18,7 @@ import PlanSets from './pages/Workout/PlanSets'
 import AppLayout from './components/layout/AppLayout'
 import StartWorkout from './pages/Workout/StartWorkout'
 import ExerciseDetail from './pages/Workout/ExerciseDetail'
-
+import { useNotifications } from './hooks/useNotifcations'
 // Protected route wrapper
 const Protected = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore()
@@ -27,12 +27,21 @@ const Protected = ({ children }: { children: React.ReactNode }) => {
 
 export default function App() {
   const { fetchMe, isAuthenticated } = useAuthStore()
+  const { requestPermission, scheduleInactivityReminder } = useNotifications()
 
   // On app load, verify token is still valid
   useEffect(() => {
     const token = localStorage.getItem('somatrack_token')
     if (token) fetchMe()
   }, [])
+  useEffect(() => {
+      if (isAuthenticated) {
+        requestPermission().then((granted) => {
+          if (granted) scheduleInactivityReminder(3)
+        })
+      }
+
+    }, [isAuthenticated])
 
   return (
     <BrowserRouter>
