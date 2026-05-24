@@ -265,6 +265,9 @@ export default function ActiveWorkout() {
 
   const totalSets = currentExercise.sets.length
   const prevSet = currentExercise.sets[currentSetIndex - 1]
+  const isLastSet =
+    currentExerciseIndex === selectedExercises.length - 1
+    && currentSetIndex === totalSets - 1
 
   //   ACTIVE WORKOUT SCREEN 
   return (
@@ -495,58 +498,75 @@ export default function ActiveWorkout() {
               <div className="w-2 h-2 bg-dark-500 rounded-full" />
             </div>
 
-            {/* Complete button */}
+            {/* Complete / End button */}
             <button
-              onClick={handleSetDone}
-              className="w-full bg-brand-teal text-black font-bold py-4
-                         rounded-btn text-base active:scale-95 transition-transform"
+              onClick={isLastSet ? handleFinish : handleSetDone}
+              disabled={isLastSet && isFinishing}
+              className={`w-full font-bold py-4 rounded-btn text-base
+                         active:scale-95 transition-transform
+                         ${isLastSet
+                           ? 'bg-[#2a1a1a] border border-brand-red/40 text-brand-red'
+                           : 'bg-brand-teal text-black'
+                         }`}
             >
-              ✓ Set Done — Start Rest
+              {isLastSet
+                ? (isFinishing ? 'Saving...' : '⏹ End')
+                : '✓ Set Done — Start Rest'}
             </button>
           </div>
         </div>
 
-        {/* Up next bar */}
-        <div className="mt-3 bg-dark-800 rounded-card px-4 py-3
-                        flex items-center gap-3 border border-dark-600">
-          <div className="flex-1">
-            <p className="text-dark-500 text-xs uppercase">Up next</p>
-            <p className="text-dark-200 text-sm font-medium">
-              {currentSetIndex < totalSets - 1
-                ? `Set ${currentSetIndex + 2} · ${currentExercise.sets[currentSetIndex + 1]?.weight}kg · ${currentExercise.sets[currentSetIndex + 1]?.reps} reps`
-                : selectedExercises[currentExerciseIndex + 1]
-                ? `${selectedExercises[currentExerciseIndex + 1].exercise.name}`
-                : 'Last set — finish after this!'
-              }
-            </p>
-          </div>
-          <div className="w-px h-8 bg-dark-600" />
-          {currentExerciseIndex < selectedExercises.length - 1 && (
-            <div>
-              <p className="text-dark-500 text-xs uppercase">Then</p>
-              <p className="text-dark-400 text-xs">
-                {selectedExercises[currentExerciseIndex + 1]?.exercise.name}
+        {!isLastSet && (
+          <div className="mt-3 bg-dark-800 rounded-card px-4 py-3
+                          flex items-center gap-3 border border-dark-600">
+            <div className="flex-1">
+              <p className="text-dark-500 text-xs uppercase">Up next</p>
+              <p className="text-dark-200 text-sm font-medium">
+                {currentSetIndex < totalSets - 1
+                  ? `Set ${currentSetIndex + 2} · ${currentExercise.sets[currentSetIndex + 1]?.weight}kg · ${currentExercise.sets[currentSetIndex + 1]?.reps} reps`
+                  : selectedExercises[currentExerciseIndex + 1]
+                  ? `${selectedExercises[currentExerciseIndex + 1].exercise.name}`
+                  : 'Last set — finish after this!'
+                }
               </p>
             </div>
-          )}
-        </div>
+            <div className="w-px h-8 bg-dark-600" />
+            {currentExerciseIndex < selectedExercises.length - 1 && (
+              <div>
+                <p className="text-dark-500 text-xs uppercase">Then</p>
+                <p className="text-dark-400 text-xs">
+                  {selectedExercises[currentExerciseIndex + 1]?.exercise.name}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Note + End row */}
-        <div className="flex gap-3 mt-3">
-          <button className="flex-1 bg-dark-800 border border-dark-600
-                             rounded-btn py-3 text-dark-400 text-sm">
-            📝 Note
-          </button>
-          <button
-            onClick={handleFinish}
-            disabled={isFinishing}
-            className="flex-1 bg-[#2a1a1a] border border-brand-red/40
-                       rounded-btn py-3 text-brand-red text-sm font-semibold
-                       active:scale-95 transition-transform disabled:opacity-50"
-          >
-            {isFinishing ? 'Saving...' : '⏹ End'}
-          </button>
-        </div>
+        {isLastSet ? (
+          <div className="mt-3">
+            <button className="w-full bg-dark-800 border border-dark-600
+                               rounded-btn py-3 text-dark-400 text-sm">
+              📝 Note
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-3 mt-3">
+            <button className="flex-1 bg-dark-800 border border-dark-600
+                               rounded-btn py-3 text-dark-400 text-sm">
+              📝 Note
+            </button>
+            <button
+              onClick={handleFinish}
+              disabled={isFinishing}
+              className="flex-1 bg-[#2a1a1a] border border-brand-red/40
+                         rounded-btn py-3 text-brand-red text-sm font-semibold
+                         active:scale-95 transition-transform disabled:opacity-50"
+            >
+              {isFinishing ? 'Saving...' : '⏹ End'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
