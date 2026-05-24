@@ -44,7 +44,7 @@ export default function AppLayout() {
     setDragX(deltaX)
   }
 
-  const onTouchEnd = (e: React.TouchEvent) => {
+  const onTouchEnd = () => {
     if (!isDragging) return
     setIsDragging(false)
 
