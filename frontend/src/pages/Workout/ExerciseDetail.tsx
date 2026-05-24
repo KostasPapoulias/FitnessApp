@@ -51,7 +51,7 @@ export default function ExerciseDetail() {
     <div className="min-h-dvh bg-dark-900 flex flex-col">
 
       {/* Header */}
-      <div className="px-5 pt-14 pb-3 flex items-center gap-3">
+      <div className="px-5 pt-4 pb-3 flex items-center gap-3">
         <button onClick={() => navigate(-1)}
           className="w-9 h-9 bg-dark-800 rounded-full flex items-center
                      justify-center text-white border border-dark-600">
@@ -61,10 +61,10 @@ export default function ExerciseDetail() {
         <button className="text-brand-yellow text-2xl">⭐</button>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-32">
+      <div className="flex-1 pb-12">
 
         {/* Hero */}
-        <div className="mx-5 bg-dark-800 rounded-card overflow-hidden border border-dark-600">
+        <div className="mx-3 bg-dark-800 rounded-card overflow-hidden border border-dark-600">
           <div className="bg-[#0d2218] p-6 text-center border-b border-dark-600">
             <div className="text-5xl mb-3">💪</div>
             <h2 className="text-white text-2xl font-bold">{exercise.name}</h2>
@@ -148,7 +148,7 @@ export default function ExerciseDetail() {
 
           {/* Personal best */}
           <div className="p-4">
-            <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
+            <p className="text-dark-300 text-xs uppercase tracking-wider mb-1">
               Your Personal Best
             </p>
             <div className="grid grid-cols-3 gap-2">
@@ -178,17 +178,19 @@ export default function ExerciseDetail() {
       </div>
 
       {/* CTA */}
-      <div className="px-5 pb-8 pt-3 border-t border-dark-700 flex gap-3">
+                  <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[430px]
+                    z-40 bg-dark-900/95 backdrop-blur border-t border-dark-700
+                    px-3 pb-3 pt-1 flex gap-3">
         <button
           onClick={() => navigate(-1)}
           className="flex-1 bg-dark-800 text-white border border-dark-600
-                     py-4 rounded-btn font-semibold active:scale-95 transition-transform"
+                     py-2 rounded-btn font-semibold active:scale-95 transition-transform"
         >
           ← Back
         </button>
         <button
           onClick={toggleAdd}
-          className={`flex-2 py-4 rounded-btn font-bold text-sm
+          className={`flex-2 py-2 rounded-btn font-bold text-sm
                      active:scale-95 transition-transform flex-[2]
                      ${isSelected
                        ? 'bg-dark-700 text-brand-teal border border-brand-teal'
