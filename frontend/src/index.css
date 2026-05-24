@@ -7,6 +7,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Prevent all default browser gestures */
+html, body {
+  overscroll-behavior: none;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Allow text selection in inputs */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* html, body {
   height: 100%;
 } */
