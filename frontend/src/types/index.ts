@@ -107,3 +107,11 @@ export interface Message {
   messageText: string
   dateTime: string
 }
+
+// Plan sets
+export interface PlannedSet {
+  reps: number
+  weight: number
+  rpe: number
+  restSeconds: number
+}

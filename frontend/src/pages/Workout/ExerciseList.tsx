@@ -65,7 +65,7 @@ export default function ExerciseList() {
     <div className="min-h-853 bg-dark-900 flex flex-col">
 
       {/* Header */}
-      <div className="px-5 pt-14 pb-3 flex items-center gap-3">
+      <div className="px-5 pt-4 pb-3 flex items-center gap-3">
         <button onClick={() => navigate(-1)}
           className="w-9 h-9 bg-dark-800 rounded-full flex items-center
                      justify-center text-white border border-dark-600">
@@ -178,7 +178,7 @@ export default function ExerciseList() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0" onClick={() =>
-                      navigate('/workout/exercise-detail',
+                      navigate('/exercise-detail',
                         { state: { exerciseId: exercise.id } })
                     }>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -256,12 +256,12 @@ export default function ExerciseList() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/workout/active')}
+            onClick={() => navigate('/workout/plan')}
             className="bg-brand-teal text-black text-sm font-bold
                        px-4 py-2.5 rounded-btn active:scale-95 transition-transform
                        flex-shrink-0"
           >
-            Start →
+            Plan Sets →
           </button>
         </div>
       )}

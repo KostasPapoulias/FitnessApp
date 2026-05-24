@@ -13,7 +13,7 @@ import Profile from './pages/Profile'
 import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
-
+import PlanSets from './pages/Workout/PlanSets'
 // Layout
 import AppLayout from './components/layout/AppLayout'
 import StartWorkout from './pages/Workout/StartWorkout'
@@ -59,6 +59,7 @@ export default function App() {
           <Route path="ai" element={<AIChatHub />} />
           <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="workout/plan" element={<PlanSets />} />
         </Route>
 
         {/* Catch all */}

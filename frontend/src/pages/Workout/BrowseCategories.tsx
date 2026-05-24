@@ -219,11 +219,11 @@ export default function BrowseCategories() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/workout/active')}
+            onClick={() => navigate('/workout/plan')}
             className="bg-brand-teal text-black text-sm font-bold
                        px-4 py-2 rounded-btn active:scale-95 transition-transform"
           >
-            Start →
+            Plan Sets →
           </button>
         </div>
       )}

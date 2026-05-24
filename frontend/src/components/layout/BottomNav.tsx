@@ -14,7 +14,7 @@ export default function BottomNav() {
       return { label: 'Live ●', path: '/workout/active', bg: 'bg-brand-red' }
     }
     if (selectedExercises.length > 0) {
-      return { label: `Start (${selectedExercises.length})`, path: '/workout/active', bg: 'bg-brand-teal' }
+      return { label: `Plan (${selectedExercises.length})`, path: '/workout/plan', bg: 'bg-brand-teal' }
     }
     return { label: 'Plan', path: '/workout/start', bg: 'bg-brand-teal' }
   }
