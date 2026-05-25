@@ -153,9 +153,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const { sessionId, sessionStartTime } = get()
     if (!sessionId || !sessionStartTime) return null
 
-    const duration = Math.round(
-      (Date.now() - sessionStartTime.getTime()) / 1000
-    )
+    const startMs = sessionStartTime instanceof Date
+      ? sessionStartTime.getTime()
+      : Date.parse(String(sessionStartTime))
+    const duration = Math.round((Date.now() - startMs) / 1000)
+    if (!Number.isFinite(duration) || duration < 0) return null
 
     const result = await workoutService.finishSession(sessionId, duration)
 
