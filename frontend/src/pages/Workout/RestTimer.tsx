@@ -18,6 +18,11 @@ export default function RestTimer({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const endTimeRef = useRef<number | null>(null)
   const doneRef = useRef(false)
+  const onDoneRef = useRef(onDone)
+
+  useEffect(() => {
+    onDoneRef.current = onDone
+  }, [onDone])
 
   useEffect(() => {
     doneRef.current = false
@@ -36,14 +41,14 @@ export default function RestTimer({
       if (nextRemaining <= 0) {
         doneRef.current = true
         clearInterval(intervalRef.current!)
-        onDone()
+        onDoneRef.current()
       }
     }, 1000)
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [seconds, onDone])
+  }, [seconds])
 
   const adjust = (delta: number) => {
     doneRef.current = false
