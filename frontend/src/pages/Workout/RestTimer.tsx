@@ -16,23 +16,43 @@ export default function RestTimer({
   const [remaining, setRemaining] = useState(seconds)
   const [target, setTarget] = useState(seconds)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const endTimeRef = useRef<number | null>(null)
+  const doneRef = useRef(false)
 
   useEffect(() => {
+    doneRef.current = false
+    setTarget(seconds)
+    setRemaining(seconds)
+    endTimeRef.current = Date.now() + seconds * 1000
+
+    if (intervalRef.current) clearInterval(intervalRef.current)
     intervalRef.current = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) {
-          clearInterval(intervalRef.current!)
-          onDone()
-          return 0
-        }
-        return r - 1
-      })
+      if (!endTimeRef.current || doneRef.current) return
+      const nextRemaining = Math.max(
+        0,
+        Math.ceil((endTimeRef.current - Date.now()) / 1000)
+      )
+      setRemaining(nextRemaining)
+      if (nextRemaining <= 0) {
+        doneRef.current = true
+        clearInterval(intervalRef.current!)
+        onDone()
+      }
     }, 1000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current!) }
-  }, [])
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [seconds, onDone])
 
   const adjust = (delta: number) => {
-    setRemaining(r => Math.max(5, r + delta))
+    doneRef.current = false
+    const currentEnd = endTimeRef.current ?? Date.now()
+    const nextEnd = currentEnd + delta * 1000
+    const nextRemaining = Math.max(5, Math.ceil((nextEnd - Date.now()) / 1000))
+
+    endTimeRef.current = Date.now() + nextRemaining * 1000
+    setRemaining(nextRemaining)
     setTarget(t => Math.max(5, t + delta))
   }
 
