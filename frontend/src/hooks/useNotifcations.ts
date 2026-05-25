@@ -10,7 +10,7 @@ export const useNotifications = () => {
   }
 
   // Called when user logs in — schedules inactivity reminder
-  const scheduleInactivityReminder = async (daysThreshold = 3) => {
+  const scheduleInactivityReminder = async (daysThreshold = 1) => {
     if (!Capacitor.isNativePlatform()) return
 
     await LocalNotifications.cancel({ notifications: [{ id: 1 }] })
@@ -33,7 +33,7 @@ export const useNotifications = () => {
   }
 
   // Called when workout finishes — cancels the reminder and reschedules
-  const rescheduleAfterWorkout = async (daysThreshold = 3) => {
+  const rescheduleAfterWorkout = async (daysThreshold = 1) => {
     await scheduleInactivityReminder(daysThreshold)
   }
 
