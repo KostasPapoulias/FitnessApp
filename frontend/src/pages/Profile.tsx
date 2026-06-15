@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
 import { profileService } from '../services/profile.service'
+import { useNotifications } from '../hooks/useNotifcations'
 
 //   Reusable row components 
 function StatCard({ value, label, color = 'text-white' }: {
@@ -292,6 +293,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { readinessScore } = useFatigueStore()
+  const { testNotificationNow } = useNotifications()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -343,6 +345,15 @@ export default function Profile() {
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleTestNotifications = async () => {
+    const ok = await testNotificationNow()
+    if (!ok) {
+      alert('Notification permission was denied or unsupported on this browser/device.')
+      return
+    }
+    alert('Test notification triggered. If nothing appeared, check OS/browser notification settings.')
   }
 
   // Readiness color
@@ -556,6 +567,15 @@ export default function Profile() {
             right={
               <Toggle value={aiConsent} onChange={setAiConsent} />
             }
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
+            icon="🔔"
+            label="Test Notifications"
+            sublabel="Send a test notification now"
+            onClick={handleTestNotifications}
           />
 
           <div className="h-px bg-dark-700 mx-4" />
