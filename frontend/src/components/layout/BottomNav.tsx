@@ -1,10 +1,12 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { useDeviceType } from '../../hooks/useDeviceType'
 
 export default function BottomNav() {
   const navigate = useNavigate()
   const location = useLocation()
   const { activeSession, selectedExercises } = useWorkoutStore()
+  const { isPhone } = useDeviceType()
 
   const isActive = (path: string) => location.pathname === path
 
@@ -20,6 +22,46 @@ export default function BottomNav() {
   }
 
   const center = centerButton()
+
+  if (!isPhone) {
+    return (
+      <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-dark-600 bg-dark-900/95 px-6 py-6">
+        <div className="mb-8">
+          <p className="text-xs uppercase tracking-[0.3em] text-dark-400">Somatrack</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">Training hub</h2>
+        </div>
+
+        <div className="flex flex-1 flex-col justify-between gap-6">
+          <div className="space-y-2">
+            <DesktopNavBtn icon={<HomeIcon />} label="Home" active={isActive('/')} onClick={() => navigate('/')} />
+            <DesktopNavBtn icon={<CalendarIcon />} label="Calendar" active={isActive('/calendar')} onClick={() => navigate('/calendar')} />
+            <DesktopNavBtn icon={<ChatIcon />} label="AI Chat" active={isActive('/ai')} onClick={() => navigate('/ai')} />
+            <DesktopNavBtn icon={<ProfileIcon />} label="Profile" active={isActive('/profile')} onClick={() => navigate('/profile')} />
+          </div>
+
+          <button
+            onClick={() => navigate(center.path)}
+            className={`w-full rounded-card px-4 py-4 text-left transition-transform active:scale-[0.99] ${center.bg}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-black/15">
+                {activeSession
+                  ? <PlayIcon className="h-5 w-5 text-white" />
+                  : <DumbbellIcon className="h-5 w-5 text-black" />
+                }
+              </div>
+              <div>
+                <p className={`text-sm font-bold ${activeSession ? 'text-white' : 'text-black'}`}>{center.label}</p>
+                <p className={`text-xs ${activeSession ? 'text-white/75' : 'text-black/70'}`}>
+                  {activeSession ? 'Jump back into your session' : 'Open workout planning'}
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+      </aside>
+    )
+  }
 
   return (
     <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] 
@@ -77,6 +119,27 @@ export default function BottomNav() {
         onClick={() => navigate('/profile')}
       />
     </nav>
+  )
+}
+
+function DesktopNavBtn({ icon, label, active, onClick }: {
+  icon: React.ReactNode
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-card px-4 py-3 text-left transition-colors ${
+        active ? 'bg-brand-teal/15 text-brand-teal' : 'text-dark-300 hover:bg-dark-800 hover:text-white'
+      }`}
+    >
+      <div className={active ? 'text-brand-teal' : 'text-current'}>
+        {icon}
+      </div>
+      <span className="text-sm font-medium">{label}</span>
+    </button>
   )
 }
 

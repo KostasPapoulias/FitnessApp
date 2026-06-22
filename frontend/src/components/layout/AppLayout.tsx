@@ -1,12 +1,14 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import BottomNav from './BottomNav'
+import { useDeviceType } from '../../hooks/useDeviceType'
 
 const SWIPE_ROUTES = ['/', '/calendar', '/ai', '/profile']
 
 export default function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { isPhone } = useDeviceType()
 
   const touchStartX  = useRef(0)
   const touchStartY  = useRef(0)
@@ -61,9 +63,9 @@ export default function AppLayout() {
     setDragX(0)
   }
   return (
-    <div className="flex flex-col min-h-dvh bg-dark-900 overflow-hidden">
+    <div className={`min-h-dvh bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
       <main
-        className="flex flex-col flex-1 overflow-y-auto pb-20"
+        className={`flex flex-col min-h-dvh overflow-y-auto ${isPhone ? 'pb-20' : 'pb-8 lg:pl-72'}`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
