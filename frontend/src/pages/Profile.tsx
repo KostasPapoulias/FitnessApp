@@ -293,7 +293,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { readinessScore } = useFatigueStore()
-  const { testNotificationNow, subscribeToPush } = useNotifications()
+  const { testNotificationNow, subscribeToPush, unsubscribeFromPush, isPushSubscribed } = useNotifications()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -302,6 +302,8 @@ export default function Profile() {
   const [showNutritionModal, setShowNutritionModal] = useState(false)
   const [aiConsent, setAiConsent]           = useState(true)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [pushEnabled, setPushEnabled]       = useState(false)
+  const [pushBusy, setPushBusy]             = useState(false)
 
   useEffect(() => {
     profileService.getProfile()
@@ -310,6 +312,10 @@ export default function Profile() {
         setAiConsent(data.settings?.aiConsentEnabled ?? true)
       })
       .finally(() => setIsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    isPushSubscribed().then(setPushEnabled)
   }, [])
 
   const handleSaveProfile = async (form: any) => {
@@ -356,11 +362,25 @@ export default function Profile() {
     alert('Test notification triggered. If nothing appeared, check OS/browser notification settings.')
   }
 
-  const handleEnablePush = async () => {
-    const ok = await subscribeToPush()
-    alert(ok
-      ? 'Push notifications enabled. You should get one every minute for testing.'
-      : 'Could not enable push notifications. On iPhone, make sure you opened this from the home screen icon (not Safari), and use iOS 16.4+.')
+  const handleTogglePush = async (next: boolean) => {
+    setPushBusy(true)
+    try {
+      if (next) {
+        const ok = await subscribeToPush()
+        if (!ok) {
+          alert('Could not enable push notifications. On iPhone, make sure you opened this from the home screen icon (not Safari), and use iOS 16.4+.')
+          return
+        }
+        setPushEnabled(true)
+      } else {
+        await unsubscribeFromPush()
+        setPushEnabled(false)
+      }
+    } catch (err: any) {
+      alert(`Push ${next ? 'subscription' : 'unsubscription'} failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`)
+    } finally {
+      setPushBusy(false)
+    }
   }
 
   // Readiness color
@@ -589,9 +609,15 @@ export default function Profile() {
 
           <SettingsRow
             icon="📲"
-            label="Enable Push Notifications"
-            sublabel="Get a reminder every minute, even on lock screen"
-            onClick={handleEnablePush}
+            label="Push Notifications"
+            sublabel={pushBusy
+              ? 'Updating...'
+              : pushEnabled
+                ? 'On — reminder every minute, even on lock screen'
+                : 'Off'}
+            right={
+              <Toggle value={pushEnabled} onChange={handleTogglePush} />
+            }
           />
 
           <div className="h-px bg-dark-700 mx-4" />

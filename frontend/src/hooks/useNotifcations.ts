@@ -120,6 +120,33 @@ export const useNotifications = () => {
     return true
   }
 
+  // Unsubscribes both locally (browser) and server-side (so the backend stops pushing to it)
+  const unsubscribeFromPush = async () => {
+    if (Capacitor.isNativePlatform()) return false
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
+
+    const registration = await navigator.serviceWorker.ready
+    const existing = await registration.pushManager.getSubscription()
+    if (!existing) return true
+
+    const endpoint = existing.endpoint
+    await existing.unsubscribe()
+    await api.post('/push/unsubscribe', { endpoint })
+    return true
+  }
+
+  // Reflects whether this device currently has an active push subscription
+  const isPushSubscribed = async () => {
+    if (Capacitor.isNativePlatform()) return false
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
+
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (!registration) return false
+
+    const existing = await registration.pushManager.getSubscription()
+    return Boolean(existing)
+  }
+
   const testNotificationNow = async () => {
     const granted = await requestPermission()
     if (!granted) return false
@@ -159,6 +186,8 @@ export const useNotifications = () => {
     notifyRestComplete,
     notifyReminder,
     subscribeToPush,
+    unsubscribeFromPush,
+    isPushSubscribed,
     testNotificationNow
   }
 }
