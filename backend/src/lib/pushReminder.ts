@@ -1,9 +1,11 @@
 import prisma from './prisma'
-import webpush from './webpush'
+import webpush, { isPushConfigured } from './webpush'
 
 const REMINDER_INTERVAL_MS = 60_000
 
 export const startPushReminder = () => {
+  if (!isPushConfigured) return
+
   setInterval(async () => {
     const subscriptions = await prisma.pushSubscription.findMany()
     if (subscriptions.length === 0) return

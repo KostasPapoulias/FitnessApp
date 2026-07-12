@@ -1,9 +1,14 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
+import { isPushConfigured } from '../lib/webpush'
 
 // GET /api/push/public-key
 export const getPublicKey = async (_req: AuthRequest, res: Response) => {
+  if (!isPushConfigured) {
+    res.status(503).json({ success: false, error: 'Push notifications are not configured on the server' })
+    return
+  }
   res.json({ success: true, publicKey: process.env.VAPID_PUBLIC_KEY })
 }
 
