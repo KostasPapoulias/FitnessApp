@@ -13,6 +13,8 @@ import fatigueRoutes from './routes/fatigue.routes';
 import aiRoutes from './routes/ai.routes';
 import calendarRoutes from './routes/calendar.routes';
 import profileRoutes from './routes/profile.routes';
+import pushRoutes from './routes/push.routes';
+import { startPushReminder } from './lib/pushReminder';
 
 // Types
 export interface AuthRequest extends Request {
@@ -50,6 +52,7 @@ app.use('/api/fatigue', fatigueRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/push', pushRoutes);
 
 
 // 404 handler
@@ -73,6 +76,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(port, () => {
   console.log(`✅ SomaTrack API listening on http://localhost:${port}`);
   console.log(`   Health check: http://localhost:${port}/health`);
+  startPushReminder();
 });
 
 export default app;

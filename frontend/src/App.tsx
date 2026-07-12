@@ -19,6 +19,7 @@ import AppLayout from './components/layout/AppLayout'
 import StartWorkout from './pages/Workout/StartWorkout'
 import ExerciseDetail from './pages/Workout/ExerciseDetail'
 import { useNotifications } from './hooks/useNotifcations'
+import { Capacitor } from '@capacitor/core'
 // Protected route wrapper
 const Protected = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore()
@@ -27,7 +28,7 @@ const Protected = ({ children }: { children: React.ReactNode }) => {
 
 export default function App() {
   const { fetchMe, isAuthenticated } = useAuthStore()
-  const { requestPermission, scheduleInactivityReminder } = useNotifications()
+  const { requestPermission, scheduleInactivityReminder, notifyReminder } = useNotifications()
 
   // On app load, verify token is still valid
   useEffect(() => {
@@ -42,6 +43,17 @@ export default function App() {
       }
 
     }, [isAuthenticated])
+
+  // Recurring reminder every minute while logged in, desktop/mobile web only (not the native app)
+  useEffect(() => {
+    if (!isAuthenticated || Capacitor.isNativePlatform()) return
+
+    const interval = setInterval(() => {
+      notifyReminder()
+    }, 60_000)
+
+    return () => clearInterval(interval)
+  }, [isAuthenticated])
 
   return (
     <BrowserRouter>

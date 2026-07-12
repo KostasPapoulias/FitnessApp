@@ -293,7 +293,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { readinessScore } = useFatigueStore()
-  const { testNotificationNow } = useNotifications()
+  const { testNotificationNow, subscribeToPush } = useNotifications()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -354,6 +354,13 @@ export default function Profile() {
       return
     }
     alert('Test notification triggered. If nothing appeared, check OS/browser notification settings.')
+  }
+
+  const handleEnablePush = async () => {
+    const ok = await subscribeToPush()
+    alert(ok
+      ? 'Push notifications enabled. You should get one every minute for testing.'
+      : 'Could not enable push notifications. On iPhone, make sure you opened this from the home screen icon (not Safari), and use iOS 16.4+.')
   }
 
   // Readiness color
@@ -576,6 +583,15 @@ export default function Profile() {
             label="Test Notifications"
             sublabel="Send a test notification now"
             onClick={handleTestNotifications}
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
+            icon="📲"
+            label="Enable Push Notifications"
+            sublabel="Get a reminder every minute, even on lock screen"
+            onClick={handleEnablePush}
           />
 
           <div className="h-px bg-dark-700 mx-4" />

@@ -1,5 +1,14 @@
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { Capacitor } from '@capacitor/core'
+import api from '../services/api'
+
+// VAPID public key from the backend is base64url — PushManager needs a Uint8Array
+const urlBase64ToUint8Array = (base64String: string) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
+}
 
 export const useNotifications = () => {
 
@@ -76,6 +85,41 @@ export const useNotifications = () => {
     })
   }
 
+  // Recurring reminder — desktop/mobile web only, fired on an interval while the tab is open
+  const notifyReminder = async (title = '💪 SomaTrack', body = 'Still here? Just checking in.') => {
+    if (Capacitor.isNativePlatform()) return
+    if (!canUseWebNotifications() || Notification.permission !== 'granted') return
+
+    new Notification(title, { body, icon: '/favicon.ico' })
+  }
+
+  // Real Web Push subscription — required for iOS (Add to Home Screen) to deliver
+  // notifications when the app isn't in the foreground, including the lock screen.
+  // Must be called from a user gesture (e.g. a button tap) for iOS to allow the permission prompt.
+  const subscribeToPush = async () => {
+    if (Capacitor.isNativePlatform()) return false
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
+
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') return false
+
+    const registration = await navigator.serviceWorker.ready
+    const existing = await registration.pushManager.getSubscription()
+    if (existing) {
+      await api.post('/push/subscribe', existing.toJSON())
+      return true
+    }
+
+    const { data } = await api.get('/push/public-key')
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(data.publicKey)
+    })
+
+    await api.post('/push/subscribe', subscription.toJSON())
+    return true
+  }
+
   const testNotificationNow = async () => {
     const granted = await requestPermission()
     if (!granted) return false
@@ -113,6 +157,8 @@ export const useNotifications = () => {
     scheduleInactivityReminder,
     rescheduleAfterWorkout,
     notifyRestComplete,
+    notifyReminder,
+    subscribeToPush,
     testNotificationNow
   }
 }
