@@ -1,6 +1,14 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
+import { getEffectiveFatigueLevel } from '../services/fatigue.service'
+
+const SET_TYPES = ['STRENGTH', 'CALISTHENICS', 'CARDIO', 'WOD', 'MOBILITY'] as const
+
+// Fallback bodyweight (kg) when the user has no profile weight recorded
+const DEFAULT_BODY_WEIGHT = 70
+// Seconds of isometric hold treated as equivalent to one rep
+const HOLD_SECONDS_PER_REP = 3
 
 //   START SESSION 
 // POST /api/workout/sessions
@@ -76,37 +84,73 @@ export const logSet = async (req: AuthRequest, res: Response) => {
       duration               // MOBILITY
     } = req.body
 
-    // Verify session belongs to this user
-    const session = await prisma.workoutSession.findFirst({
-      where: { id: sessionId, userId: req.userId! }
-    })
-    if (!session) {
-      res.status(404).json({ success: false, error: 'Session not found' })
+    if (!SET_TYPES.includes(setType)) {
+      res.status(400).json({ success: false, error: `Invalid setType: ${setType}` })
+      return
+    }
+    if (!workoutExerciseId || !Number.isInteger(setNumber) || setNumber < 1) {
+      res.status(400).json({ success: false, error: 'workoutExerciseId and a positive setNumber are required' })
       return
     }
 
-    // Create the base set + the modality-specific child in one transaction
-    const workoutSet = await prisma.$transaction(async (tx) => {
-      const set = await tx.workoutSet.create({
-        data: {
-          workoutExerciseId,
-          setNumber,
-          setType,
-          rpe,
-          restSeconds
-        }
+    // The exercise must belong to THIS session, and the session to this user.
+    // Checking only the session would let a caller write sets into someone
+    // else's workout by passing a foreign workoutExerciseId.
+    const workoutExercise = await prisma.workoutExercise.findFirst({
+      where: {
+        id: workoutExerciseId,
+        sessionId,
+        session: { userId: req.userId! }
+      }
+    })
+    if (!workoutExercise) {
+      res.status(404).json({ success: false, error: 'Exercise not found in this session' })
+      return
+    }
+
+    // Upsert by (workoutExerciseId, setNumber): re-logging a set corrects it in
+    // place instead of appending a duplicate that double-counts volume/fatigue.
+    const { set: workoutSet, replaced } = await prisma.$transaction(async (tx) => {
+      const existing = await tx.workoutSet.findFirst({
+        where: { workoutExerciseId, setNumber }
       })
+
+      const set = existing
+        ? await tx.workoutSet.update({
+            where: { id: existing.id },
+            data: { setType, rpe, restSeconds }
+          })
+        : await tx.workoutSet.create({
+            data: { workoutExerciseId, setNumber, setType, rpe, restSeconds }
+          })
+
+      // Clear any previous child row — the modality may have changed on re-log
+      if (existing) {
+        await Promise.all([
+          tx.setStrength.deleteMany({ where: { setId: set.id } }),
+          tx.setCalisthenics.deleteMany({ where: { setId: set.id } }),
+          tx.setCardio.deleteMany({ where: { setId: set.id } }),
+          tx.setWOD.deleteMany({ where: { setId: set.id } }),
+          tx.setMobility.deleteMany({ where: { setId: set.id } })
+        ])
+      }
 
       // Create the child record based on modality
       switch (setType) {
         case 'STRENGTH':
           await tx.setStrength.create({
-            data: { setId: set.id, reps, weight }
+            data: { setId: set.id, reps: reps ?? 0, weight: weight ?? 0 }
           })
           break
         case 'CALISTHENICS':
           await tx.setCalisthenics.create({
-            data: { setId: set.id, reps, addedWeight: addedWeight ?? 0 }
+            data: {
+              setId: set.id,
+              reps: reps ?? 0,
+              addedWeight: addedWeight ?? 0,
+              // isometric holds record seconds under tension, not reps
+              time: duration ?? null
+            }
           })
           break
         case 'CARDIO':
@@ -126,10 +170,11 @@ export const logSet = async (req: AuthRequest, res: Response) => {
           break
       }
 
-      return set
+      return { set, replaced: existing != null }
     })
 
-    res.status(201).json({ success: true, data: workoutSet })
+    // 200 when an existing set was corrected, 201 when a new one was recorded
+    res.status(replaced ? 200 : 201).json({ success: true, data: workoutSet, replaced })
 
   } catch (error) {
     console.error('logSet error:', error)
@@ -179,7 +224,54 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Calculate session totals 
+    // Claim the session atomically. `duration: null` in the WHERE makes this a
+    // single conditional UPDATE, so of two concurrent finishes exactly one gets
+    // count === 1; the loser returns the stored summary instead of applying a
+    // second round of fatigue. A plain `if (session.duration != null)` check
+    // would not survive the race — both requests could read null and proceed.
+    const claim = await prisma.workoutSession.updateMany({
+      where: { id: sessionId, userId: req.userId!, duration: null },
+      data: { duration }
+    })
+
+    if (claim.count === 0) {
+      // Someone else finished it first (double-tap, retry, or a stale client)
+      const [finished, priorLogs] = await Promise.all([
+        prisma.workoutSession.findUnique({ where: { id: sessionId } }),
+        prisma.muscleFatigueLog.findMany({
+          where: { workoutSessionId: sessionId },
+          include: { muscle: true }
+        })
+      ])
+      res.json({
+        success: true,
+        data: {
+          sessionId,
+          totalVolume: Math.round(finished?.totalVolume ?? 0),
+          avgRpe: Math.round((finished?.avgRpe ?? 0) * 10) / 10,
+          duration: finished?.duration ?? session.duration,
+          musclesAffected: priorLogs.map(l => ({
+            muscleId: l.muscleId,
+            muscleName: l.muscle.name,
+            delta: Math.round(l.delta),
+            newLevel: Math.round(l.fatigueLevelAfter)
+          })),
+          alreadyFinished: true
+        }
+      })
+      return
+    }
+
+    // Bodyweight drives calisthenics load — fall back only if unrecorded
+    const profile = await prisma.userProfile.findUnique({
+      where: { userId: req.userId! }
+    })
+    const bodyWeight = profile?.weight ?? DEFAULT_BODY_WEIGHT
+
+    // Calculate session totals
+    // totalVolume is mechanical load in KG (strength + calisthenics only).
+    // Cardio distance and mobility seconds are different units and are
+    // deliberately excluded — they still drive fatigue via setIntensity.
     let totalVolume = 0
     let totalRpe = 0
     let rpeCount = 0
@@ -208,13 +300,21 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
           // Intensity for fatigue = reps × weight × rpe multiplier
           setIntensity = set.strength.reps * set.strength.weight * rpeMultiplier
         } else if (set.calisthenics) {
-          setVolume = set.calisthenics.reps * (70 + set.calisthenics.addedWeight)
-          setIntensity = set.calisthenics.reps * rpeMultiplier * 10
+          // Load is the user's own bodyweight plus any added/assisted weight
+          const load = bodyWeight + set.calisthenics.addedWeight
+          // Isometric holds carry no reps — convert seconds under tension to a
+          // rep equivalent so a 45s plank isn't scored as 45 reps.
+          const repEquivalent = set.calisthenics.reps > 0
+            ? set.calisthenics.reps
+            : (set.calisthenics.time ?? 0) / HOLD_SECONDS_PER_REP
+          setVolume = repEquivalent * load
+          setIntensity = repEquivalent * rpeMultiplier * 10
         } else if (set.cardio) {
-          setVolume = (set.cardio.distance ?? 0) * 1000
+          // distance/time are not kilograms — fatigue only, no volume
           setIntensity = (set.cardio.time ?? 0) * rpeMultiplier
+        } else if (set.wod) {
+          setIntensity = (set.wod.time ?? 0) * rpeMultiplier
         } else if (set.mobility) {
-          setVolume = set.mobility.time ?? 0
           setIntensity = (set.mobility.time ?? 0) * rpeMultiplier * 0.1
         }
 
@@ -245,39 +345,42 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
 
     const avgRpe = rpeCount > 0 ? totalRpe / rpeCount : 0
 
-    //  Update database in one transaction 
+    // Read current fatigue for every affected muscle up front, in ONE query.
+    // Doing these reads inside the transaction cost 3 sequential round-trips
+    // per muscle, which blew Prisma's 5s interactive-transaction timeout
+    // against a remote database and failed the whole finish with a 500.
+    const existingFatigue = await prisma.muscleFatigueCurrent.findMany({
+      where: { userId: req.userId!, muscleId: { in: [...muscleDeltas.keys()] } }
+    })
+    const fatigueByMuscle = new Map(existingFatigue.map(f => [f.muscleId, f]))
+
+    // Compute every new level in memory before opening the transaction
+    const now = Date.now()
+    const fatigueUpdates = [...muscleDeltas].map(([muscleId, { delta }]) => {
+      // Decay the stored level to *now* before adding today's work. Using the
+      // raw stored value would ignore all recovery since the last session, so
+      // fatigue would only ever ratchet upward and pin at 100.
+      const currentLevel = getEffectiveFatigueLevel(fatigueByMuscle.get(muscleId) ?? null)
+      // Fatigue level is capped at 100
+      const newLevel = Math.min(100, currentLevel + delta)
+      // Recovery time = default 48 hours at 100% fatigue
+      const recoveryTargetAt = new Date(now + newLevel * 0.48 * 60 * 60 * 1000)
+      return { muscleId, delta, newLevel, recoveryTargetAt }
+    })
+
+    //  Update database in one transaction
     await prisma.$transaction(async (tx) => {
 
-      //  Update the session with final stats
+      //  Update the session with final stats (duration was set by the claim)
+      // dateTime is the session's START time and must not be overwritten here,
+      // or a late-night workout gets filed under the following day.
       await tx.workoutSession.update({
         where: { id: sessionId },
-        data: {
-          duration,
-          totalVolume,
-          avgRpe,
-          dateTime: new Date()
-        }
+        data: { totalVolume, avgRpe }
       })
 
       //  Update fatigue for each muscle involved
-      for (const [muscleId, { delta }] of muscleDeltas) {
-
-        // Get current fatigue level
-        const current = await tx.muscleFatigueCurrent.findUnique({
-          where: { userId_muscleId: { userId: req.userId!, muscleId } }
-        })
-
-        const currentLevel = current?.fatigueLevel ?? 0
-        // Fatigue level is capped at 100
-        const newLevel = Math.min(100, currentLevel + delta)
-
-        // Recovery time = default 48 hours at 100% fatigue
-        const recoveryHours = newLevel * 0.48
-        const recoveryTargetAt = new Date(
-          Date.now() + recoveryHours * 60 * 60 * 1000
-        )
-
-        //  Upsert MuscleFatigueCurrent
+      for (const { muscleId, newLevel, recoveryTargetAt } of fatigueUpdates) {
         await tx.muscleFatigueCurrent.upsert({
           where: {
             userId_muscleId: { userId: req.userId!, muscleId }
@@ -290,19 +393,23 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
             recoveryTargetAt
           }
         })
-
-        //  Write to MuscleFatigueLog , activity history
-        await tx.muscleFatigueLog.create({
-          data: {
-            userId: req.userId!,
-            muscleId,
-            workoutSessionId: sessionId,
-            source: 'workout',
-            delta,
-            fatigueLevelAfter: newLevel
-          }
-        })
       }
+
+      //  Write to MuscleFatigueLog , activity history — one round-trip
+      await tx.muscleFatigueLog.createMany({
+        data: fatigueUpdates.map(({ muscleId, delta, newLevel }) => ({
+          userId: req.userId!,
+          muscleId,
+          workoutSessionId: sessionId,
+          source: 'workout',
+          delta,
+          fatigueLevelAfter: newLevel
+        }))
+      })
+    }, {
+      // Headroom for a slow/remote database on a many-muscle session
+      timeout: 20_000,
+      maxWait: 10_000
     })
 
     //   STEP 4: Return summary 
@@ -366,7 +473,14 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
               }
             },
             sets: {
-              include: { strength: true, cardio: true, calisthenics: true }
+              include: {
+                strength: true,
+                calisthenics: true,
+                cardio: true,
+                wod: true,
+                mobility: true
+              },
+              orderBy: { setNumber: 'asc' }
             }
           },
           orderBy: { orderIndex: 'asc' }

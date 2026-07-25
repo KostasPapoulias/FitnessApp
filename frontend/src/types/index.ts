@@ -89,7 +89,9 @@ export interface WorkoutSet {
   restSeconds?: number
   strength?: { reps: number; weight: number }
   cardio?: { distance?: number; time?: number }
-  calisthenics?: { reps: number; addedWeight: number }
+  // `time` is seconds under tension for isometric holds (reps is 0 then)
+  calisthenics?: { reps: number; addedWeight: number; time?: number }
+  wod?: { distance?: number; time?: number }
   mobility?: { time?: number }
 }
 

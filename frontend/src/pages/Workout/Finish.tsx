@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { useFatigueStore } from '../../store/useFatigueStore'
+import { useNotifications } from '../../hooks/useNotifcations'
 import { fmtTime } from './helpers'
 
 interface SnapshotExercise {
@@ -21,16 +23,68 @@ export default function Finish() {
   const navigate = useNavigate()
   const location = useLocation()
   const clearExercises = useWorkoutStore(s => s.clearExercises)
+  const finishSession = useWorkoutStore(s => s.finishSession)
+  const { fetchFatigue } = useFatigueStore()
+  const { rescheduleAfterWorkout } = useNotifications()
 
   const state = location.state as { result?: any; snapshot?: Snapshot } | null
-  const result = state?.result ?? null
   const snapshot = state?.snapshot
 
-  // Landed here without going through a workout → bounce home
+  // This screen owns the finish request. It runs here rather than on the live
+  // workout page so there is no End button on screen while we wait — the user
+  // cannot trigger a second finish from a page that no longer exists.
+  const [result, setResult] = useState<any>(state?.result ?? null)
+  // Seeded from the store so the summary never flashes for a frame before the
+  // mount effect starts the request.
+  const [saving, setSaving] = useState(() => Boolean(useWorkoutStore.getState().sessionId))
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const startedRef = useRef(false)
+
+  const save = () => {
+    // finishSession() de-dupes concurrent calls internally; this ref stops a
+    // StrictMode double-mount from even queueing the second one.
+    if (startedRef.current) return
+    const { sessionId } = useWorkoutStore.getState()
+    if (!sessionId) return          // already finished, or arrived without one
+    startedRef.current = true
+    setSaving(true)
+    setSaveError(null)
+    finishSession()
+      .then(async res => {
+        if (res) setResult(res)
+        // Best-effort follow-ups: a failure here must not read as a failed save
+        try { await fetchFatigue() } catch { /* non-fatal */ }
+        try { await rescheduleAfterWorkout(3) } catch { /* non-fatal */ }
+      })
+      .catch(err => {
+        console.error('finish error:', err)
+        startedRef.current = false   // allow a retry
+        setSaveError('Your sets are saved, but the workout summary could not be completed.')
+      })
+      .finally(() => setSaving(false))
+  }
+
   useEffect(() => {
-    if (!snapshot) navigate('/', { replace: true })
-  }, [snapshot])
+    if (!snapshot) { navigate('/', { replace: true }); return }
+    save()
+  }, [snapshot]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!snapshot) return null
+
+  // ── saving ──
+  if (saving) {
+    return (
+      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+        <div className="text-center">
+          <div className="text-5xl mb-4 animate-pulse">💾</div>
+          <p className="text-white font-semibold">Saving your workout...</p>
+          <p className="text-dark-300 text-[13px] mt-2">
+            Every set you logged is already stored — just finishing up.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const durationSec = result?.duration ?? snapshot.elapsed
   const volume = result?.totalVolume
@@ -68,6 +122,22 @@ export default function Finish() {
       <div className="text-[56px] leading-none">🏆</div>
       <h1 className="text-[26px] font-extrabold mt-3">Workout Complete</h1>
       <p className="text-dark-300 text-sm mt-1">Nice work. Here's how today went.</p>
+
+      {saveError && (
+        <div className="mt-4 text-left flex flex-col gap-2.5 rounded-card border
+                        border-brand-red/40 bg-[#2a1a1a] px-4 py-3.5">
+          <div className="flex gap-2.5">
+            <span className="text-base">⚠️</span>
+            <p className="flex-1 text-[13px] text-white leading-snug">{saveError}</p>
+          </div>
+          <button
+            onClick={save}
+            className="w-full py-2.5 rounded-btn bg-brand-teal text-black text-[13px]
+                       font-bold active:scale-95 transition-transform">
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2.5 mt-6">

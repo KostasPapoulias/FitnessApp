@@ -219,6 +219,9 @@ model WorkoutSet {
   mobility           SetMobility?
 
   @@index([workoutExerciseId])
+  // One row per set of an exercise — re-logging corrects the set in place
+  // rather than appending a duplicate that double-counts volume and fatigue.
+  @@unique([workoutExerciseId, setNumber])
 }
 
 enum SetType {
@@ -241,6 +244,9 @@ model SetCalisthenics {
   set         WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   reps        Int
   addedWeight Float      @default(0)
+  // Seconds under tension for isometric holds (plank, L-sit, front lever…),
+  // which have no meaningful rep count. Null for normal rep-based sets.
+  time        Int?
 }
 
 model SetCardio {

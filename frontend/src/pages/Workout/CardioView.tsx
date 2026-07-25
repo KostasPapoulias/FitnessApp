@@ -14,6 +14,8 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
   const activity = selectedExercises[currentExerciseIndex]?.exercise.name ?? 'Outdoor Run'
 
   const [started, setStarted] = useState(false)
+  const [ending, setEnding] = useState(false)
+  const endingRef = useRef(false)
   const [sec, setSec] = useState(0)
   const [running, setRunning] = useState(true)
   const [meters, setMeters] = useState(0)
@@ -57,6 +59,13 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
 
   // Log a SetCardio (distance in km, time in seconds) so history + fatigue record it
   const endSession = async () => {
+    // Ref guard: the summary-set request keeps this button on screen, so a
+    // second tap would log the run twice and finish twice.
+    if (endingRef.current) return
+    endingRef.current = true
+    setEnding(true)
+    // A failed summary set must not strand the user in the tracker — the
+    // Finish screen surfaces the error either way.
     await completeSet({
       distance: Math.round((meters / 1000) * 100) / 100,
       time: sec,
@@ -206,10 +215,11 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
           ⚑ Lap
         </button>
       </div>
-      <button onClick={endSession}
+      <button onClick={endSession} disabled={ending}
         className="w-full mt-2.5 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
-                   text-brand-red text-sm font-bold active:scale-95 transition-transform">
-        ■ End Session
+                   text-brand-red text-sm font-bold active:scale-95 transition-transform
+                   disabled:opacity-50">
+        {ending ? 'Ending…' : '■ End Session'}
       </button>
     </div>
   )

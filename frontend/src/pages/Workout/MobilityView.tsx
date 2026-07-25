@@ -7,7 +7,7 @@ function isPerSide(name: string) {
   return /stretch|hip|lunge|pigeon|couch|90|thoracic|shoulder|side|twist|rotation/i.test(name)
 }
 
-export default function MobilityView({ elapsed, onAdvance, coachEnabled }: ModalityViewProps) {
+export default function MobilityView({ elapsed, onAdvance, onFinish, coachEnabled }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, currentSetIndex } = useWorkoutStore()
   const ex = selectedExercises[currentExerciseIndex]
   const set = ex?.sets[currentSetIndex]
@@ -176,6 +176,12 @@ export default function MobilityView({ elapsed, onAdvance, coachEnabled }: Modal
         title={perSide && !leftDone ? `${ex.exercise.name} · Right side` : (nextEx ? nextEx.exercise.name : 'Flow complete')}
         detail={perSide && !leftDone ? `Same pose, other side · ${target}s` : (nextEx ? `Hold · ${Math.max(5, nextEx.sets[0]?.reps || 30)}s` : 'Great work — you’ve moved every joint')}
       />
+
+      <button onClick={onFinish}
+        className="w-full mt-3 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
+                   text-brand-red text-sm font-bold active:scale-95 transition-transform">
+        ■ End Flow
+      </button>
     </div>
   )
 }

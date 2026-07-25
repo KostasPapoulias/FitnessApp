@@ -6,6 +6,9 @@ export interface LogPayload {
   weight: number
   rpe: number
   restSeconds: number
+  duration?: number   // seconds under tension for isometric holds
+  distance?: number   // cardio / wod
+  time?: number       // cardio / wod
 }
 
 // Callbacks ActiveWorkout hands to every modality view

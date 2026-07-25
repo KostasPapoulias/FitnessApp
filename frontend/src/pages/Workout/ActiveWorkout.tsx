@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { useFatigueStore } from '../../store/useFatigueStore'
 import { useNotifications } from '../../hooks/useNotifcations'
 import RestTimer from './RestTimer'
 import CalisthenicsView from './CalisthenicsView'
@@ -18,11 +17,13 @@ export default function ActiveWorkout() {
   const {
     selectedExercises, sessionId, sessionStartTime,
     currentExerciseIndex, currentSetIndex, completedSets,
-    startSession, completeSet, finishSession, updateSet, setCurrent,
+    startSession, completeSet, updateSet, setCurrent,
+    startError, logError, clearErrors,
   } = useWorkoutStore()
 
-  const { fetchFatigue } = useFatigueStore()
-  const { notifyRestComplete, rescheduleAfterWorkout } = useNotifications()
+  // The finish request, fatigue refresh and reminder reschedule all live on the
+  // Finish screen now — see handleFinish below.
+  const { notifyRestComplete } = useNotifications()
 
   const [isStarting, setIsStarting] = useState(false)
   const [showRest, setShowRest] = useState(false)
@@ -30,17 +31,25 @@ export default function ActiveWorkout() {
   const [rpeMode, setRpeMode] = useState<RpeMode>('standard')
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const finishingRef = useRef(false)
 
   const currentExercise = selectedExercises[currentExerciseIndex]
   const currentSetPlan = currentExercise?.sets[currentSetIndex]
 
   // ── start session on mount ──
-  useEffect(() => {
-    if (!sessionId && selectedExercises.length > 0) {
-      setIsStarting(true)
-      startSession().finally(() => setIsStarting(false))
-    }
-  }, [])
+  // Reads fresh store state rather than the render closure, and startSession()
+  // itself de-dupes concurrent calls, so a StrictMode double-mount or a
+  // remount can't create a second session.
+  const beginSession = () => {
+    const s = useWorkoutStore.getState()
+    if (s.sessionId || s.selectedExercises.length === 0) return
+    setIsStarting(true)
+    startSession()
+      .catch(() => { /* startError is surfaced from the store */ })
+      .finally(() => setIsStarting(false))
+  }
+
+  useEffect(() => { beginSession() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── elapsed timer ──
   useEffect(() => {
@@ -56,16 +65,32 @@ export default function ActiveWorkout() {
     completedSets.some(cs =>
       cs.exerciseId === selectedExercises[exIdx]?.exercise.id && cs.setIndex === setIdx)
 
+  // Last set of the last exercise we'll actually work through (skipped ones
+  // don't count) — after it there is nothing to rest for.
+  const isFinalSet = (exIdx: number, setIdx: number) => {
+    const ex = selectedExercises[exIdx]
+    if (!ex || setIdx + 1 < ex.sets.length) return false
+    let ni = exIdx + 1
+    while (ni < selectedExercises.length && selectedExercises[ni].skipped) ni++
+    return ni >= selectedExercises.length
+  }
+
   // ── set / rest flow ──
-  // Log a set to the backend, then show the rest timer (strength / calisthenics)
+  // Log a set to the backend, then show the rest timer (strength / calisthenics).
+  // Only move on when the set actually persisted — advancing on a failed write
+  // is what silently dropped sets while the UI reported success.
   const logAndRest = async (payload: LogPayload) => {
-    await completeSet(payload)
-    setShowRest(true)
+    // Decide before awaiting: the indices can move while the request is out
+    const final = isFinalSet(currentExerciseIndex, currentSetIndex)
+    if (!(await completeSet(payload))) return
+    // "Set Done" on the very last set ends the workout instead of starting a
+    // rest the user will never use
+    if (final) handleFinish()
+    else setShowRest(true)
   }
   // Log a set, then move straight to the next set/exercise, no rest (mobility)
   const logAndAdvance = async (payload: LogPayload) => {
-    await completeSet(payload)
-    advance()
+    if (await completeSet(payload)) advance()
   }
 
   const handleSetDone = () => logAndRest({
@@ -125,19 +150,20 @@ export default function ActiveWorkout() {
     }
   }
 
-  const handleFinish = async () => {
-    if (isFinishing) return
+  // Ending the workout does NOT call the API here. We capture the summary and
+  // leave immediately; the Finish screen owns the request and waits for it.
+  // Awaiting on this page would keep the End button on screen during a slow
+  // response, letting the user fire a second finish.
+  const handleFinish = () => {
+    // Ref, not state: two taps in the same tick would both read a `false`
+    // state value and both get through.
+    if (finishingRef.current) return
+    finishingRef.current = true
     setIsFinishing(true)
-    const snapshot = buildSnapshot()
-    try {
-      const result = await finishSession()
-      await fetchFatigue()
-      await rescheduleAfterWorkout(3)
-      navigate('/workout/finish', { state: { result, snapshot } })
-    } catch (err) {
-      console.error('finish error:', err)
-      setIsFinishing(false)
-    }
+    navigate('/workout/finish', {
+      state: { snapshot: buildSnapshot() },
+      replace: true,   // back must not return to a live workout that is over
+    })
   }
 
   // ── REST ──
@@ -160,6 +186,41 @@ export default function ActiveWorkout() {
         }}
         onSkip={advance}
       />
+    )
+  }
+
+  // ── SAVING (finish in flight) ──
+  // Rendered before the "no exercises" branch: finishSession clears the
+  // selection, so without this the screen flashes an empty state on the way out.
+  if (isFinishing) {
+    return (
+      <div className="min-h-dvh bg-dark-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4 animate-pulse">💾</div>
+          <p className="text-white font-semibold">Saving your workout...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── START FAILED ──
+  if (startError) {
+    return (
+      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+        <div className="text-center max-w-[320px]">
+          <div className="text-4xl mb-4">⚠️</div>
+          <p className="text-white font-semibold mb-2">Couldn't start the workout</p>
+          <p className="text-dark-300 text-[13px] mb-6">{startError}</p>
+          <button
+            onClick={() => { clearErrors(); beginSession() }}
+            className="w-full bg-brand-teal text-black py-3.5 rounded-btn font-bold
+                       active:scale-95 transition-transform">
+            Retry
+          </button>
+          <button onClick={() => navigate('/workout/plan')}
+            className="mt-3 text-dark-400 text-sm">← Back to plan</button>
+        </div>
+      </div>
     )
   }
 
@@ -190,6 +251,16 @@ export default function ActiveWorkout() {
     )
   }
 
+  // Toast shown when a set failed to persist, so a dropped set is never silent
+  const errorToast = logError ? (
+    <div className="fixed bottom-4 left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
+                    rounded-card border border-brand-red/50 bg-[#2a1a1a] shadow-lg">
+      <span className="text-base">⚠️</span>
+      <p className="flex-1 text-[13px] text-white leading-snug">{logError}</p>
+      <button onClick={clearErrors} className="text-dark-300 text-lg leading-none px-1">×</button>
+    </div>
+  ) : null
+
   // ── modality branch: render the matching live view ──
   const modalityProps = {
     elapsed,
@@ -197,13 +268,18 @@ export default function ActiveWorkout() {
     onAdvance: logAndAdvance,
     onFinish: handleFinish,
   }
-  switch (currentExercise.exercise.modality) {
-    case 'Calisthenics': return <CalisthenicsView {...modalityProps} />
-    case 'Mobility':     return <MobilityView {...modalityProps} />
-    case 'Cardio':       return <CardioView {...modalityProps} />
-    case 'WOD':          return <WodView {...modalityProps} />
-    // 'Strength' and anything else fall through to the strength UI below
-  }
+  const modalityView = (() => {
+    switch (currentExercise.exercise.modality) {
+      case 'Calisthenics': return <CalisthenicsView {...modalityProps} />
+      case 'Mobility':     return <MobilityView {...modalityProps} />
+      case 'Cardio':       return <CardioView {...modalityProps} />
+      case 'WOD':          return <WodView {...modalityProps} />
+      // 'Strength' and anything else fall through to the strength UI below
+      default:             return null
+    }
+  })()
+  if (modalityView) return <>{modalityView}{errorToast}</>
+
 
   const ex = currentExercise.exercise
   const cur = currentSetPlan ?? { reps: 0, weight: 0, rpe: 7, restSeconds: 90 }
@@ -430,9 +506,11 @@ export default function ActiveWorkout() {
           className="py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
                      text-brand-red text-sm font-bold active:scale-95 transition-transform
                      disabled:opacity-50">
-          {isFinishing ? 'Saving...' : '■ End'}
+          {isFinishing ? 'Ending…' : '■ End'}
         </button>
       </div>
+
+      {errorToast}
     </div>
   )
 }

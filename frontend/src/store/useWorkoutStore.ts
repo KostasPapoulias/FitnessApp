@@ -51,6 +51,9 @@ interface WorkoutStore {
   // Selection phase
   activeSession: WorkoutSession | null
   selectedExercises: SelectedExercise[]
+  startError: string | null
+  logError: string | null
+  clearErrors: () => void
   addExercise: (exercise: Exercise) => void
   setSingleExercise: (exercise: Exercise) => void // replace selection with one (cardio)
   removeExercise: (exerciseId: string) => void
@@ -82,19 +85,30 @@ interface WorkoutStore {
   completedSets: { exerciseId: string; setIndex: number }[]
 
   startSession: () => Promise<void>
+  registerExercise: (exIdx: number) => Promise<string>
   completeSet: (data: {
     rpe?: number
     restSeconds?: number
     reps?: number       // strength / calisthenics reps; also carries mobility hold-seconds
     weight?: number     // strength weight; also carries calisthenics added load
     addedWeight?: number
-    duration?: number   // mobility hold seconds (explicit)
+    duration?: number   // mobility hold seconds / calisthenics isometric hold seconds
     distance?: number   // cardio / wod
     time?: number       // cardio / wod
-  }) => Promise<void>
+  }) => Promise<boolean>
   finishSession: () => Promise<any>
   nextExercise: () => void
 }
+
+// Guards against concurrent startSession() calls (React StrictMode double-invokes
+// mount effects, and a remount would otherwise create a second orphan session).
+let startInFlight: Promise<void> | null = null
+
+// Same guard for finishing: a double-tap, a StrictMode double-mount of the
+// Finish screen, or an auto-finish racing a manual End must all resolve to a
+// single POST. The backend also refuses to re-apply fatigue to an already
+// finished session, so this is the first of two layers.
+let finishInFlight: Promise<any> | null = null
 
 const DEFAULT_SET: PlannedSet = { reps: 10, weight: 20, rpe: 7, restSeconds: 90 }
 
@@ -117,6 +131,10 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   completedSets: [],
   cardioTarget: null,
   wodConfig: null,
+  startError: null,
+  logError: null,
+
+  clearErrors: () => set({ startError: null, logError: null }),
 
   addExercise: (exercise) => {
     if (get().selectedExercises.find(e => e.exercise.id === exercise.id)) return
@@ -143,6 +161,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   })),
 
   clearExercises: () => set({
+    activeSession: null,
     selectedExercises: [],
     sessionId: null,
     sessionStartTime: null,
@@ -151,6 +170,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     completedSets: [],
     cardioTarget: null,
     wodConfig: null,
+    startError: null,
+    logError: null,
   }),
 
   updateSets: (exerciseId, sets) => set(state => ({
@@ -237,48 +258,122 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   }),
 
   startSession: async () => {
-    const session = await workoutService.startSession()
-    const { selectedExercises } = get()
+    // Already running, or another caller is mid-flight → reuse, never start twice.
+    if (get().sessionId) return
+    if (startInFlight) return startInFlight
 
-    // Register all exercises with the backend
-    const updated = await Promise.all(
-      selectedExercises.map(async (se, index) => {
-        const we = await workoutService.addExercise(session.id, {
-          exerciseId: se.exercise.id,
-          orderIndex: index + 1
+    startInFlight = (async () => {
+      try {
+        set({ startError: null })
+        const session = await workoutService.startSession()
+
+        // Commit the session id *before* registering exercises: if registration
+        // partially fails we still hold a usable session instead of orphaning it.
+        const firstLive = get().selectedExercises.findIndex(se => !se.skipped)
+        set({
+          activeSession: session,
+          sessionId: session.id,
+          sessionStartTime: new Date(),
+          currentExerciseIndex: firstLive < 0 ? 0 : firstLive,
+          currentSetIndex: 0,
+          completedSets: [],
         })
-        return { ...se, workoutExerciseId: we.id }
-      })
-    )
 
-    set({
-      activeSession: session,
-      sessionId: session.id,
-      sessionStartTime: new Date(),
-      selectedExercises: updated,
-      currentExerciseIndex: 0,
-      currentSetIndex: 0,
-      completedSets: []
+        // Only register what we'll actually work through — skipped exercises
+        // would otherwise become empty rows in the user's history.
+        const pending = get().selectedExercises
+          .map((se, i) => ({ se, i }))
+          .filter(({ se }) => !se.skipped && !se.workoutExerciseId)
+
+        const registered = await Promise.all(pending.map(async ({ se, i }) => {
+          const we = await workoutService.addExercise(session.id, {
+            exerciseId: se.exercise.id,
+            orderIndex: i + 1,
+          })
+          return [se.exercise.id, we.id] as const
+        }))
+
+        // Match by exercise id, not index — the queue may have reordered meanwhile.
+        const idMap = new Map(registered)
+        set(state => ({
+          selectedExercises: state.selectedExercises.map(e => {
+            const id = idMap.get(e.exercise.id)
+            return id ? { ...e, workoutExerciseId: id } : e
+          }),
+        }))
+      } catch (err) {
+        console.error('startSession error:', err)
+        set({ startError: 'Could not start the workout. Check your connection and retry.' })
+        throw err
+      } finally {
+        startInFlight = null
+      }
+    })()
+
+    return startInFlight
+  },
+
+  // Registers a single exercise against the live session. Used for exercises
+  // added *after* the session started — without this their sets are dropped.
+  registerExercise: async (exIdx) => {
+    const { sessionId, selectedExercises } = get()
+    if (!sessionId) throw new Error('No active session')
+    const se = selectedExercises[exIdx]
+    if (!se) throw new Error('No such exercise')
+    if (se.workoutExerciseId) return se.workoutExerciseId
+
+    const we = await workoutService.addExercise(sessionId, {
+      exerciseId: se.exercise.id,
+      orderIndex: exIdx + 1,
     })
+    set(state => ({
+      selectedExercises: state.selectedExercises.map(e =>
+        e.exercise.id === se.exercise.id ? { ...e, workoutExerciseId: we.id } : e
+      ),
+    }))
+    return we.id
   },
 
   completeSet: async (data) => {
     const {
       sessionId, selectedExercises,
-      currentExerciseIndex, currentSetIndex, completedSets
+      currentExerciseIndex, currentSetIndex
     } = get()
 
-    if (!sessionId) return
+    // Capture the target up front — awaits below must not write to a set the
+    // user has since navigated away from.
+    const exIdx = currentExerciseIndex
+    const setIdx = currentSetIndex
 
-    const currentExercise = selectedExercises[currentExerciseIndex]
-    if (!currentExercise?.workoutExerciseId) return
+    if (!sessionId) {
+      set({ logError: 'The workout hasn’t started yet — that set was not saved.' })
+      return false
+    }
+
+    const currentExercise = selectedExercises[exIdx]
+    if (!currentExercise) {
+      set({ logError: 'No exercise selected — that set was not saved.' })
+      return false
+    }
+
+    let workoutExerciseId = currentExercise.workoutExerciseId
+    if (!workoutExerciseId) {
+      // Added mid-workout and never registered — do it now rather than drop the set.
+      try {
+        workoutExerciseId = await get().registerExercise(exIdx)
+      } catch (err) {
+        console.error('registerExercise error:', err)
+        set({ logError: 'Could not save that set — the exercise is not attached to this workout.' })
+        return false
+      }
+    }
 
     const setType = MODALITY_SET_TYPE[currentExercise.exercise.modality] ?? 'STRENGTH'
 
     // Build the modality-specific payload the backend expects for this SetType
     const payload: Parameters<typeof workoutService.logSet>[1] = {
-      workoutExerciseId: currentExercise.workoutExerciseId,
-      setNumber: currentSetIndex + 1,
+      workoutExerciseId,
+      setNumber: setIdx + 1,
       setType,
       rpe: data.rpe,
       restSeconds: data.restSeconds,
@@ -287,6 +382,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       case 'CALISTHENICS':
         payload.reps = data.reps ?? 0
         payload.addedWeight = data.addedWeight ?? data.weight ?? 0
+        // isometric holds carry seconds-under-tension instead of reps
+        if (data.duration != null) payload.duration = data.duration
         break
       case 'MOBILITY':
         // reps carries the hold time in seconds unless an explicit duration is given
@@ -304,24 +401,45 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         break
     }
 
-    await workoutService.logSet(sessionId, payload)
+    try {
+      await workoutService.logSet(sessionId, payload)
+    } catch (err) {
+      console.error('logSet error:', err)
+      set({ logError: 'That set could not be saved. Check your connection and log it again.' })
+      return false
+    }
 
-    set({
-      completedSets: [
-        ...completedSets,
-        { exerciseId: currentExercise.exercise.id, setIndex: currentSetIndex }
-      ]
+    // The backend keys a set by (workoutExercise, setNumber) and overwrites on
+    // re-log, so mirror that here: one entry per set, never a duplicate.
+    set(state => {
+      const exerciseId = currentExercise.exercise.id
+      const already = state.completedSets.some(
+        cs => cs.exerciseId === exerciseId && cs.setIndex === setIdx
+      )
+      return {
+        logError: null,
+        completedSets: already
+          ? state.completedSets
+          : [...state.completedSets, { exerciseId, setIndex: setIdx }],
+      }
     })
+    return true
   },
 
   nextExercise: () => {
     const { currentExerciseIndex, selectedExercises } = get()
-    if (currentExerciseIndex < selectedExercises.length - 1) {
-      set({ currentExerciseIndex: currentExerciseIndex + 1, currentSetIndex: 0 })
+    let ni = currentExerciseIndex + 1
+    while (ni < selectedExercises.length && selectedExercises[ni].skipped) ni++
+    if (ni < selectedExercises.length) {
+      set({ currentExerciseIndex: ni, currentSetIndex: 0 })
     }
   },
 
   finishSession: async () => {
+    // A finish already on the wire → hand back the same promise instead of
+    // firing a second POST.
+    if (finishInFlight) return finishInFlight
+
     const { sessionId, sessionStartTime } = get()
     if (!sessionId || !sessionStartTime) return null
 
@@ -331,17 +449,43 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const duration = Math.round((Date.now() - startMs) / 1000)
     if (!Number.isFinite(duration) || duration < 0) return null
 
-    const result = await workoutService.finishSession(sessionId, duration)
+    finishInFlight = (async () => {
+      try {
+        return await doFinish(sessionId, duration, set)
+      } finally {
+        // Cleared on failure too, so a retry from the Finish screen can run
+        finishInFlight = null
+      }
+    })()
 
-    set({
-      activeSession: null,
-      sessionId: null,
-      sessionStartTime: null,
-      currentExerciseIndex: 0,
-      currentSetIndex: 0,
-      completedSets: []
-    })
-
-    return result
+    return finishInFlight
   }
 }))
+
+// Performs the finish request and clears the workout out of the store.
+async function doFinish(
+  sessionId: string,
+  duration: number,
+  set: (partial: Partial<WorkoutStore>) => void
+) {
+  const result = await workoutService.finishSession(sessionId, duration)
+
+  // Wipe the whole selection, not just the session ids: leaving
+  // selectedExercises behind lets a back-navigation to /workout/active
+  // remount and start a brand-new session against stale exercise rows.
+  set({
+    activeSession: null,
+    sessionId: null,
+    sessionStartTime: null,
+    selectedExercises: [],
+    currentExerciseIndex: 0,
+    currentSetIndex: 0,
+    completedSets: [],
+    cardioTarget: null,
+    wodConfig: null,
+    startError: null,
+    logError: null,
+  })
+
+  return result
+}

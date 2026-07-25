@@ -23,7 +23,7 @@ const bigStep =
 // per-exercise extras the backend model doesn't hold (live-only)
 interface Extra { level: number; tempo: string; load: number }
 
-export default function CalisthenicsView({ elapsed, onRest, coachEnabled }: ModalityViewProps) {
+export default function CalisthenicsView({ elapsed, onRest, onFinish, coachEnabled }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, currentSetIndex, completedSets, updateSet, setCurrent } =
     useWorkoutStore()
 
@@ -81,7 +81,12 @@ export default function CalisthenicsView({ elapsed, onRest, coachEnabled }: Moda
 
   const restSeconds = set.restSeconds ?? 90
   const logReps = () => onRest({ reps: set.reps, weight: Math.max(0, extra.load), rpe: set.rpe, restSeconds })
-  const logHold = () => onRest({ reps: holdSec, weight: Math.max(0, extra.load), rpe: set.rpe, restSeconds })
+  // A hold has no reps — send seconds under tension as `duration` so it isn't
+  // recorded (and scored for volume) as if it were that many repetitions.
+  const logHold = () => {
+    if (holdSec <= 0) return
+    onRest({ reps: 0, duration: holdSec, weight: Math.max(0, extra.load), rpe: set.rpe, restSeconds })
+  }
 
   return (
     <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-4">
@@ -156,8 +161,9 @@ export default function CalisthenicsView({ elapsed, onRest, coachEnabled }: Moda
                 }}>
                 {holdRunning ? '‖ Stop' : holdSec > 0 ? '▶ Resume' : '▶ Start'}
               </button>
-              <button onClick={logHold}
-                className="py-4 rounded-btn bg-brand-teal text-black text-base font-extrabold active:scale-95 transition-transform">
+              <button onClick={logHold} disabled={holdSec <= 0}
+                className="py-4 rounded-btn bg-brand-teal text-black text-base font-extrabold
+                           active:scale-95 transition-transform disabled:opacity-40">
                 ✓ Log Hold
               </button>
             </div>
@@ -209,6 +215,12 @@ export default function CalisthenicsView({ elapsed, onRest, coachEnabled }: Moda
 
       {coachEnabled !== false && <CoachTip text={coachTip} />}
       <UpNext title={un.t} detail={un.d} />
+
+      <button onClick={onFinish}
+        className="w-full mt-3 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
+                   text-brand-red text-sm font-bold active:scale-95 transition-transform">
+        ■ End Workout
+      </button>
     </div>
   )
 }
