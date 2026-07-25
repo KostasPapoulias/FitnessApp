@@ -1,195 +1,219 @@
 import { useEffect, useState, useRef } from 'react'
+import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { rpeColor } from './helpers'
 
 interface RestTimerProps {
   seconds: number
   setInfo: { exercise: string; setNumber: number; reps: number; weight: number; rpe: number }
-  nextSet?: { reps: number; weight: number; rpe: number }
-  nextExercise?: string
   workoutTime: string
   onDone: () => void
   onSkip: () => void
 }
 
+// Small stepper used in the "adjust next set" card
+function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="w-[30px] h-[30px] rounded-[9px] border border-dark-600 bg-dark-700
+                 text-white text-lg font-bold flex items-center justify-center
+                 active:scale-90 transition-transform">
+      {children}
+    </button>
+  )
+}
+
 export default function RestTimer({
-  seconds, setInfo, nextSet, nextExercise, workoutTime, onDone, onSkip
+  seconds, setInfo, workoutTime, onDone, onSkip,
 }: RestTimerProps) {
   const [remaining, setRemaining] = useState(seconds)
   const [target, setTarget] = useState(seconds)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const endTimeRef = useRef<number | null>(null)
+  const [paused, setPaused] = useState(false)
   const doneRef = useRef(false)
   const onDoneRef = useRef(onDone)
+  const pausedRef = useRef(false)
 
-  useEffect(() => {
-    onDoneRef.current = onDone
-  }, [onDone])
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
+  useEffect(() => { pausedRef.current = paused }, [paused])
 
+  // Countdown — one tick/second, honouring pause
   useEffect(() => {
     doneRef.current = false
     setTarget(seconds)
     setRemaining(seconds)
-    endTimeRef.current = Date.now() + seconds * 1000
-
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    intervalRef.current = setInterval(() => {
-      if (!endTimeRef.current || doneRef.current) return
-      const nextRemaining = Math.max(
-        0,
-        Math.ceil((endTimeRef.current - Date.now()) / 1000)
-      )
-      setRemaining(nextRemaining)
-      if (nextRemaining <= 0) {
-        doneRef.current = true
-        clearInterval(intervalRef.current!)
-        onDoneRef.current()
-      }
+    const id = setInterval(() => {
+      if (pausedRef.current || doneRef.current) return
+      setRemaining(prev => {
+        const next = prev - 1
+        if (next <= 0) {
+          doneRef.current = true
+          onDoneRef.current()
+          return 0
+        }
+        return next
+      })
     }, 1000)
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
+    return () => clearInterval(id)
   }, [seconds])
 
   const adjust = (delta: number) => {
     doneRef.current = false
-    const currentEnd = endTimeRef.current ?? Date.now()
-    const nextEnd = currentEnd + delta * 1000
-    const nextRemaining = Math.max(5, Math.ceil((nextEnd - Date.now()) / 1000))
-
-    endTimeRef.current = Date.now() + nextRemaining * 1000
-    setRemaining(nextRemaining)
+    setRemaining(r => Math.max(0, r + delta))
     setTarget(t => Math.max(5, t + delta))
   }
 
-  // SVG ring calculation
-  const radius = 78
+  // ── ring geometry (r = 130 → 280px box) ──
+  const radius = 130
   const circumference = 2 * Math.PI * radius
-  const progress = remaining / target
-  const dashOffset = circumference * (1 - progress)
+  const frac = target > 0 ? Math.max(0, remaining) / target : 0
+  const dashOffset = circumference * (1 - Math.min(1, frac))
 
-  const rpeColors: Record<number, string> = {
-    7: '#f97316', 8: '#facc15', 9: '#ef4444', 10: '#ef4444'
+  // ── next editable set (from store) ──
+  const {
+    selectedExercises, currentExerciseIndex, currentSetIndex, updateSet,
+  } = useWorkoutStore()
+  const curEx = selectedExercises[currentExerciseIndex]
+  let nEx = currentExerciseIndex
+  let nSet = currentSetIndex + 1
+  if (curEx && nSet >= curEx.sets.length) {
+    nEx = currentExerciseIndex + 1
+    while (nEx < selectedExercises.length && selectedExercises[nEx].skipped) nEx++
+    nSet = 0
   }
+  const hasNext = nEx < selectedExercises.length
+  const nextExObj = hasNext ? selectedExercises[nEx] : null
+  const nextSetObj = hasNext ? nextExObj!.sets[nSet] : null
+  const nextName = hasNext
+    ? (nEx === currentExerciseIndex
+        ? `Set ${nSet + 1} · ${curEx!.exercise.name}`
+        : `Set 1 · ${nextExObj!.exercise.name}`)
+    : ''
+
+  // ── coach tip from last RPE ──
+  const rpe = setInfo.rpe
+  const aiTip =
+    rpe >= 9
+      ? `That was near-max (RPE ${rpe}). Consider holding weight or dropping 2.5kg to keep reps clean.`
+      : rpe >= 7
+      ? `Solid working set at RPE ${rpe}. You've got room — keep the weight and chase one more rep.`
+      : `That felt easy (RPE ${rpe}). Bump the load 2.5–5kg on the next set.`
 
   return (
-    <div className="min-h-853 bg-dark-900 flex flex-col">
+    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-6">
 
-      {/* Top bar */}
-      <div className="px-5 pt-4 pb-3 flex justify-between items-center
-                      border-b border-dark-700">
-        <div>
-          <p className="text-white font-bold text-lg">{setInfo.exercise}</p>
-          <p className="text-brand-green text-xs mt-0.5">
+      {/* Header */}
+      <div className="flex justify-between items-start pb-3.5 border-b border-dark-600">
+        <div className="min-w-0 flex-1">
+          <p className="text-xl font-extrabold leading-tight truncate">{setInfo.exercise}</p>
+          <p className="text-brand-green text-[12.5px] mt-1">
             ✓ Set {setInfo.setNumber} logged · {setInfo.reps} reps @ {setInfo.weight}kg · RPE {setInfo.rpe}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-dark-400 text-xs">Workout</p>
-          <p className="text-white font-bold">{workoutTime}</p>
+        <div className="text-right ml-3">
+          <p className="text-dark-300 text-xs">Workout</p>
+          <p className="text-xl font-extrabold mt-0.5">{workoutTime}</p>
         </div>
       </div>
 
-      {/* Ring timer */}
-      <div className="flex-2 flex flex-col items-center justify-center px-5">
-        <div className="relative w-48 h-48 mb-6">
-          <svg width="192" height="192" viewBox="0 0 192 192"
-            className="absolute inset-0">
-            {/* Track */}
-            <circle cx="96" cy="96" r={radius} fill="none"
-              stroke="#1e1e1e" strokeWidth="12" />
-            {/* Progress */}
-            <circle cx="96" cy="96" r={radius} fill="none"
-              stroke="#00D4AA" strokeWidth="12"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              strokeLinecap="round"
-              transform="rotate(-90 96 96)"
-              style={{ transition: 'stroke-dashoffset 1s linear' }}
-            />
+      {/* Ring */}
+      <div className="flex justify-center mt-5">
+        <div className="relative w-[280px] h-[280px]">
+          <svg width="280" height="280" viewBox="0 0 280 280" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="140" cy="140" r={radius} fill="none" stroke="#1E1E1E" strokeWidth="14" />
+            <circle cx="140" cy="140" r={radius} fill="none" stroke="#00D4AA" strokeWidth="14"
+              strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset}
+              style={{ transition: 'stroke-dashoffset 1s linear' }} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-white text-5xl font-bold">{remaining}</span>
-            <span className="text-dark-300 text-sm">seconds</span>
+            <span className="text-[68px] font-extrabold leading-none">{Math.max(0, remaining)}</span>
+            <span className="text-dark-300 text-[15px] mt-0.5">seconds</span>
           </div>
         </div>
+      </div>
 
-        <p className="text-dark-300 text-sm mb-6">
-          Rest target: <span className="text-white font-semibold">{target}s</span>
-        </p>
+      <p className="text-center text-sm text-dark-300 mt-3">
+        Rest target: <span className="text-white font-bold">{target}s</span>
+      </p>
 
-        {/* Adjust buttons */}
-        <div className="flex gap-3 mb-8 w-full">
-          {[-15, -30, +30, +60].map(delta => (
-            <button
-              key={delta}
-              onClick={() => adjust(delta)}
-              className="flex-1 bg-dark-800 border border-dark-600 rounded-btn
-                         py-3 text-dark-300 text-sm active:scale-95 transition-transform"
-            >
-              {delta > 0 ? `+${delta}s` : `${delta}s`}
-            </button>
-          ))}
+      {/* Adjust */}
+      <div className="grid grid-cols-4 gap-2 mt-3.5">
+        {[-15, -30, 30, 60].map(d => (
+          <button key={d} onClick={() => adjust(d)}
+            className="py-3 rounded-btn border border-dark-600 bg-dark-800
+                       text-white text-sm font-bold active:scale-95 transition-transform">
+            {d > 0 ? `+${d}s` : `${d}s`}
+          </button>
+        ))}
+      </div>
+
+      {/* Coach */}
+      <div className="mt-4 flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25 rounded-card p-3.5">
+        <span className="text-base">🤖</span>
+        <div>
+          <p className="text-[10px] tracking-wide text-brand-teal font-bold mb-1">
+            COACH · POWERED BY GEMINI
+          </p>
+          <p className="text-[13px] text-dark-200 leading-relaxed">{aiTip}</p>
         </div>
+      </div>
 
-        {/* Next set preview */}
-        {(nextSet || nextExercise) && (
-          <div className="w-full bg-dark-800 border border-dark-600
-                          rounded-card p-4 mb-6">
-            <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-              {nextExercise ? 'Next Exercise' : 'Next Set Preview'}
-            </p>
-            {nextExercise ? (
-              <p className="text-white font-semibold">{nextExercise}</p>
-            ) : nextSet ? (
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: 'Set', value: '—' },
-                  { label: 'Reps', value: nextSet.reps },
-                  { label: 'Weight', value: `${nextSet.weight}kg` },
-                  { label: 'RPE', value: nextSet.rpe },
-                ].map(item => (
-                  <div key={item.label}
-                    className="bg-dark-700 rounded-xl p-3 text-center">
-                    <p className="text-dark-400 text-xs mb-1">{item.label}</p>
-                    <p className={`font-bold text-sm
-                      ${item.label === 'RPE'
-                        ? '' : 'text-white'}`}
-                      style={item.label === 'RPE'
-                        ? { color: rpeColors[Number(item.value)] ?? '#fff' }
-                        : {}}>
-                      {item.value}
-                    </p>
-                  </div>
-                ))}
+      {/* Next set edit */}
+      {hasNext && nextSetObj && (
+        <div className="mt-4 bg-dark-800 border border-dark-600 rounded-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] tracking-widest text-dark-400">NEXT SET · ADJUST NOW</p>
+            <p className="text-xs text-dark-300 max-w-[55%] truncate text-right">{nextName}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {/* reps */}
+            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1.5 py-2.5 text-center">
+              <p className="text-[10px] tracking-wide text-dark-400 mb-2">REPS</p>
+              <div className="flex items-center justify-center gap-1.5">
+                <MiniStep onClick={() => updateSet(nEx, nSet, { reps: Math.max(1, nextSetObj.reps - 1) })}>−</MiniStep>
+                <span className="min-w-[22px] text-[17px] font-extrabold">{nextSetObj.reps}</span>
+                <MiniStep onClick={() => updateSet(nEx, nSet, { reps: nextSetObj.reps + 1 })}>+</MiniStep>
               </div>
-            ) : null}
+            </div>
+            {/* weight */}
+            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1.5 py-2.5 text-center">
+              <p className="text-[10px] tracking-wide text-dark-400 mb-2">WEIGHT</p>
+              <div className="flex items-center justify-center gap-1.5">
+                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.max(0, Math.round((nextSetObj.weight - 2.5) * 10) / 10) })}>−</MiniStep>
+                <span className="min-w-[28px] text-[17px] font-extrabold">{nextSetObj.weight}</span>
+                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.round((nextSetObj.weight + 2.5) * 10) / 10 })}>+</MiniStep>
+              </div>
+            </div>
+            {/* rpe */}
+            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1.5 py-2.5 text-center">
+              <p className="text-[10px] tracking-wide text-dark-400 mb-2">RPE</p>
+              <button
+                onClick={() => updateSet(nEx, nSet, { rpe: (nextSetObj.rpe % 10) + 1 })}
+                className="text-xl font-extrabold py-1.5"
+                style={{ color: rpeColor(nextSetObj.rpe) }}>
+                {nextSetObj.rpe}
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* Haptic note */}
-        <div className="w-full bg-dark-800 border border-dark-600
-                        rounded-xl px-4 py-3 flex items-center gap-2 mb-10">
-          <span className="text-base">📳</span>
-          <span className="text-dark-400 text-sm">
-            Phone will vibrate when rest ends
-          </span>
         </div>
+      )}
+
+      {/* Vibrate note */}
+      <div className="mt-3.5 flex items-center gap-2.5 px-3.5 py-3 rounded-btn border border-dashed border-dark-600">
+        <span className="text-[15px]">📳</span>
+        <span className="text-[12.5px] text-dark-300">Phone will vibrate when rest ends</span>
       </div>
 
       {/* Actions */}
-      <div className="px-5 pb-10 flex gap-3">
+      <div className="grid grid-cols-[1fr_1.4fr] gap-2.5 mt-4">
         <button
-          onClick={() => {}}
-          className="flex-1 bg-dark-800 border border-dark-600 rounded-btn
-                     py-4 text-dark-300 font-semibold active:scale-95 transition-transform"
-        >
-          ⏸ Pause
+          onClick={() => setPaused(p => !p)}
+          className="py-4 rounded-btn border border-dark-600 bg-dark-800
+                     text-[15px] font-bold active:scale-95 transition-transform">
+          {paused ? '▶ Resume' : '‖ Pause'}
         </button>
         <button
           onClick={onSkip}
-          className="flex-[2] bg-brand-teal text-black font-bold py-4
-                     rounded-btn active:scale-95 transition-transform"
-        >
+          className="py-4 rounded-btn bg-brand-teal text-black
+                     text-[15px] font-extrabold active:scale-95 transition-transform">
           Skip Rest → Next Set
         </button>
       </div>
