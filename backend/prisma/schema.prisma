@@ -70,6 +70,8 @@ model Biometric {
   type       BiometricType
   value      Float
   source     String        @default("manual")
+
+  @@index([userId, type, measuredAt])
 }
 
 enum BiometricType {
@@ -184,6 +186,8 @@ model WorkoutSession {
   notes            String?
   workoutExercises WorkoutExercise[]
   fatigueLogs      MuscleFatigueLog[]
+
+  @@index([userId, dateTime])
 }
 
 model WorkoutExercise {
@@ -195,6 +199,9 @@ model WorkoutExercise {
   orderIndex Int
   notes     String?
   sets      WorkoutSet[]
+
+  @@index([sessionId])
+  @@index([exerciseId])
 }
 
 model WorkoutSet {
@@ -210,6 +217,8 @@ model WorkoutSet {
   cardio             SetCardio?
   wod                SetWOD?
   mobility           SetMobility?
+
+  @@index([workoutExerciseId])
 }
 
 enum SetType {
@@ -278,6 +287,9 @@ model MuscleFatigueLog {
   createdAt        DateTime       @default(now())
   workoutSessionId String?
   workoutSession   WorkoutSession? @relation(fields: [workoutSessionId], references: [id])
+
+  @@index([userId])
+  @@index([workoutSessionId])
 }
 
 model SleepLog {
@@ -288,6 +300,8 @@ model SleepLog {
   durationMin Int
   sleepScore Float?
   notes      String?
+
+  @@index([userId, sleepDate])
 }
 
 model NutritionLog {
@@ -298,6 +312,8 @@ model NutritionLog {
   proteinG Float?
   calories Float?
   notes    String?
+
+  @@index([userId, logDate])
 }
 
 model ChatThread {
@@ -306,6 +322,8 @@ model ChatThread {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime  @default(now())
   messages  AIChat[]
+
+  @@index([userId])
 }
 
 model AIChat {
@@ -316,6 +334,8 @@ model AIChat {
   messageText String   @db.Text
   sender    String
   dateTime  DateTime   @default(now())
+
+  @@index([threadId, dateTime])
 }
 
 model Notification {

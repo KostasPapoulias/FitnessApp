@@ -45,3 +45,13 @@ body {
   position: relative;
   overflow-x: hidden;
 }
+
+/* Hide scrollbar on scrollable containers (e.g. the activity heatmap)
+   while still allowing touch/wheel scrolling. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
