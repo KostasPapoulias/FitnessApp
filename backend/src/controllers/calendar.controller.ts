@@ -2,6 +2,19 @@ import { Response } from 'express';
 import { AuthRequest } from '../server';
 import { prisma } from '../server';
 
+// Muscle -> muscle-group mapping, mirrors the groups used on the
+// Calendar "Muscles" tab (Chest / Back / Legs / Shoulders / Arms / Core / Calves).
+const MUSCLE_GROUP: Record<string, string> = {
+  'Chest': 'Chest',
+  'Back': 'Back', 'Lats': 'Back', 'Traps': 'Back', 'Lower Back': 'Back',
+  'Quadriceps': 'Legs', 'Hamstrings': 'Legs', 'Glutes': 'Legs',
+  'Shoulders': 'Shoulders',
+  'Biceps': 'Arms', 'Triceps': 'Arms', 'Forearms': 'Arms',
+  'Abs': 'Core', 'Obliques': 'Core',
+  'Calves': 'Calves',
+}
+const GROUP_ORDER = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Calves']
+
 // Get all workout days for a given month
 // GET /api/calendar?month=4&year=2025
 
@@ -13,19 +26,20 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 1);
 
+    // Month view only needs per-session totals + exercise count — never the
+    // actual exercises/muscles, so select just that instead of a deep include.
     const sessions = await prisma.workoutSession.findMany({
       where: {
         userId: req.userId!,
         dateTime: {gte: start, lt: end}
       },
-      include: {
-        workoutExercises: {
-          include: {
-            exercise: {
-              include: {muscleLinks: {include: {muscle: true}}}
-            }
-          }
-        }
+      select: {
+        id: true,
+        dateTime: true,
+        duration: true,
+        totalVolume: true,
+        avgRpe: true,
+        _count: { select: { workoutExercises: true } }
       },
       orderBy: { dateTime: 'asc' }
     });
@@ -59,7 +73,7 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
       dayAgg[dateKey].sessionId = session.id
       dayAgg[dateKey].totalVolume += totalVolume
       dayAgg[dateKey].duration += session.duration ?? 0
-      dayAgg[dateKey].exerciseCount += session.workoutExercises.length
+      dayAgg[dateKey].exerciseCount += session._count.workoutExercises
       dayAgg[dateKey].rpeWeightedSum += avgRpe * rpeWeight
       dayAgg[dateKey].rpeWeight += rpeWeight
     }
@@ -227,6 +241,203 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
 
   } catch (error) {
     console.error('getCalendarDay error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+// GET /api/calendar/activity
+// GitHub-style 53-week training heatmap + streak stats
+export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const end = new Date(today); end.setDate(end.getDate() + (6 - end.getDay())) // Saturday of this week
+    const TOTAL_WEEKS = 53
+    const start = new Date(end); start.setDate(end.getDate() - TOTAL_WEEKS * 7 + 1) // Sunday, 53 weeks back
+
+    const sessions = await prisma.workoutSession.findMany({
+      where: { userId, dateTime: { gte: start, lte: end } },
+      select: { dateTime: true, totalVolume: true }
+    })
+
+    const volumeByDay = new Map<string, number>()
+    for (const s of sessions) {
+      const key = s.dateTime.toISOString().split('T')[0]
+      volumeByDay.set(key, (volumeByDay.get(key) ?? 0) + (s.totalVolume ?? 0))
+    }
+
+    // Bucket active days into quartiles (relative to this user's own volume
+    // range) so the heatmap adapts instead of using fixed kg thresholds.
+    const activeVolumes = Array.from(volumeByDay.values()).sort((a, b) => a - b)
+    const quantile = (p: number) => {
+      if (!activeVolumes.length) return 0
+      return activeVolumes[Math.min(activeVolumes.length - 1, Math.floor(p * activeVolumes.length))]
+    }
+    const q25 = quantile(0.25), q50 = quantile(0.5), q75 = quantile(0.75)
+    const levelFor = (vol: number) => {
+      if (vol <= 0) return 1
+      if (vol <= q25) return 1
+      if (vol <= q50) return 2
+      if (vol <= q75) return 3
+      return 4
+    }
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const weeks: { monthLabel: string; days: { date: string; level: number; future: boolean }[] }[] = []
+    let prevMonth = -1
+    const cursor = new Date(start)
+    for (let w = 0; w < TOTAL_WEEKS; w++) {
+      const days: { date: string; level: number; future: boolean }[] = []
+      let labelThisWeek = ''
+      for (let d = 0; d < 7; d++) {
+        const key = cursor.toISOString().split('T')[0]
+        const future = cursor > today
+        const vol = volumeByDay.get(key)
+        const level = future ? 0 : (vol !== undefined ? levelFor(vol) : 0)
+        days.push({ date: key, level, future })
+        if (d === 0) {
+          const m = cursor.getMonth()
+          if (m !== prevMonth) { labelThisWeek = MONTHS[m]; prevMonth = m }
+        }
+        cursor.setDate(cursor.getDate() + 1)
+      }
+      weeks.push({ days, monthLabel: labelThisWeek })
+    }
+
+    // Streaks — chronological, past/today only.
+    const flat = weeks.flatMap(w => w.days).filter(d => !d.future)
+    let longest = 0, run = 0
+    for (const d of flat) { if (d.level > 0) { run++; longest = Math.max(longest, run) } else run = 0 }
+    let current = 0
+    for (let i = flat.length - 1; i >= 0; i--) { if (flat[i].level > 0) current++; else break }
+
+    // Year-to-date totals (independent of the 53-week rolling window).
+    const yearStart = new Date(today.getFullYear(), 0, 1)
+    const yearSessions = await prisma.workoutSession.findMany({
+      where: { userId, dateTime: { gte: yearStart, lte: today } },
+      select: { dateTime: true }
+    })
+    const totalThisYear = new Set(yearSessions.map(s => s.dateTime.toISOString().split('T')[0])).size
+    const daysElapsed = Math.floor((today.getTime() - yearStart.getTime()) / 86400000) + 1
+    const consistencyPct = daysElapsed > 0 ? Math.round((totalThisYear / daysElapsed) * 100) : 0
+
+    res.json({
+      success: true,
+      data: { weeks, streak: { current, longest, totalThisYear, consistencyPct } }
+    })
+
+  } catch (error) {
+    console.error('getCalendarActivity error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+// GET /api/calendar/muscles
+// Weekly set volume per muscle group (last 8 weeks) + imbalance/coach insights
+export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!
+    const today = new Date(); today.setHours(23, 59, 59, 999)
+    const WEEKS = 8
+    const rangeStart = new Date(today)
+    rangeStart.setDate(rangeStart.getDate() - WEEKS * 7 + 1)
+    rangeStart.setHours(0, 0, 0, 0)
+
+    const workoutExercises = await prisma.workoutExercise.findMany({
+      where: { session: { userId, dateTime: { gte: rangeStart, lte: today } } },
+      include: {
+        session: { select: { dateTime: true } },
+        exercise: { include: { muscleLinks: { include: { muscle: true } } } },
+        sets: { select: { id: true } }
+      }
+    })
+
+    const weekIndexFor = (date: Date) => {
+      const diffDays = Math.floor((date.getTime() - rangeStart.getTime()) / 86400000)
+      return Math.min(WEEKS - 1, Math.max(0, Math.floor(diffDays / 7)))
+    }
+
+    const counts: Record<string, number[]> = {}
+    for (const g of GROUP_ORDER) counts[g] = Array(WEEKS).fill(0)
+
+    for (const we of workoutExercises) {
+      const wIdx = weekIndexFor(we.session.dateTime)
+      const setCount = we.sets.length
+      const groupsHit = new Set(
+        we.exercise.muscleLinks
+          .map(ml => MUSCLE_GROUP[ml.muscle.name])
+          .filter((g): g is string => Boolean(g))
+      )
+      for (const g of groupsHit) counts[g][wIdx] += setCount
+    }
+
+    const withRecent = GROUP_ORDER.map(name => {
+      const cells = counts[name]
+      const recent = cells.slice(-3).reduce((a, b) => a + b, 0)
+      return { name, cells, recent }
+    })
+
+    const avgRecent = withRecent.reduce((s, r) => s + r.recent, 0) / withRecent.length
+    const muscleRows = withRecent.map(r => ({
+      name: r.name,
+      cells: r.cells,
+      status: r.recent === 0
+        ? 'neglected'
+        : (avgRecent > 0 && r.recent > avgRecent * 1.6) ? 'overloaded' : 'balanced'
+    }))
+
+    const neglected = muscleRows.filter(r => r.status === 'neglected').map(r => r.name)
+    const overloaded = muscleRows.filter(r => r.status === 'overloaded').map(r => r.name)
+
+    let muscleInsight: string
+    if (neglected.length && overloaded.length) {
+      muscleInsight = `${neglected.join(' and ')} ${neglected.length > 1 ? 'have' : 'has'} gone without volume in the last 3 weeks while ${overloaded.join(' and ')} ${overloaded.length > 1 ? 'are' : 'is'} trending high. Add a ${neglected[0].toLowerCase()} finisher this week to even things out.`
+    } else if (neglected.length) {
+      muscleInsight = `${neglected.join(' and ')} ${neglected.length > 1 ? "haven't" : "hasn't"} seen volume in the last 3 weeks. Work it back into your split soon.`
+    } else if (overloaded.length) {
+      muscleInsight = `${overloaded.join(' and ')} ${overloaded.length > 1 ? 'are' : 'is'} trending high relative to the rest of your split. Make sure recovery keeps pace.`
+    } else {
+      muscleInsight = 'Your training is well balanced across muscle groups over the last 8 weeks.'
+    }
+
+    // AI coach tip, derived from current per-muscle fatigue levels.
+    const fatigue = await prisma.muscleFatigueCurrent.findMany({
+      where: { userId },
+      include: { muscle: true }
+    })
+    const fatigueByGroup: Record<string, number[]> = {}
+    for (const f of fatigue) {
+      const g = MUSCLE_GROUP[f.muscle.name]
+      if (!g) continue
+      if (!fatigueByGroup[g]) fatigueByGroup[g] = []
+      fatigueByGroup[g].push(f.fatigueLevel)
+    }
+    const groupAvg = Object.entries(fatigueByGroup).map(([group, vals]) => ({
+      group, avg: vals.reduce((a, b) => a + b, 0) / vals.length
+    }))
+
+    let coachTip = 'Log a session to get a personalized recommendation for today.'
+    if (groupAvg.length) {
+      groupAvg.sort((a, b) => b.avg - a.avg)
+      const mostFatigued  = groupAvg[0]
+      const mostRecovered = groupAvg[groupAvg.length - 1]
+      coachTip = mostFatigued.avg >= 50
+        ? `${mostFatigued.group} is still fatigued from recent training. A ${mostRecovered.group.toLowerCase()} or core day fits best today — your ${mostRecovered.group.toLowerCase()} is recovered.`
+        : `Fatigue is low across the board. Any muscle group is fair game for a strong session today.`
+    }
+
+    res.json({
+      success: true,
+      data: {
+        weekHeads: Array.from({ length: WEEKS }, (_, i) => i === WEEKS - 1 ? 'Now' : `-${WEEKS - 1 - i}`),
+        muscleRows,
+        muscleInsight,
+        coachTip
+      }
+    })
+
+  } catch (error) {
+    console.error('getCalendarMuscles error:', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

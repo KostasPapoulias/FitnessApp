@@ -2,7 +2,6 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
 
 dotenv.config();
 // Routes
@@ -28,7 +27,9 @@ export interface AuthRequest extends Request {
 const app: Express = express();
 const port = process.env.PORT || 3001;
 
-export const prisma = new PrismaClient();
+// Single shared PrismaClient instance (one connection pool for the whole
+// process) — see src/lib/prisma.ts.
+export { default as prisma } from './lib/prisma';
 
 // Middleware
 app.use(cors({

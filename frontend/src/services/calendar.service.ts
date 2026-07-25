@@ -9,5 +9,15 @@ export const calendarService = {
   getDay: async (date: string) => {
     const res = await api.get(`/calendar/${date}`)
     return res.data.data
+  },
+
+  getActivity: async () => {
+    const res = await api.get('/calendar/activity')
+    return res.data.data
+  },
+
+  getMuscles: async () => {
+    const res = await api.get('/calendar/muscles')
+    return res.data.data
   }
 }
