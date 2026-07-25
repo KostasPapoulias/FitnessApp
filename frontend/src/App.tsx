@@ -14,6 +14,11 @@ import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
 import PlanSets from './pages/Workout/PlanSets'
+import WorkoutQueue from './pages/Workout/WorkoutQueue'
+import Finish from './pages/Workout/Finish'
+import CardioPlan from './pages/Workout/CardioPlan'
+import MobilityPlan from './pages/Workout/MobilityPlan'
+import WodPlan from './pages/Workout/WodPlan'
 // Layout
 import AppLayout from './components/layout/AppLayout'
 import StartWorkout from './pages/Workout/StartWorkout'
@@ -77,10 +82,15 @@ export default function App() {
           <Route path="workout/exercises" element={<ExerciseList />} />
           <Route path="exercise-detail" element={<ExerciseDetail />} />
           <Route path="workout/active" element={<ActiveWorkout />} />
+          <Route path="workout/queue" element={<WorkoutQueue />} />
+          <Route path="workout/finish" element={<Finish />} />
           <Route path="ai" element={<AIChatHub />} />
           <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
           <Route path="workout/plan" element={<PlanSets />} />
+          <Route path="workout/plan/cardio" element={<CardioPlan />} />
+          <Route path="workout/plan/mobility" element={<MobilityPlan />} />
+          <Route path="workout/plan/wod" element={<WodPlan />} />
         </Route>
 
         {/* Catch all */}
