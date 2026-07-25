@@ -1,336 +1,45 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { rpeColor, exerciseEmoji, cycleRpe } from './helpers'
 
-// Default sets based on common modality patterns
-const DEFAULT_REST = 90
-
-interface SetRow {
-  reps: number
-  weight: number
-  rpe: number
-  restSeconds: number
-}
-
-function SetTable({
-  exerciseName,
-  sets,
-  onChange,
-  modality,
-}: {
-  exerciseName: string
-  sets: SetRow[]
-  onChange: (sets: SetRow[]) => void
-  modality: string
+// ── small stepper button ──────────────────────────────────────────────────
+function Step({ children, onClick, disabled }: {
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
 }) {
-  const isCardio    = modality === 'Cardio'
-  const isMobility  = modality === 'Mobility'
-  const isCalisthenics = modality === 'Calisthenics'
-
-  const updateSet = (index: number, field: keyof SetRow, value: number) => {
-    const updated = sets.map((s, i) =>
-      i === index ? { ...s, [field]: value } : s
-    )
-    onChange(updated)
-  }
-
-  const addSet = () => {
-    const last = sets[sets.length - 1]
-    onChange([...sets, { ...last }])
-  }
-
-  const removeSet = (index: number) => {
-    if (sets.length <= 1) return
-    onChange(sets.filter((_, i) => i !== index))
-  }
-
-  // Copy values from previous set to all sets below
-  const copyDown = (fromIndex: number) => {
-    const source = sets[fromIndex]
-    const updated = sets.map((s, i) =>
-      i > fromIndex ? { ...source } : s
-    )
-    onChange(updated)
-  }
-
-  return (
-    <div className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden mb-4">
-
-      {/* Exercise header */}
-      <div className="px-4 py-2 border-b border-dark-700 flex items-center gap-3">
-        <div className="w-9 h-9 bg-dark-700 rounded-xl flex items-center
-                        justify-center text-base flex-shrink-0">
-          💪
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-white font-semibold text-sm truncate">
-            {exerciseName}
-          </p>
-          <p className="text-dark-400 text-xs">{modality}</p>
-        </div>
-        <span className="text-dark-500 text-xs">
-          {sets.length} set{sets.length > 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* Column headers */}
-      <div className={`grid gap-2 px-4 py-2 border-b border-dark-700
-        ${isCardio || isMobility
-          ? 'grid-cols-[32px_1fr_1fr_1fr]'
-          : 'grid-cols-[32px_1fr_1fr_1fr_28px]'
-        }`}>
-        <div />
-        {isCardio ? (
-          <>
-            <p className="text-dark-500 text-[10px] uppercase text-center">Dist (km)</p>
-            <p className="text-dark-500 text-[10px] uppercase text-center">Time (min)</p>
-            <p className="text-dark-500 text-[10px] uppercase text-center">Rest (s)</p>
-          </>
-        ) : isMobility ? (
-          <>
-            <p className="text-dark-500 text-[10px] uppercase text-center">Time (s)</p>
-            <p className="text-dark-500 text-[10px] uppercase text-center">Rest (s)</p>
-            <p className="text-dark-500 text-[10px] uppercase text-center">RPE</p>
-          </>
-        ) : (
-          <>
-            <p className="text-dark-500 text-[10px] uppercase text-center">Reps</p>
-            <p className="text-dark-500 text-[10px] uppercase text-center">
-              {isCalisthenics ? '+Weight' : 'Weight'}
-            </p>
-            <p className="text-dark-500 text-[10px] uppercase text-center">RPE</p>
-            <div />
-          </>
-        )}
-      </div>
-
-      {/* Set rows */}
-      {sets.map((set, i) => (
-        <div key={i}>
-          <div className={`grid gap-2 px-4 py-2 items-center
-            ${isCardio || isMobility
-              ? 'grid-cols-[32px_1fr_1fr_1fr]'
-              : 'grid-cols-[32px_1fr_1fr_1fr_28px]'
-            }`}>
-
-            {/* Set number */}
-            <div className="w-7 h-7 bg-dark-700 rounded-lg flex items-center
-                            justify-center">
-              <span className="text-dark-300 text-xs font-bold">{i + 1}</span>
-            </div>
-
-            {isCardio ? (
-              <>
-                <NumberInput
-                  value={set.reps} step={0.5}
-                  onChange={v => updateSet(i, 'reps', v)}
-                />
-                <NumberInput
-                  value={set.weight}
-                  onChange={v => updateSet(i, 'weight', v)}
-                />
-                <NumberInput
-                  value={set.restSeconds} step={15}
-                  onChange={v => updateSet(i, 'restSeconds', v)}
-                />
-              </>
-            ) : isMobility ? (
-              <>
-                <NumberInput
-                  value={set.reps} step={10}
-                  onChange={v => updateSet(i, 'reps', v)}
-                />
-                <NumberInput
-                  value={set.restSeconds} step={15}
-                  onChange={v => updateSet(i, 'restSeconds', v)}
-                />
-                <RPEInput
-                  value={set.rpe}
-                  onChange={v => updateSet(i, 'rpe', v)}
-                />
-              </>
-            ) : (
-              <>
-                <NumberInput
-                  value={set.reps}
-                  onChange={v => updateSet(i, 'reps', v)}
-                />
-                <NumberInput
-                  value={set.weight} step={2.5}
-                  onChange={v => updateSet(i, 'weight', v)}
-                />
-                <RPEInput
-                  value={set.rpe}
-                  onChange={v => updateSet(i, 'rpe', v)}
-                />
-                {/* Remove set */}
-                <button
-                  onClick={() => removeSet(i)}
-                  className="w-7 h-7 flex items-center justify-center
-                             text-dark-600 hover:text-brand-red transition-colors"
-                >
-                  ×
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Copy down button — appears between sets */}
-          {i < sets.length - 1 && (
-            <div className="flex justify-center py-0.5">
-              <button
-                onClick={() => copyDown(i)}
-                className="text-[10px] text-dark-600 hover:text-brand-teal
-                           transition-colors px-2"
-              >
-                ↓ copy to remaining
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
-
-      {/* Rest time for the exercise (global) */}
-      <div className="px-4 py-3 border-t border-dark-700 flex items-center
-                      justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-base">⏱️</span>
-          <span className="text-dark-300 text-sm">Rest between sets</span>
-        </div>
-        <div className="flex items-center gap-3 bg-dark-700 rounded-xl
-                        px-3 py-1.5">
-          <button
-            onClick={() => {
-              const updated = sets.map(s => ({
-                ...s, restSeconds: Math.max(15, s.restSeconds - 15)
-              }))
-              onChange(updated)
-            }}
-            className="text-dark-300 text-lg leading-none active:scale-90">
-            −
-          </button>
-          <span className="text-white text-sm font-bold w-10 text-center">
-            {sets[0]?.restSeconds ?? DEFAULT_REST}s
-          </span>
-          <button
-            onClick={() => {
-              const updated = sets.map(s => ({
-                ...s, restSeconds: s.restSeconds + 15
-              }))
-              onChange(updated)
-            }}
-            className="text-dark-300 text-lg leading-none active:scale-90">
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* Add set button */}
-      <div className="px-4 pb-3">
-        <button
-          onClick={addSet}
-          className="w-full bg-dark-700 border border-dashed border-dark-500
-                     rounded-xl py-2.5 text-dark-400 text-sm
-                     active:scale-95 transition-transform
-                     hover:border-brand-teal/40 hover:text-brand-teal"
-        >
-          + Add Set
-        </button>
-      </div>
-    </div>
-  )
-}
-
-//  Reusable number input with +/− 
-function NumberInput({
-  value, onChange, step = 1, min = 0
-}: {
-  value: number
-  onChange: (v: number) => void
-  step?: number
-  min?: number
-}) {
-  return (
-    <div className="bg-dark-700 rounded-xl flex items-center justify-between
-                    px-2 py-2 gap-1">
-      <button
-        onClick={() => onChange(Math.max(min, Math.round((value - step) * 100) / 100))}
-        className="text-dark-300 text-base leading-none w-5 flex items-center
-                   justify-center active:scale-90 flex-shrink-0"
-      >
-        −
-      </button>
-      <span className="text-white text-xs font-semibold text-center flex-1">
-        {value}
-      </span>
-      <button
-        onClick={() => onChange(Math.round((value + step) * 100) / 100)}
-        className="text-dark-300 text-base leading-none w-5 flex items-center
-                   justify-center active:scale-90 flex-shrink-0"
-      >
-        +
-      </button>
-    </div>
-  )
-}
-
-//  RPE selector 
-function RPEInput({ value, onChange }: {
-  value: number; onChange: (v: number) => void
-}) {
-  const colors = ['','#4ade80','#4ade80','#86efac','#86efac',
-    '#facc15','#facc15','#f97316','#facc15','#ef4444','#ef4444']
-
   return (
     <button
-      onClick={() => {
-        const next = value >= 10 ? 1 : value + 1
-        onChange(next)
-      }}
-      className="rounded-xl py-2 text-xs font-bold text-center
-                 bg-dark-700 transition-colors"
-      style={{ color: colors[value] }}
+      onClick={onClick}
+      disabled={disabled}
+      className="w-[34px] h-[34px] rounded-[9px] border border-dark-600 bg-dark-700
+                 text-white text-lg font-bold flex items-center justify-center
+                 active:scale-90 transition-transform disabled:opacity-30"
     >
-      {value}
+      {children}
     </button>
   )
 }
 
-// Main Plan Sets  
 export default function PlanSets() {
   const navigate = useNavigate()
-  const { selectedExercises, updateSets } = useWorkoutStore()
+  const {
+    selectedExercises,
+    updateSet, addSet, removeSet, setExerciseRest, removeExerciseAt,
+  } = useWorkoutStore()
 
-  // Local copy of sets for editing
-  const [localSets, setLocalSets] = useState<Record<string, SetRow[]>>(
-    Object.fromEntries(
-      selectedExercises.map(se => [se.exercise.id, se.sets])
-    )
+  // Aggregate stats
+  const totalSets = selectedExercises.reduce(
+    (sum, se) => sum + (se.skipped ? 0 : se.sets.length), 0
   )
-
-  const handleSetsChange = (exerciseId: string, sets: SetRow[]) => {
-    setLocalSets(prev => ({ ...prev, [exerciseId]: sets }))
-  }
-
-  const handleStart = () => {
-    // Save all sets back to the store
-    Object.entries(localSets).forEach(([exerciseId, sets]) => {
-      updateSets(exerciseId, sets)
-    })
-    navigate('/workout/active')
-  }
-
-  // Total sets across all exercises
-  const totalSets = Object.values(localSets).reduce(
-    (sum, sets) => sum + sets.length, 0
-  )
-
-  // Estimated duration (rough: 45s per set + rest time)
-  const estimatedMinutes = Math.round(
-    Object.values(localSets).reduce((sum, sets) =>
-      sum + sets.reduce((s, set) => s + 45 + set.restSeconds, 0), 0
+  const estimatedMinutes = Math.max(1, Math.round(
+    selectedExercises.reduce((sum, se) =>
+      se.skipped ? sum
+        : sum + se.sets.reduce((s, set) => s + 35 + set.restSeconds, 0), 0
     ) / 60
-  )
+  ))
+
+  const handleStart = () => navigate('/workout/active')
 
   if (selectedExercises.length === 0) {
     return (
@@ -348,88 +57,206 @@ export default function PlanSets() {
   }
 
   return (
-    <div className="min-h-853 bg-dark-900 flex flex-col">
+    <div className="min-h-dvh bg-dark-900 text-white">
+      <div className="px-5 pt-4 pb-2">
 
-      {/* Header */}
-      <div className="px-5 pt-4 pb-4 border-b border-dark-700">
-        <div className="flex items-center gap-3 mb-3">
+        {/* Header */}
+        <div className="flex items-center gap-3.5 mb-4">
           <button
-            onClick={() => navigate("/workout/browse")}
-            className="w-9 h-9 bg-dark-800 border border-dark-600 rounded-full
-                       flex items-center justify-center text-white
-                       active:scale-90 transition-transform flex-shrink-0"
+            onClick={() => navigate('/workout/browse')}
+            className="w-10 h-10 rounded-full border border-dark-600 bg-dark-800
+                       text-white text-lg flex items-center justify-center
+                       flex-shrink-0 active:scale-90 transition-transform"
           >
             ←
           </button>
-          <div className="flex-1">
-            <h1 className="text-white text-xl font-bold">Plan Sets</h1>
-            <p className="text-dark-400 text-xs">
+          <div>
+            <h1 className="text-2xl font-extrabold leading-tight">Plan Sets</h1>
+            <p className="text-dark-300 text-[13px] mt-0.5">
               {selectedExercises.length} exercises · configure before starting
             </p>
           </div>
         </div>
 
-        {/* Summary strip */}
-        <div className="flex gap-3">
-          <div className="flex-1 bg-dark-800 border border-dark-600
-                          rounded-xl p-3 text-center">
-            <p className="text-white font-bold text-base">{totalSets}</p>
-            <p className="text-dark-400 text-xs">Total sets</p>
-          </div>
-          <div className="flex-1 bg-dark-800 border border-dark-600
-                          rounded-xl p-3 text-center">
-            <p className="text-white font-bold text-base">
-              {selectedExercises.length}
-            </p>
-            <p className="text-dark-400 text-xs">Exercises</p>
-          </div>
-          <div className="flex-1 bg-dark-800 border border-dark-600
-                          rounded-xl p-3 text-center">
-            <p className="text-white font-bold text-base">
-              ~{estimatedMinutes}m
-            </p>
-            <p className="text-dark-400 text-xs">Est. duration</p>
-          </div>
+        {/* Stat cards */}
+        <div className="grid grid-cols-3 gap-2.5 mb-5">
+          {[
+            { value: String(totalSets), label: 'Total sets' },
+            { value: String(selectedExercises.length), label: 'Exercises' },
+            { value: `~${estimatedMinutes}m`, label: 'Est. duration' },
+          ].map(s => (
+            <div key={s.label}
+              className="bg-dark-800 border border-dark-600 rounded-card
+                         py-4 px-2 text-center">
+              <p className="text-[22px] font-extrabold">{s.value}</p>
+              <p className="text-dark-300 text-[11px] mt-1">{s.label}</p>
+            </div>
+          ))}
         </div>
-      </div>
 
-      {/* Exercise set tables */}
-      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-16">
-
-        {/* Quick tip */}
-        <div className="bg-dark-800 border border-dark-700 rounded-card
-                        px-4 py-3 mb-4 flex items-start gap-2">
-          <span className="text-sm flex-shrink-0">💡</span>
-          <p className="text-dark-400 text-xs leading-relaxed">
-            Tap RPE to cycle through values. Tap "↓ copy to remaining"
-            to apply the same values to all sets below.
+        {/* Tip */}
+        <div className="flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25
+                        rounded-card p-3.5 mb-4">
+          <span className="text-base leading-snug">💡</span>
+          <p className="text-dark-200 text-[12.5px] leading-relaxed">
+            Tap −/+ to adjust each value. Tap{' '}
+            <span className="text-brand-teal">copy to remaining</span>{' '}
+            to apply a set's numbers to the sets below it.
           </p>
         </div>
 
-        {selectedExercises.map(se => (
-          <SetTable
-            key={se.exercise.id}
-            exerciseName={se.exercise.name}
-            modality={se.exercise.modality}
-            sets={localSets[se.exercise.id] ?? se.sets}
-            onChange={sets => handleSetsChange(se.exercise.id, sets)}
-          />
-        ))}
-      </div>
+        {/* Exercise cards */}
+        <div className="flex flex-col gap-4">
+          {selectedExercises.map((se, ei) => {
+            const ex = se.exercise
+            const rest = se.sets[0]?.restSeconds ?? 90
+            return (
+              <div key={ex.id}
+                className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden"
+                style={{ opacity: se.skipped ? 0.55 : 1 }}>
 
-      {/* Start button */}
-      <div className="fixed bottom-12 left-1/2 -translate-x-1/2
-                      w-full max-w-[430px] bg-dark-900/95 backdrop-blur
-                      border-t border-dark-700 px-5 pb-10 pt-1">
-        <button
-          onClick={handleStart}
-          className="w-full bg-brand-red text-white font-bold py-4
-                     rounded-btn text-base active:scale-95 transition-transform
-                     flex items-center justify-center gap-2"
-        >
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-          Start Workout — {totalSets} sets
-        </button>
+                {/* Exercise header */}
+                <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                  <div className="w-10 h-10 rounded-[10px] bg-dark-700 flex items-center
+                                  justify-center text-xl flex-shrink-0">
+                    {exerciseEmoji(ex)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-bold leading-tight truncate">{ex.name}</p>
+                    <p className="text-dark-300 text-xs mt-0.5">{ex.modality}</p>
+                  </div>
+                  <span className="text-dark-300 text-xs flex-shrink-0">
+                    {se.sets.length} set{se.sets.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                {/* Column headers */}
+                <div className="grid grid-cols-[30px_1fr_1fr_64px_30px] gap-2 px-4 py-1 items-center">
+                  <div />
+                  <p className="text-[10px] tracking-wider text-dark-400 text-center">REPS</p>
+                  <p className="text-[10px] tracking-wider text-dark-400 text-center">
+                    {ex.modality === 'Calisthenics' ? 'LOAD' : 'WEIGHT'}
+                  </p>
+                  <p className="text-[10px] tracking-wider text-dark-400 text-center">RPE</p>
+                  <div />
+                </div>
+
+                {/* Set rows */}
+                {se.sets.map((s, si) => (
+                  <div key={si}>
+                    <div className="grid grid-cols-[30px_1fr_1fr_64px_30px] gap-2 px-4 py-1.5 items-center">
+                      <div className="w-[26px] h-[26px] rounded-badge bg-dark-700 border border-dark-600
+                                      flex items-center justify-center text-xs font-bold text-dark-200">
+                        {si + 1}
+                      </div>
+                      {/* reps */}
+                      <div className="flex items-center justify-center gap-1">
+                        <Step onClick={() => updateSet(ei, si, { reps: Math.max(1, s.reps - 1) })}>−</Step>
+                        <span className="min-w-[26px] text-center text-[15px] font-bold">{s.reps}</span>
+                        <Step onClick={() => updateSet(ei, si, { reps: s.reps + 1 })}>+</Step>
+                      </div>
+                      {/* weight */}
+                      <div className="flex items-center justify-center gap-1">
+                        <Step onClick={() => updateSet(ei, si, { weight: Math.max(0, Math.round((s.weight - 2.5) * 10) / 10) })}>−</Step>
+                        <span className="min-w-[30px] text-center text-[15px] font-bold">{s.weight}</span>
+                        <Step onClick={() => updateSet(ei, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</Step>
+                      </div>
+                      {/* rpe */}
+                      <button
+                        onClick={() => updateSet(ei, si, { rpe: cycleRpe(s.rpe) })}
+                        className="text-[15px] font-extrabold"
+                        style={{ color: rpeColor(s.rpe) }}
+                      >
+                        {s.rpe}
+                      </button>
+                      {/* remove */}
+                      <button
+                        onClick={() => removeSet(ei, si)}
+                        disabled={se.sets.length <= 1}
+                        className="w-[26px] h-[26px] rounded-badge text-dark-400 text-base
+                                   flex items-center justify-center disabled:opacity-30"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    {si < se.sets.length - 1 && (
+                      <div className="text-center pb-1">
+                        <button
+                          onClick={() => se.sets.forEach((_, j) => {
+                            if (j > si) updateSet(ei, j, {
+                              reps: s.reps, weight: s.weight, rpe: s.rpe,
+                            })
+                          })}
+                          className="text-dark-400 hover:text-brand-teal text-[11px] transition-colors"
+                        >
+                          ↓ copy to remaining
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Rest row */}
+                <div className="flex items-center justify-between px-4 py-3 mx-4 mt-2
+                                border-t border-dark-600">
+                  <div className="flex items-center gap-2 text-dark-200 text-[13.5px]">
+                    <span>⏱️</span> Rest between sets
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Step onClick={() => setExerciseRest(ei, rest - 15)}>−</Step>
+                    <span className="min-w-[42px] text-center text-[15px] font-bold">{rest}s</span>
+                    <Step onClick={() => setExerciseRest(ei, rest + 15)}>+</Step>
+                  </div>
+                </div>
+
+                {/* Add / remove exercise */}
+                <div className="px-4 pb-4 flex gap-2">
+                  <button
+                    onClick={() => addSet(ei)}
+                    className="flex-1 py-3 rounded-btn border border-dashed border-dark-500
+                               text-dark-300 text-[13px] font-semibold
+                               active:scale-95 transition-transform hover:text-brand-teal
+                               hover:border-brand-teal/40"
+                  >
+                    + Add Set
+                  </button>
+                  <button
+                    onClick={() => removeExerciseAt(ei)}
+                    className="px-4 py-3 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
+                               text-brand-red text-[13px] font-semibold
+                               active:scale-95 transition-transform"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+
+          <button
+            onClick={() => navigate('/workout/browse')}
+            className="w-full py-4 rounded-card border border-dashed border-dark-500
+                       bg-dark-800 text-dark-200 text-sm font-semibold
+                       active:scale-95 transition-transform"
+          >
+            + Add Exercise
+          </button>
+        </div>
+
+        {/* Sticky start */}
+        <div className="sticky bottom-0 pt-4 pb-1 mt-5"
+          style={{ background: 'linear-gradient(to top, #111 70%, transparent)' }}>
+          <button
+            onClick={handleStart}
+            disabled={totalSets === 0}
+            className="w-full py-[18px] rounded-card bg-brand-teal text-black
+                       text-[17px] font-extrabold active:scale-95 transition-transform
+                       disabled:opacity-40"
+            style={{ boxShadow: '0 8px 24px -6px rgba(0,212,170,0.4)' }}
+          >
+            ▶ Start Workout — {totalSets} sets
+          </button>
+        </div>
       </div>
     </div>
   )
