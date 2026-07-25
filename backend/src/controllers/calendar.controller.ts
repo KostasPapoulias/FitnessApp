@@ -1,6 +1,10 @@
 import { Response } from 'express';
-import { AuthRequest } from '../server';
-import { prisma } from '../server';
+// Import the client directly rather than via '../server'. Going through server
+// creates a cycle (server → routes → controller → server) that breaks any
+// attempt to load this module on its own. server.ts only re-exports this same
+// singleton, so the instance is identical.
+import prisma from '../lib/prisma';
+import type { AuthRequest } from '../server';
 
 // Muscle -> muscle-group mapping, mirrors the groups used on the
 // Calendar "Muscles" tab (Chest / Back / Legs / Shoulders / Arms / Core / Calves).
@@ -14,6 +18,24 @@ const MUSCLE_GROUP: Record<string, string> = {
   'Calves': 'Calves',
 }
 const GROUP_ORDER = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Calves']
+
+// Calendar day key (YYYY-MM-DD) in LOCAL time.
+// toISOString() must never be used for this: it renders the UTC date, so for a
+// user east of UTC a local midnight resolves to the previous day and a workout
+// lands on the wrong square. Session timestamps and grid cells have to be keyed
+// the same way or they never line up.
+const dayKey = (d: Date) => {
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+// Last instant of a day — for `lte` bounds that must include the whole day
+const endOfDay = (d: Date) => {
+  const e = new Date(d)
+  e.setHours(23, 59, 59, 999)
+  return e
+}
 
 // Get all workout days for a given month
 // GET /api/calendar?month=4&year=2025
@@ -54,7 +76,7 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
     }> = {}
 
     for (const session of sessions) {
-      const dateKey = session.dateTime.toISOString().split('T')[0]
+      const dateKey = dayKey(session.dateTime)
       const totalVolume = session.totalVolume ?? 0
       const avgRpe = session.avgRpe ?? 0
       const rpeWeight = totalVolume > 0 ? totalVolume : (avgRpe > 0 ? 1 : 0)
@@ -124,9 +146,17 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
 export const getCalendarDay = async (req: AuthRequest, res: Response) => {
   try {
     const { date } = req.params
-    const dayStart = new Date(date)
-    const dayEnd   = new Date(date)
-    dayEnd.setDate(dayEnd.getDate() + 1)
+    // "2026-07-25" through `new Date()` parses as UTC midnight, which is a
+    // different instant from the local day the grid keys by. Build the window
+    // from local date parts so tapping a day shows the same sessions the grid
+    // counted for it.
+    const [y, m, d] = String(date).split('-').map(Number)
+    if (!y || !m || !d) {
+      res.status(400).json({ success: false, error: 'Invalid date, expected YYYY-MM-DD' })
+      return
+    }
+    const dayStart = new Date(y, m - 1, d)
+    const dayEnd   = new Date(y, m - 1, d + 1)
 
     const sessions = await prisma.workoutSession.findMany({
       where: {
@@ -251,18 +281,25 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const end = new Date(today); end.setDate(end.getDate() + (6 - end.getDay())) // Saturday of this week
+    // Grid runs to the Saturday of this week, at midnight — the cursor below
+    // steps day by day from `start` and compares against `today`, so both must
+    // stay at midnight or today's cell would read as "future".
+    const gridEnd = new Date(today); gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()))
     const TOTAL_WEEKS = 53
-    const start = new Date(end); start.setDate(end.getDate() - TOTAL_WEEKS * 7 + 1) // Sunday, 53 weeks back
+    const start = new Date(gridEnd); start.setDate(gridEnd.getDate() - TOTAL_WEEKS * 7 + 1) // Sunday, 53 weeks back
+    // The QUERY bound has to cover the whole final day. Using gridEnd directly
+    // (Saturday 00:00) silently dropped every session logged later that day —
+    // invisible all week, then on Saturday it hid the whole of today.
+    const queryEnd = endOfDay(gridEnd)
 
     const sessions = await prisma.workoutSession.findMany({
-      where: { userId, dateTime: { gte: start, lte: end } },
+      where: { userId, dateTime: { gte: start, lte: queryEnd } },
       select: { dateTime: true, totalVolume: true }
     })
 
     const volumeByDay = new Map<string, number>()
     for (const s of sessions) {
-      const key = s.dateTime.toISOString().split('T')[0]
+      const key = dayKey(s.dateTime)
       volumeByDay.set(key, (volumeByDay.get(key) ?? 0) + (s.totalVolume ?? 0))
     }
 
@@ -290,7 +327,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
       const days: { date: string; level: number; future: boolean }[] = []
       let labelThisWeek = ''
       for (let d = 0; d < 7; d++) {
-        const key = cursor.toISOString().split('T')[0]
+        const key = dayKey(cursor)
         const future = cursor > today
         const vol = volumeByDay.get(key)
         const level = future ? 0 : (vol !== undefined ? levelFor(vol) : 0)
@@ -314,10 +351,12 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
     // Year-to-date totals (independent of the 53-week rolling window).
     const yearStart = new Date(today.getFullYear(), 0, 1)
     const yearSessions = await prisma.workoutSession.findMany({
-      where: { userId, dateTime: { gte: yearStart, lte: today } },
+      // endOfDay, not `today`: a midnight bound excluded everything logged
+      // today, so the year total was always a day behind.
+      where: { userId, dateTime: { gte: yearStart, lte: endOfDay(today) } },
       select: { dateTime: true }
     })
-    const totalThisYear = new Set(yearSessions.map(s => s.dateTime.toISOString().split('T')[0])).size
+    const totalThisYear = new Set(yearSessions.map(s => dayKey(s.dateTime))).size
     const daysElapsed = Math.floor((today.getTime() - yearStart.getTime()) / 86400000) + 1
     const consistencyPct = daysElapsed > 0 ? Math.round((totalThisYear / daysElapsed) * 100) : 0
 
