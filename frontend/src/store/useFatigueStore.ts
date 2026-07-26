@@ -1,10 +1,12 @@
 import { create } from 'zustand'
-import { MuscleFatigue } from '../types'
+import { FitnessLevel, MuscleFatigue, ReadinessStatus } from '../types'
 import { fatigueService } from '../services/fatigue.service'
 
 interface FatigueStore {
   muscles: MuscleFatigue[]
   readinessScore: number
+  readinessStatus: ReadinessStatus
+  fitnessLevel: FitnessLevel
   isLoading: boolean
   selectedMuscle: MuscleFatigue | null
 
@@ -16,6 +18,8 @@ interface FatigueStore {
 export const useFatigueStore = create<FatigueStore>((set, get) => ({
   muscles: [],
   readinessScore: 0,
+  readinessStatus: 'rest',
+  fitnessLevel: 'intermediate',
   isLoading: false,
   selectedMuscle: null,
 
@@ -26,6 +30,8 @@ export const useFatigueStore = create<FatigueStore>((set, get) => ({
       set({
         muscles: data.muscles,
         readinessScore: data.readinessScore,
+        readinessStatus: data.readinessStatus,
+        fitnessLevel: data.fitnessLevel,
         isLoading: false
       })
     } catch (err) {

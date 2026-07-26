@@ -1,63 +1,23 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
-import { getEffectiveFatigueLevel } from '../services/fatigue.service'
+import { getUserReadiness } from '../services/readiness.service'
 import { AuthRequest } from '../server'
 
 // GET /api/fatigue/current
 // Returns ALL muscles with their current fatigue state
 export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
   try {
-    // Get all muscles that exist
-    const allMuscles = await prisma.muscle.findMany()
-
-    // Get this user's current fatigue records
-    const fatigueCurrent = await prisma.muscleFatigueCurrent.findMany({
-      where: { userId: req.userId! },
-      include: { muscle: true }
-    })
-
-    const fatigueMap = new Map(
-      fatigueCurrent.map(f => [f.muscleId, f])
-    )
-
-    const now = new Date()
-
-    // For every muscle, return its fatigue state
-    // If no record exists yet 0% fatigue
-    const muscles = allMuscles.map(muscle => {
-      const record = fatigueMap.get(muscle.id)
-
-      const fatigueLevel = getEffectiveFatigueLevel(record ?? null, now)
-      const recoveryTargetAt = record?.recoveryTargetAt ?? null
-
-      const rounded = Math.round(fatigueLevel)
-
-      return {
-        muscleId: muscle.id,
-        muscleName: muscle.name,
-        fatigueLevel: rounded,
-        // SVG colors
-        status: rounded >= 70 ? 'high' :
-                rounded >= 35 ? 'moderate' : 'recovered',
-        color: rounded >= 70 ? '#EF4444' :
-               rounded >= 35 ? '#FACC15' : '#4ADE80',
-        recoveryTargetAt,
-        lastUpdated: record?.updatedAt ?? null
-      }
-    })
-
-    // calculate readiness score
-    const avgFatigue = muscles.reduce(
-      (sum, m) => sum + m.fatigueLevel, 0
-    ) / muscles.length
-
-    const readinessScore = Math.round(Math.max(0, 100 - avgFatigue))
+    const { muscles, readinessScore, status, fitnessLevel } =
+      await getUserReadiness(req.userId!)
 
     res.json({
       success: true,
       data: {
-        muscles,
-        readinessScore
+        // effectiveLevel is internal precision — not part of the API contract
+        muscles: muscles.map(({ effectiveLevel, ...m }) => m),
+        readinessScore,
+        readinessStatus: status,
+        fitnessLevel
       }
     })
 

@@ -36,9 +36,16 @@ export interface MuscleFatigue {
   recoveryTargetAt: string | null
 }
 
+export type ReadinessStatus = 'ready' | 'caution' | 'rest'
+export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
+
 export interface FatigueData {
   muscles: MuscleFatigue[]
   readinessScore: number
+  // Server-computed banding — prefer this over re-thresholding readinessScore
+  // on the client, so the cutoffs stay in one place (readiness.service.ts).
+  readinessStatus: ReadinessStatus
+  fitnessLevel: FitnessLevel
 }
 
 // Exercise

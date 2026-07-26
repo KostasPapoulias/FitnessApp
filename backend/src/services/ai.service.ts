@@ -1,19 +1,13 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
-import { getEffectiveFatigueLevel } from './fatigue.service'
+import { getUserReadiness } from './readiness.service'
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
-  // Get current fatigue
-  const fatigue = await prisma.muscleFatigueCurrent.findMany({
-    where: { userId },
-    include: { muscle: true }
-  })
-  const now = new Date()
-  const effectiveFatigue = fatigue.map(record => ({
-    ...record,
-    effectiveLevel: getEffectiveFatigueLevel(record, now)
-  }))
+  // Same readiness calculation the Home/Profile screens show, so the AI
+  // never quotes a different number than the UI.
+  const { readinessScore: readiness, muscles: effectiveFatigue, fitnessLevel } =
+    await getUserReadiness(userId)
 
   // Get latest sleep
   const sleep = await prisma.sleepLog.findFirst({
@@ -44,26 +38,21 @@ export const buildUserContext = async (userId: string): Promise<string> => {
     take: 3
   })
 
-  // Build readiness score
-  const avgFatigue = effectiveFatigue.length > 0
-    ? effectiveFatigue.reduce((sum, f) => sum + f.effectiveLevel, 0) / effectiveFatigue.length
-    : 0
-  const readiness = Math.round(Math.max(0, 100 - avgFatigue))
-
   // Format fatigue by status
   const highFatigue   = effectiveFatigue.filter(f => f.effectiveLevel >= 70)
   const modFatigue    = effectiveFatigue.filter(f => f.effectiveLevel >= 35 && f.effectiveLevel < 70)
   const recovered     = effectiveFatigue.filter(f => f.effectiveLevel < 35)
 
   const context = `
-You are SomaTrack AI — a personal fitness and recovery coach assistant.
-You have access to the user's real-time body data. Always use this data
-to give personalised, specific advice. Be encouraging but honest.
-Keep responses concise — this is a mobile app.
+## LIVE BODY DATA — measured just now
+These figures are authoritative and supersede any numbers stated earlier in
+this conversation. Readiness and fatigue change continuously, so earlier
+replies are stale. Never repeat a readiness score from an earlier message —
+quote only the value below.
 
 ## User Profile
 Name: ${profile?.name ?? 'Athlete'}
-Fitness level: ${profile?.fitnessLevel ?? 'intermediate'}
+Fitness level: ${fitnessLevel}
 Goal: ${profile?.goal ?? 'general fitness'}
 
 ## Current Body State
@@ -71,18 +60,18 @@ Overall readiness score: ${readiness}%
 
 High fatigue muscles (🔴 need rest):
 ${highFatigue.length > 0
-  ? highFatigue.map(f => `  - ${f.muscle.name}: ${Math.round(f.effectiveLevel)}% fatigued`).join('\n')
+  ? highFatigue.map(f => `  - ${f.muscleName}: ${f.fatigueLevel}% fatigued`).join('\n')
   : '  None'}
 
 Moderate fatigue muscles (🟡 train light):
 ${modFatigue.length > 0
-  ? modFatigue.map(f => `  - ${f.muscle.name}: ${Math.round(f.effectiveLevel)}% fatigued`).join('\n')
+  ? modFatigue.map(f => `  - ${f.muscleName}: ${f.fatigueLevel}% fatigued`).join('\n')
   : '  None'}
 
 Recovered muscles (🟢 ready to train):
 ${recovered.length > 0
-  ? recovered.map(f => `  - ${f.muscle.name}: ${Math.round(f.effectiveLevel)}% fatigued`).join('\n')
-  : '  All muscles need more data'}
+  ? recovered.map(f => `  - ${f.muscleName}: ${f.fatigueLevel}% fatigued`).join('\n')
+  : '  None'}
 
 ## Today's Health Data
 Sleep: ${sleep ? `${(sleep.durationMin / 60).toFixed(1)}h (score: ${sleep.sleepScore ?? 'not rated'})` : 'Not logged'}
@@ -103,6 +92,15 @@ ${recentSessions.length > 0
 
   return context
 }
+
+// Static instructions — safe to pin at the front of the conversation, since
+// nothing here goes stale.
+export const AI_PERSONA = `
+You are SomaTrack AI — a personal fitness and recovery coach assistant.
+You have access to the user's real-time body data. Always use this data
+to give personalised, specific advice. Be encouraging but honest.
+Keep responses concise — this is a mobile app.
+`.trim()
 
 // Send a message and get a response from Chatgpt
 export const sendMessage = async ({
@@ -131,13 +129,17 @@ export const sendMessage = async ({
       { apiVersion: 'v1' }
     )
 
+    // Live data goes LAST, not first. Older assistant turns assert concrete
+    // numbers ("your readiness is 58%"), and a context block pinned at the
+    // top of the thread loses to them on recency — the model kept quoting
+    // stale scores. Freshest data closest to the question wins.
     const contents = [
-      { role: 'user', parts: [{ text: systemContext }] },
+      { role: 'user', parts: [{ text: AI_PERSONA }] },
       ...history.map(item => ({
         role: item.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: item.content }]
       })),
-      { role: 'user', parts: [{ text: message }] }
+      { role: 'user', parts: [{ text: `${systemContext}\n\n---\n\n${message}` }] }
     ]
 
     const response = await model.generateContent({ contents })
