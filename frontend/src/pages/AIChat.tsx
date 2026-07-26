@@ -3,6 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { aiService } from '../services/ai.service'
 import { useFatigueStore } from '../store/useFatigueStore'
+import { useDeviceType } from '../hooks/useDeviceType'
+import { useKeyboardInset } from '../hooks/useKeyboardInset'
+import { BOTTOM_NAV_HEIGHT, PHONE_MAX_WIDTH, SIDEBAR_WIDTH } from '../constants/layout'
+import { NEW_THREAD } from '../constants/chat'
 import { Message } from '../types'
 
 export default function AIChat() {
@@ -12,18 +16,35 @@ export default function AIChat() {
   const firstMessage = location.state?.firstMessage as string | undefined
 
   const { readinessScore } = useFatigueStore()
+  const { isPhone }     = useDeviceType()
+  const keyboardInset   = useKeyboardInset()
+
+  // An unsaved chat: nothing exists server-side until the first message.
+  const isUnsaved = threadId === NEW_THREAD
 
   const [messages,   setMessages]   = useState<Message[]>([])
   const [input,      setInput]      = useState('')
   const [isLoading,  setIsLoading]  = useState(false)
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(!isUnsaved)
+  // Null until the server creates the thread on first send.
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(
+    isUnsaved ? null : threadId ?? null
+  )
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const sentFirst = useRef(false)
+  const historyLoaded = useRef(false)
 
-  // Load history for this specific thread
+  // Load history for this specific thread. Guarded by a ref because adopting
+  // the real thread id changes the route param, and re-fetching then would
+  // clobber the messages already on screen.
   useEffect(() => {
-    if (!threadId) return
+    if (historyLoaded.current) return
+    if (isUnsaved || !threadId) {
+      historyLoaded.current = true
+      return
+    }
+    historyLoaded.current = true
     aiService.getHistory(threadId)
       .then(data => {
         if (data.messages?.length > 0) {
@@ -31,7 +52,7 @@ export default function AIChat() {
         }
       })
       .finally(() => setIsLoadingHistory(false))
-  }, [threadId])
+  }, [threadId, isUnsaved])
 
   // Send the first message if navigated with one
   useEffect(() => {
@@ -41,9 +62,11 @@ export default function AIChat() {
     }
   }, [isLoadingHistory, firstMessage])
 
+  // Also re-pin to the bottom when the keyboard opens, so the latest message
+  // isn't left behind the newly-raised input bar.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading])
+  }, [messages, isLoading, keyboardInset])
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return
@@ -60,7 +83,19 @@ export default function AIChat() {
     setIsLoading(true)
 
     try {
-      const data = await aiService.sendMessage(text.trim(), threadId)
+      const data = await aiService.sendMessage(
+        text.trim(),
+        activeThreadId ?? undefined,
+        activeThreadId === null
+      )
+
+      // First message of an unsaved chat — adopt the id the server just
+      // created so follow-ups land in the same thread and a refresh works.
+      if (activeThreadId === null && data.threadId) {
+        setActiveThreadId(data.threadId)
+        navigate(`/ai/chat/${data.threadId}`, { replace: true })
+      }
+
       const aiMsg: Message = {
         id:          Date.now().toString() + '_ai',
         sender:      'assistant',
@@ -84,11 +119,35 @@ export default function AIChat() {
     readinessScore >= 70 ? '#4ADE80' :
     readinessScore >= 40 ? '#FACC15' : '#EF4444'
 
+  // The shell is a fixed, full-height flex column so the message list can own
+  // the scrolling. Previously the header/input were independently `fixed` and
+  // the list used guessed padding, which let messages slide under both.
+  //
+  // Desktop: start after the sidebar instead of spanning the whole viewport.
+  // Phone: mirror the bottom nav's centred 430px column.
+  const shellClass = isPhone
+    ? 'fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[430px]'
+    : 'fixed top-0 right-0'
+
+  // Keyboard open -> sit directly on top of it, letting the bottom nav stay
+  // pinned at 0 and be covered. Closed -> clear the nav (phone only).
+  // --bottom-nav-h is measured and published by BottomNav.
+  const shellBottom = keyboardInset > 0
+    ? `${keyboardInset}px`
+    : (isPhone ? `var(--bottom-nav-h, ${BOTTOM_NAV_HEIGHT}px)` : '0px')
+
   return (
-    <div className="min-h-853 bg-dark-900 overflow-hidden">
+    <div
+      className={`${shellClass} z-30 flex flex-col bg-dark-900`}
+      style={{
+        bottom: shellBottom,
+        left: isPhone ? undefined : SIDEBAR_WIDTH,
+        maxWidth: isPhone ? PHONE_MAX_WIDTH : undefined,
+      }}
+    >
 
       {/* Header with back button */}
-      <div className="fixed top-0 left-0 right-0 z-10 bg-dark-900
+      <div className="flex-shrink-0 bg-dark-900
               px-5 pt-4 pb-3 border-b border-dark-700
               flex items-center gap-3">
         <button
@@ -121,8 +180,8 @@ export default function AIChat() {
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="min-h-853 overflow-y-auto px-4 pt-24 pb-[80px]">
+      {/* Messages — the only scrolling region */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-4">
         {isLoadingHistory ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-dark-400 text-sm">Loading...</div>
@@ -167,9 +226,17 @@ export default function AIChat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-            <div className="fixed bottom-[60px] left-0 right-0 z-10 bg-dark-900
-              px-4 pb-8 pt-3 border-t border-dark-700">
+      {/* Input — rides at the bottom of the shell, so it rises with the keyboard */}
+      <div
+        className="flex-shrink-0 bg-dark-900 px-4 pt-3 border-t border-dark-700"
+        style={{
+          // Clear the home indicator only when the keyboard isn't already
+          // occupying that space.
+          paddingBottom: keyboardInset > 0
+            ? 12
+            : 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+        }}
+      >
         <div className="flex gap-3 items-end">
           <div className="flex-1 bg-dark-800 border border-dark-600
                           rounded-2xl px-4 py-3

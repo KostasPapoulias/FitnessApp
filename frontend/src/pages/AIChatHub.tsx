@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { aiService } from '../services/ai.service'
 import { useFatigueStore } from '../store/useFatigueStore'
+import { NEW_THREAD } from '../constants/chat'
 
 const SUGGESTED_PROMPTS = [
   { emoji: '💪', text: 'What should I train today?' },
@@ -26,7 +27,6 @@ export default function AIChatHub() {
 
   const [threads,     setThreads]     = useState<Thread[]>([])
   const [isLoading,   setIsLoading]   = useState(true)
-  const [isStarting,  setIsStarting]  = useState(false)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
 
   useEffect(() => {
@@ -35,21 +35,11 @@ export default function AIChatHub() {
       .finally(() => setIsLoading(false))
   }, [])
 
-  // Start a new chat with an optional first message
-  const startChat = async (firstMessage?: string) => {
-    setIsStarting(true)
-    try {
-      const thread = await aiService.createThread(
-        firstMessage
-          ? firstMessage.slice(0, 30) + '...'
-          : 'New Chat'
-      )
-      navigate(`/ai/chat/${thread.id}`, {
-        state: { firstMessage }
-      })
-    } finally {
-      setIsStarting(false)
-    }
+  // Open the compose screen without persisting anything. The thread is
+  // created server-side on the first message, so backing out of an unused
+  // chat leaves no trace.
+  const startChat = (firstMessage?: string) => {
+    navigate(`/ai/chat/${NEW_THREAD}`, { state: { firstMessage } })
   }
 
   const handleDelete = async (threadId: string) => {
@@ -139,7 +129,6 @@ export default function AIChatHub() {
               <button
                 key={prompt.text}
                 onClick={() => startChat(prompt.text)}
-                disabled={isStarting}
                 className="bg-dark-800 border border-dark-600 rounded-card
                            p-3 text-left active:scale-95 transition-all
                            active:border-brand-teal/50 active:bg-brand-teal/5
@@ -157,7 +146,6 @@ export default function AIChatHub() {
         {/* New chat button */}
         <button
           onClick={() => startChat()}
-          disabled={isStarting}
           className="w-full bg-brand-teal text-black font-bold py-4
                      rounded-btn flex items-center justify-center gap-2
                      active:scale-95 transition-transform mb-5
@@ -168,7 +156,7 @@ export default function AIChatHub() {
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          {isStarting ? 'Starting...' : 'New Chat'}
+          New Chat
         </button>
 
         {/* Chat history */}

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useDeviceType } from '../../hooks/useDeviceType'
@@ -7,6 +8,30 @@ export default function BottomNav() {
   const location = useLocation()
   const { activeSession, selectedExercises } = useWorkoutStore()
   const { isPhone } = useDeviceType()
+  const navRef = useRef<HTMLElement>(null)
+
+  // Publish the nav's real height so fixed overlays (chat input) can sit
+  // exactly on top of it. Measured rather than hardcoded: the raised centre
+  // button and the safe-area inset both change it per device.
+  useEffect(() => {
+    const root = document.documentElement
+    if (!isPhone) {
+      root.style.setProperty('--bottom-nav-h', '0px')
+      return
+    }
+    const el = navRef.current
+    if (!el) return
+
+    // Border box, not contentRect — the nav's own padding counts, and the
+    // raised centre button is already folded into its layout height.
+    const publish = () =>
+      root.style.setProperty('--bottom-nav-h', `${Math.round(el.getBoundingClientRect().height)}px`)
+
+    publish()
+    const observer = new ResizeObserver(publish)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [isPhone])
 
   const isActive = (path: string) => location.pathname === path
 
@@ -64,7 +89,7 @@ export default function BottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] 
+    <nav ref={navRef} className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px]
                     bg-dark-800 border-t border-dark-600 px-4 pb-2 pt-3
                     flex items-center justify-around z-50">
 

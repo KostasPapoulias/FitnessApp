@@ -1,9 +1,11 @@
 import api from './api'
 
 export const aiService = {
-  sendMessage: async (message: string, threadId?: string) => {
-    const res = await api.post('/ai/chat', { message, threadId })
-    return res.data.data
+  // `newThread` asks the server to create the conversation now, on the first
+  // real message — nothing is persisted before that.
+  sendMessage: async (message: string, threadId?: string, newThread?: boolean) => {
+    const res = await api.post('/ai/chat', { message, threadId, newThread })
+    return res.data.data as { reply: string; threadId: string }
   },
 
   getHistory: async (threadId?: string) => {

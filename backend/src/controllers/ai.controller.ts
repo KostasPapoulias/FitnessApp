@@ -10,14 +10,16 @@ import prisma from '../lib/prisma'
 // POST /api/ai/chat
 export const chat = async (req: AuthRequest, res: Response) => {
   try {
-    const { message, threadId: existingThreadId } = req.body
+    const { message, threadId: existingThreadId, newThread } = req.body
 
     if (!message?.trim()) {
       res.status(400).json({ success: false, error: 'Message is required' })
       return
     }
 
-    // provided threadId or get/create default
+    // Thread resolution. `newThread` is how the client starts a fresh
+    // conversation — the row is created here, on the first real message,
+    // so abandoning the compose screen never leaves an empty thread behind.
     let thread
     if (existingThreadId) {
       thread = await prisma.chatThread.findFirst({
@@ -27,6 +29,8 @@ export const chat = async (req: AuthRequest, res: Response) => {
         res.status(404).json({ success: false, error: 'Thread not found' })
         return
       }
+    } else if (newThread) {
+      thread = await prisma.chatThread.create({ data: { userId: req.userId! } })
     } else {
       thread = await getOrCreateThread(req.userId!)
     }
@@ -53,7 +57,9 @@ export const chat = async (req: AuthRequest, res: Response) => {
 export const getThreads = async (req: AuthRequest, res: Response) => {
   try {
     const threads = await prisma.chatThread.findMany({
-      where: { userId: req.userId! },
+      // Only conversations that actually contain something. Also hides the
+      // empty rows left behind by the old eager-create flow.
+      where: { userId: req.userId!, messages: { some: {} } },
       include: {
         messages: {
           orderBy: { dateTime: 'desc' },
@@ -105,7 +111,25 @@ export const deleteThread = async (req: AuthRequest, res: Response) => {
 // Returns full chat history for the user
 export const getHistory = async (req: AuthRequest, res: Response) => {
   try {
-    const thread = await getOrCreateThread(req.userId!)
+    const { threadId } = req.query
+
+    // Reading history must never create a thread — that was a second source
+    // of empty rows. It also has to honour the requested threadId; it used
+    // to always return the newest thread, so opening an older chat showed
+    // the wrong conversation.
+    const thread = threadId
+      ? await prisma.chatThread.findFirst({
+          where: { id: String(threadId), userId: req.userId! }
+        })
+      : await prisma.chatThread.findFirst({
+          where: { userId: req.userId! },
+          orderBy: { createdAt: 'desc' }
+        })
+
+    if (!thread) {
+      res.json({ success: true, data: { threadId: null, messages: [] } })
+      return
+    }
 
     const messages = await prisma.aIChat.findMany({
       where: { threadId: thread.id },

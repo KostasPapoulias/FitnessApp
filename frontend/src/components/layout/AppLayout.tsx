@@ -64,8 +64,10 @@ export default function AppLayout() {
   }
   return (
     <div className={`min-h-dvh bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
+      {/* The sidebar renders on !isPhone, so the offset keys off the same flag —
+          `lg:pl-72` left a 768–1024px gap where the sidebar covered content. */}
       <main
-        className={`flex flex-col min-h-dvh overflow-y-auto ${isPhone ? 'pb-20' : 'pb-8 lg:pl-72'}`}
+        className={`flex flex-col min-h-dvh overflow-y-auto ${isPhone ? 'pb-20' : 'pb-8 pl-72'}`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
