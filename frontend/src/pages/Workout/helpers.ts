@@ -49,9 +49,11 @@ export function exerciseEmoji(ex?: Pick<Exercise, 'modality'>): string {
   }
 }
 
-// mm:ss
+// mm:ss — rounds first, so derived values (e.g. pace = 1000 / speed) don't
+// leak their fractional seconds into the string.
 export function fmtTime(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.max(0, seconds) % 60
+  const total = Math.max(0, Math.round(seconds))
+  const m = Math.floor(total / 60)
+  const s = total % 60
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }

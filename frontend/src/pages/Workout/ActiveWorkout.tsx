@@ -382,26 +382,26 @@ export default function ActiveWorkout() {
         </div>
 
         {/* Weight + Reps */}
-        <div className="p-4 grid grid-cols-2 gap-3">
+        <div className="p-3.5 grid grid-cols-2 gap-2.5">
           {/* Weight */}
-          <div className="bg-dark-800 border border-dark-600 rounded-btn px-2.5 py-3.5">
+          <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3.5 min-w-0">
             <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">WEIGHT (KG)</p>
-            <div className="flex items-center justify-center gap-2.5">
+            <div className="flex items-center justify-center gap-1.5">
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.max(0, Math.round((cur.weight - 2.5) * 10) / 10) })}
-                className="w-[46px] h-[46px] rounded-btn border border-dark-600 bg-dark-700
-                           text-2xl font-bold active:scale-90 transition-transform">−</button>
-              <span className="min-w-[52px] text-center text-[26px] font-extrabold">{cur.weight}</span>
+                className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
+                           bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
+              <span className="flex-1 min-w-0 text-center text-[22px] sm:text-[26px] font-extrabold tabular-nums">{cur.weight}</span>
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.round((cur.weight + 2.5) * 10) / 10 })}
-                className="w-[46px] h-[46px] rounded-btn border border-dark-600 bg-dark-700
-                           text-2xl font-bold active:scale-90 transition-transform">+</button>
+                className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
+                           bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">+</button>
             </div>
-            <div className="flex gap-1.5 justify-center mt-3">
+            <div className="flex gap-1 mt-3">
               {weightChips.map(w => (
                 <button key={w}
                   onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: w })}
-                  className="min-w-[44px] px-2.5 py-1.5 rounded-badge text-xs font-bold border"
+                  className="flex-1 basis-0 min-w-0 px-0.5 py-1.5 rounded-badge text-[11px] sm:text-xs font-bold border tabular-nums"
                   style={{
                     borderColor: w === cur.weight ? '#00D4AA' : '#2A2A2A',
                     background: w === cur.weight ? '#00D4AA' : '#1E1E1E',
@@ -411,24 +411,24 @@ export default function ActiveWorkout() {
             </div>
           </div>
           {/* Reps */}
-          <div className="bg-dark-800 border border-dark-600 rounded-btn px-2.5 py-3.5">
+          <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3.5 min-w-0">
             <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">REPS</p>
-            <div className="flex items-center justify-center gap-2.5">
+            <div className="flex items-center justify-center gap-1.5">
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: Math.max(1, cur.reps - 1) })}
-                className="w-[46px] h-[46px] rounded-btn border border-dark-600 bg-dark-700
-                           text-2xl font-bold active:scale-90 transition-transform">−</button>
-              <span className="min-w-[52px] text-center text-[26px] font-extrabold">{cur.reps}</span>
+                className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
+                           bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
+              <span className="flex-1 min-w-0 text-center text-[22px] sm:text-[26px] font-extrabold tabular-nums">{cur.reps}</span>
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: cur.reps + 1 })}
-                className="w-[46px] h-[46px] rounded-btn border border-dark-600 bg-dark-700
-                           text-2xl font-bold active:scale-90 transition-transform">+</button>
+                className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
+                           bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">+</button>
             </div>
-            <div className="flex gap-1.5 justify-center mt-3">
+            <div className="flex gap-1 mt-3">
               {repChips.map(r => (
                 <button key={r}
                   onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: r })}
-                  className="min-w-[44px] px-2.5 py-1.5 rounded-badge text-xs font-bold border"
+                  className="flex-1 basis-0 min-w-0 px-0.5 py-1.5 rounded-badge text-[11px] sm:text-xs font-bold border tabular-nums"
                   style={{
                     borderColor: r === cur.reps ? '#00D4AA' : '#2A2A2A',
                     background: r === cur.reps ? '#00D4AA' : '#1E1E1E',
