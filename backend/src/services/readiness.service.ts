@@ -36,21 +36,52 @@ export const bandReadiness = (score: number, model: ReadinessModel): ReadinessSt
   score >= model.bands.ready ? 'ready' :
   score >= model.bands.caution ? 'caution' : 'rest'
 
+// How many of the worst-hit muscles define the "peak" term below.
+const PEAK_MUSCLE_COUNT = 3
+
+// Split between local muscle damage and whole-body cost. Systemic fatigue is
+// what a hard run or metcon actually loads, so it has to carry real weight.
+const MUSCLE_SHARE = 0.7
+const SYSTEMIC_SHARE = 0.3
+
 /**
- * Pure scoring function.
+ * How loaded the athlete's muscles are, as one number.
  *
- * `fatigueLevels` must cover the user's ENTIRE muscle set — untrained muscles
- * count as 0. Averaging over only the muscles with a fatigue row makes the
- * score worse the less you have trained, which is backwards.
+ * A flat mean across all 15 muscles buries every session: a leg day that pins
+ * quads, hams and glutes at 80 averaged out to 16, and the app called it
+ * "ready". Half the weight now goes to the worst-hit muscles, so training three
+ * muscles hard registers as training hard.
+ *
+ * `fatigueLevels` must still cover the ENTIRE muscle set — untrained muscles
+ * count as 0, or the score gets worse the less you have trained.
+ */
+export const aggregateMuscleFatigue = (fatigueLevels: number[]): number => {
+  if (fatigueLevels.length === 0) return 0
+
+  const mean = fatigueLevels.reduce((sum, f) => sum + f, 0) / fatigueLevels.length
+
+  const worst = [...fatigueLevels].sort((a, b) => b - a).slice(0, PEAK_MUSCLE_COUNT)
+  const peak = worst.reduce((sum, f) => sum + f, 0) / worst.length
+
+  return mean * 0.5 + peak * 0.5
+}
+
+/**
+ * Pure scoring function. Blends local muscle load with whole-body fatigue —
+ * without the systemic term, an hour of running left every muscle reading
+ * "fresh" and readiness essentially untouched.
  */
 export const computeReadinessScore = (
   fatigueLevels: number[],
-  model: ReadinessModel = READINESS_MODELS[DEFAULT_FITNESS_LEVEL]
+  model: ReadinessModel = READINESS_MODELS[DEFAULT_FITNESS_LEVEL],
+  systemicFatigue = 0
 ): number => {
-  if (fatigueLevels.length === 0) return 100
+  if (fatigueLevels.length === 0 && systemicFatigue <= 0) return 100
 
-  const avgFatigue = fatigueLevels.reduce((sum, f) => sum + f, 0) / fatigueLevels.length
-  const score = 100 - avgFatigue * model.fatiguePenalty
+  const load =
+    aggregateMuscleFatigue(fatigueLevels) * MUSCLE_SHARE +
+    systemicFatigue * SYSTEMIC_SHARE
+  const score = 100 - load * model.fatiguePenalty
 
   // Round once, at the end — rounding per-muscle first skews the average.
   return Math.round(Math.min(100, Math.max(0, score)))
@@ -72,6 +103,9 @@ export interface UserReadiness {
   status: ReadinessStatus
   fitnessLevel: FitnessLevel
   muscles: MuscleReadiness[]
+  /** Whole-body fatigue, decayed to now. Cardio and metcons load this. */
+  systemicFatigue: number
+  systemicRecoveryTargetAt: Date | null
 }
 
 /**
@@ -82,10 +116,11 @@ export const getUserReadiness = async (
   userId: string,
   now: Date = new Date()
 ): Promise<UserReadiness> => {
-  const [allMuscles, fatigueCurrent, profile] = await Promise.all([
+  const [allMuscles, fatigueCurrent, profile, systemic] = await Promise.all([
     prisma.muscle.findMany(),
     prisma.muscleFatigueCurrent.findMany({ where: { userId } }),
     prisma.userProfile.findUnique({ where: { userId } }),
+    prisma.systemicFatigue.findUnique({ where: { userId } }),
   ])
 
   const fatigueMap = new Map(fatigueCurrent.map(f => [f.muscleId, f]))
@@ -110,14 +145,29 @@ export const getUserReadiness = async (
     }
   })
 
+  const systemicFatigue = getEffectiveFatigueLevel(
+    systemic
+      ? {
+          fatigueLevel: systemic.level,
+          updatedAt: systemic.updatedAt,
+          recoveryTargetAt: systemic.recoveryTargetAt,
+        }
+      : null,
+    now
+  )
+
   const fitnessLevel = normalizeFitnessLevel(profile?.fitnessLevel)
   const model = READINESS_MODELS[fitnessLevel]
-  const readinessScore = computeReadinessScore(muscles.map(m => m.effectiveLevel), model)
+  const readinessScore = computeReadinessScore(
+    muscles.map(m => m.effectiveLevel), model, systemicFatigue
+  )
 
   return {
     readinessScore,
     status: bandReadiness(readinessScore, model),
     fitnessLevel,
     muscles,
+    systemicFatigue: Math.round(systemicFatigue),
+    systemicRecoveryTargetAt: systemic?.recoveryTargetAt ?? null,
   }
 }

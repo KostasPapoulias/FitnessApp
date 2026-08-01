@@ -1,14 +1,27 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
-import { getEffectiveFatigueLevel } from '../services/fatigue.service'
+import { getEffectiveFatigueLevel, recoveryTargetFor } from '../services/fatigue.service'
+import {
+  FATIGUE_PER_HSE,
+  HOLD_SECONDS_PER_REP,
+  RECOVERY_RATE_BY_LEVEL,
+  SYSTEMIC_HALF_LIFE_HOURS,
+  accumulate,
+  cardioHse,
+  estimateE1rm,
+  mobilityHse,
+  resistanceHse,
+  systemicFatigueDelta,
+  systemicLoad,
+  wodHse,
+} from '../services/fatigue-model.service'
+import { normalizeFitnessLevel } from '../services/readiness.service'
 
 const SET_TYPES = ['STRENGTH', 'CALISTHENICS', 'CARDIO', 'WOD', 'MOBILITY'] as const
 
 // Fallback bodyweight (kg) when the user has no profile weight recorded
 const DEFAULT_BODY_WEIGHT = 70
-// Seconds of isometric hold treated as equivalent to one rep
-const HOLD_SECONDS_PER_REP = 3
 
 //   START SESSION 
 // POST /api/workout/sessions
@@ -81,6 +94,7 @@ export const logSet = async (req: AuthRequest, res: Response) => {
       reps, weight,          // STRENGTH
       addedWeight,           // CALISTHENICS
       distance, time,        // CARDIO / WOD
+      rounds,                // WOD (reps carries reps-per-round)
       duration               // MOBILITY
     } = req.body
 
@@ -159,8 +173,10 @@ export const logSet = async (req: AuthRequest, res: Response) => {
           })
           break
         case 'WOD':
+          // reps-per-round and rounds completed are the metcon's score; without
+          // them the elapsed clock is all the fatigue model has to go on.
           await tx.setWOD.create({
-            data: { setId: set.id, distance, time }
+            data: { setId: set.id, distance, time, reps: reps ?? null, rounds: rounds ?? null }
           })
           break
         case 'MOBILITY':
@@ -250,6 +266,7 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
           totalVolume: Math.round(finished?.totalVolume ?? 0),
           avgRpe: Math.round((finished?.avgRpe ?? 0) * 10) / 10,
           duration: finished?.duration ?? session.duration,
+          systemicLoad: Math.round(finished?.systemicLoad ?? 0),
           musclesAffected: priorLogs.map(l => ({
             muscleId: l.muscleId,
             muscleName: l.muscle.name,
@@ -262,16 +279,26 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Bodyweight drives calisthenics load — fall back only if unrecorded
+    // Bodyweight drives calisthenics load, fitness level drives recovery speed
     const profile = await prisma.userProfile.findUnique({
       where: { userId: req.userId! }
     })
     const bodyWeight = profile?.weight ?? DEFAULT_BODY_WEIGHT
+    const recoveryRate =
+      RECOVERY_RATE_BY_LEVEL[normalizeFitnessLevel(profile?.fitnessLevel)] ?? 1
+
+    // Load relative to the athlete's own strength is what makes a set costly,
+    // so pull their best known 1RM for everything in this session up front.
+    const exerciseIds = [...new Set(session.workoutExercises.map(we => we.exerciseId))]
+    const estimates = await prisma.exerciseStrengthEstimate.findMany({
+      where: { userId: req.userId!, exerciseId: { in: exerciseIds } }
+    })
+    const e1rmByExercise = new Map(estimates.map(e => [e.exerciseId, e.e1rm]))
 
     // Calculate session totals
     // totalVolume is mechanical load in KG (strength + calisthenics only).
     // Cardio distance and mobility seconds are different units and are
-    // deliberately excluded — they still drive fatigue via setIntensity.
+    // deliberately excluded — whole-body cost is carried by systemicLoad.
     let totalVolume = 0
     let totalRpe = 0
     let rpeCount = 0
@@ -281,92 +308,185 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
     const muscleDeltas = new Map<string, {
       delta: number
       muscleName: string
+      halfLifeHours: number
     }>()
+
+    // How many sets of each modality — weights the session's systemic load
+    const setTypeCounts = new Map<string, number>()
+    // Best e1RM seen this session, to fold back into the estimate afterwards
+    const newE1rm = new Map<string, number>()
+
+    type MuscleLink = (typeof session.workoutExercises)[number]['exercise']['muscleLinks']
+    // A metcon is one effort spread over several movements, so it cannot be
+    // scored set by set — collected here and split after the main loop.
+    const wodEntries: {
+      links: MuscleLink
+      damage: number
+      repsPerRound: number
+      seconds: number
+      rounds: number
+      rpe: number | null
+    }[] = []
+
+    // `damageFactor` is the movement's mechanical cost per unit of work, kept
+    // separate from impactFactor (which only says which muscles are recruited).
+    // Without it, cycling scored higher on quads than running of the same
+    // length, because cycling happens to carry a higher impactFactor.
+    const addMuscleDelta = (links: MuscleLink, hse: number, damageFactor: number) => {
+      if (hse <= 0 || damageFactor <= 0) return
+      for (const muscleLink of links) {
+        const fatigueDelta = hse * muscleLink.impactFactor * damageFactor * FATIGUE_PER_HSE
+        const existing = muscleDeltas.get(muscleLink.muscleId)
+        if (existing) {
+          existing.delta += fatigueDelta
+        } else {
+          muscleDeltas.set(muscleLink.muscleId, {
+            delta: fatigueDelta,
+            muscleName: muscleLink.muscle.name,
+            halfLifeHours: muscleLink.muscle.recoveryHalfLifeHours
+          })
+        }
+      }
+    }
 
     for (const workoutExercise of session.workoutExercises) {
       const exercise = workoutExercise.exercise
       const muscleLinks = exercise.muscleLinks
+      const knownE1rm = e1rmByExercise.get(exercise.id) ?? 0
+      const damage = exercise.damageFactor
 
       for (const set of workoutExercise.sets) {
-        const rpe = set.rpe ?? 7 // default RPE if not set
-        const rpeMultiplier = rpe / 10 // RPE 10 = 1.0, RPE 5 = 0.5
-
-        // Calculate volume based on set type
-        let setVolume = 0
-        let setIntensity = 0
-
-        if (set.strength) {
-          setVolume = set.strength.reps * set.strength.weight
-          // Intensity for fatigue = reps × weight × rpe multiplier
-          setIntensity = set.strength.reps * set.strength.weight * rpeMultiplier
-        } else if (set.calisthenics) {
-          // Load is the user's own bodyweight plus any added/assisted weight
-          const load = bodyWeight + set.calisthenics.addedWeight
-          // Isometric holds carry no reps — convert seconds under tension to a
-          // rep equivalent so a 45s plank isn't scored as 45 reps.
-          const repEquivalent = set.calisthenics.reps > 0
-            ? set.calisthenics.reps
-            : (set.calisthenics.time ?? 0) / HOLD_SECONDS_PER_REP
-          setVolume = repEquivalent * load
-          setIntensity = repEquivalent * rpeMultiplier * 10
-        } else if (set.cardio) {
-          // distance/time are not kilograms — fatigue only, no volume
-          setIntensity = (set.cardio.time ?? 0) * rpeMultiplier
-        } else if (set.wod) {
-          setIntensity = (set.wod.time ?? 0) * rpeMultiplier
-        } else if (set.mobility) {
-          setIntensity = (set.mobility.time ?? 0) * rpeMultiplier * 0.1
-        }
-
-        totalVolume += setVolume
+        setTypeCounts.set(set.setType, (setTypeCounts.get(set.setType) ?? 0) + 1)
 
         if (set.rpe) {
           totalRpe += set.rpe
           rpeCount++
         }
 
-        //  Calculate fatigue delta per muscle 
-        // Formula: intensity × impact_factor × normalisation_constant
-        for (const muscleLink of muscleLinks) {
-          const fatigueDelta = setIntensity * muscleLink.impactFactor * 0.1
+        if (set.strength) {
+          const { reps, weight } = set.strength
+          totalVolume += reps * weight
+          addMuscleDelta(muscleLinks, resistanceHse({
+            reps, weight, rpe: set.rpe, e1rm: knownE1rm
+          }), damage)
+          const estimate = estimateE1rm(weight, reps, set.rpe)
+          newE1rm.set(exercise.id, Math.max(newE1rm.get(exercise.id) ?? 0, estimate))
 
-          const existing = muscleDeltas.get(muscleLink.muscleId)
-          if (existing) {
-            existing.delta += fatigueDelta
-          } else {
-            muscleDeltas.set(muscleLink.muscleId, {
-              delta: fatigueDelta,
-              muscleName: muscleLink.muscle.name
-            })
-          }
+        } else if (set.calisthenics) {
+          // Load is the user's own bodyweight plus any added/assisted weight.
+          // Feeding it through the same curve as barbell work is what finally
+          // makes a hard set of push-ups cost the same as a hard bench set.
+          const load = bodyWeight + set.calisthenics.addedWeight
+          const holdSeconds = set.calisthenics.time
+          const repEquivalent = set.calisthenics.reps > 0
+            ? set.calisthenics.reps
+            : (holdSeconds ?? 0) / HOLD_SECONDS_PER_REP
+          totalVolume += repEquivalent * load
+          addMuscleDelta(muscleLinks, resistanceHse({
+            reps: set.calisthenics.reps, weight: load, rpe: set.rpe,
+            holdSeconds, e1rm: knownE1rm
+          }), damage)
+          const estimate = estimateE1rm(load, repEquivalent, set.rpe)
+          newE1rm.set(exercise.id, Math.max(newE1rm.get(exercise.id) ?? 0, estimate))
+
+        } else if (set.cardio) {
+          // distance/time are not kilograms — no volume, but a real load.
+          // Distance drives the local cost where the activity has a reference
+          // speed, so ground actually covered counts rather than time on foot.
+          addMuscleDelta(muscleLinks, cardioHse(
+            set.cardio.time ?? 0,
+            set.rpe,
+            set.cardio.distance,
+            exercise.referenceSpeedKmh
+          ), damage)
+
+        } else if (set.wod) {
+          wodEntries.push({
+            links: muscleLinks,
+            damage,
+            repsPerRound: set.wod.reps ?? 0,
+            seconds: set.wod.time ?? 0,
+            rounds: set.wod.rounds ?? 0,
+            rpe: set.rpe,
+          })
+
+        } else if (set.mobility) {
+          addMuscleDelta(muscleLinks, mobilityHse(), damage)
         }
+      }
+    }
+
+    //  Score the metcon as a whole, then split it across its movements
+    // Every movement's set carries the same elapsed clock, so scoring them
+    // individually would multiply the workout by the number of movements.
+    if (wodEntries.length > 0) {
+      const seconds = Math.max(...wodEntries.map(w => w.seconds))
+      const rounds = Math.max(...wodEntries.map(w => w.rounds))
+      const rated = wodEntries.filter(w => w.rpe != null)
+      const rpe = rated.length > 0
+        ? rated.reduce((sum, w) => sum + (w.rpe ?? 0), 0) / rated.length
+        : null
+      const totalReps = wodEntries.reduce((sum, w) => sum + w.repsPerRound * rounds, 0)
+      const totalHse = wodHse(seconds, rpe, totalReps)
+
+      // Share out by rep contribution; fall back to an even split when the
+      // movements were logged without rep counts.
+      const repShareBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound, 0)
+      for (const entry of wodEntries) {
+        const share = repShareBase > 0
+          ? entry.repsPerRound / repShareBase
+          : 1 / wodEntries.length
+        addMuscleDelta(entry.links, totalHse * share, entry.damage)
       }
     }
 
     const avgRpe = rpeCount > 0 ? totalRpe / rpeCount : 0
 
+    // Whole-body cost of the session. A long run leaves every individual muscle
+    // reading fine, which is exactly why readiness never used to move for it.
+    const sessionLoad = systemicLoad(duration ?? 0, avgRpe, setTypeCounts)
+
     // Read current fatigue for every affected muscle up front, in ONE query.
     // Doing these reads inside the transaction cost 3 sequential round-trips
     // per muscle, which blew Prisma's 5s interactive-transaction timeout
     // against a remote database and failed the whole finish with a 500.
-    const existingFatigue = await prisma.muscleFatigueCurrent.findMany({
-      where: { userId: req.userId!, muscleId: { in: [...muscleDeltas.keys()] } }
-    })
+    const [existingFatigue, existingSystemic] = await Promise.all([
+      prisma.muscleFatigueCurrent.findMany({
+        where: { userId: req.userId!, muscleId: { in: [...muscleDeltas.keys()] } }
+      }),
+      prisma.systemicFatigue.findUnique({ where: { userId: req.userId! } }),
+    ])
     const fatigueByMuscle = new Map(existingFatigue.map(f => [f.muscleId, f]))
 
     // Compute every new level in memory before opening the transaction
-    const now = Date.now()
-    const fatigueUpdates = [...muscleDeltas].map(([muscleId, { delta }]) => {
+    const now = new Date()
+    const fatigueUpdates = [...muscleDeltas].map(([muscleId, { delta, halfLifeHours }]) => {
       // Decay the stored level to *now* before adding today's work. Using the
       // raw stored value would ignore all recovery since the last session, so
       // fatigue would only ever ratchet upward and pin at 100.
-      const currentLevel = getEffectiveFatigueLevel(fatigueByMuscle.get(muscleId) ?? null)
-      // Fatigue level is capped at 100
-      const newLevel = Math.min(100, currentLevel + delta)
-      // Recovery time = default 48 hours at 100% fatigue
-      const recoveryTargetAt = new Date(now + newLevel * 0.48 * 60 * 60 * 1000)
+      const currentLevel = getEffectiveFatigueLevel(fatigueByMuscle.get(muscleId) ?? null, now)
+      // Saturating, so a session far past the limit still outranks a merely
+      // hard one instead of both flattening to exactly 100.
+      const newLevel = accumulate(currentLevel, delta)
+      const recoveryTargetAt = recoveryTargetFor(newLevel, halfLifeHours * recoveryRate, now)
       return { muscleId, delta, newLevel, recoveryTargetAt }
     })
+
+    // Same curve, one row, whole body
+    const systemicBefore = getEffectiveFatigueLevel(
+      existingSystemic
+        ? {
+            fatigueLevel: existingSystemic.level,
+            updatedAt: existingSystemic.updatedAt,
+            recoveryTargetAt: existingSystemic.recoveryTargetAt,
+          }
+        : null,
+      now
+    )
+    const systemicAfter = accumulate(systemicBefore, systemicFatigueDelta(sessionLoad))
+    const systemicRecoveryAt = recoveryTargetFor(
+      systemicAfter, SYSTEMIC_HALF_LIFE_HOURS * recoveryRate, now
+    )
 
     //  Update database in one transaction
     await prisma.$transaction(async (tx) => {
@@ -376,7 +496,7 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
       // or a late-night workout gets filed under the following day.
       await tx.workoutSession.update({
         where: { id: sessionId },
-        data: { totalVolume, avgRpe }
+        data: { totalVolume, avgRpe, systemicLoad: sessionLoad }
       })
 
       //  Update fatigue for each muscle involved
@@ -392,6 +512,29 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
             fatigueLevel: newLevel,
             recoveryTargetAt
           }
+        })
+      }
+
+      //  Whole-body fatigue — the channel cardio and metcons actually load
+      if (systemicAfter > 0) {
+        await tx.systemicFatigue.upsert({
+          where: { userId: req.userId! },
+          update: { level: systemicAfter, recoveryTargetAt: systemicRecoveryAt },
+          create: {
+            userId: req.userId!,
+            level: systemicAfter,
+            recoveryTargetAt: systemicRecoveryAt
+          }
+        })
+      }
+
+      //  Roll forward the strength estimates this session improved on
+      for (const [exerciseId, e1rm] of newE1rm) {
+        if (e1rm <= (e1rmByExercise.get(exerciseId) ?? 0)) continue
+        await tx.exerciseStrengthEstimate.upsert({
+          where: { userId_exerciseId: { userId: req.userId!, exerciseId } },
+          update: { e1rm },
+          create: { userId: req.userId!, exerciseId, e1rm }
         })
       }
 
@@ -426,6 +569,9 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
         totalVolume: Math.round(totalVolume),
         avgRpe: Math.round(avgRpe * 10) / 10,
         duration,
+        // Whole-body training load, and where it left the athlete overall
+        systemicLoad: Math.round(sessionLoad),
+        systemicFatigue: Math.round(systemicAfter),
         musclesAffected: Array.from(muscleDeltas.entries()).map(
           ([muscleId, { delta, muscleName }]) => ({
             muscleId,
