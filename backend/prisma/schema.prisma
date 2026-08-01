@@ -27,6 +27,8 @@ model User {
   notifications         Notification[]
   customExercises       Exercise[]              @relation("CustomExercises")
   pushSubscriptions     PushSubscription[]
+  systemicFatigue       SystemicFatigue?
+  strengthEstimates     ExerciseStrengthEstimate[]
 }
 
 model PushSubscription {
@@ -86,6 +88,9 @@ enum BiometricType {
 model Muscle {
   id               String                  @id @default(uuid())
   name             String                  @unique
+  // Hours for this muscle's fatigue to halve. Small muscles clear far faster
+  // than large ones — calves are usable the next day, lower back is not.
+  recoveryHalfLifeHours Float              @default(15)
   musclePaths      MusclePath[]
   exerciseLinks    MuscleExercise[]
   fatigueLogs      MuscleFatigueLog[]
@@ -119,6 +124,16 @@ model Exercise {
   modalityId       String
   modality         Modality             @relation(fields: [modalityId], references: [id])
   description      String?              @db.Text
+  // Mechanical damage per unit of work, relative to a normal barbell lift.
+  // Eccentric, weight-bearing and landing-heavy movements tear muscle far more
+  // than concentric ones: running ≫ cycling, RDLs ≫ leg press. impactFactor
+  // says WHICH muscles a movement uses; this says how hard it is on them.
+  damageFactor     Float                @default(1.0)
+  // Typical speed for a distance-based activity, used to convert distance
+  // covered into comparable work across modalities (15 km cycled is not 15 km
+  // run). Null when distance is meaningless for the movement — jump rope,
+  // or anything logged on a clock alone — which falls back to duration.
+  referenceSpeedKmh Float?
   createdByUserId  String?
   createdByUser    User?                @relation("CustomExercises", fields: [createdByUserId], references: [id])
   muscleLinks      MuscleExercise[]
@@ -126,6 +141,7 @@ model Exercise {
   equipmentLinks   EquipmentExercise[]
   media            Media[]
   workoutExercises WorkoutExercise[]
+  strengthEstimates ExerciseStrengthEstimate[]
   @@unique([name])
 }
 
@@ -182,6 +198,10 @@ model WorkoutSession {
   duration         Int?
   avgRpe           Float?
   totalVolume      Float?
+  // Session training load in arbitrary units (Foster's sRPE: minutes × RPE,
+  // weighted by how cardiovascularly costly the modality mix is). This is the
+  // whole-body cost of the session — totalVolume only covers mechanical kg.
+  systemicLoad     Float?
   weatherCondition String?
   notes            String?
   workoutExercises WorkoutExercise[]
@@ -261,6 +281,11 @@ model SetWOD {
   set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   distance Float?
   time     Int?
+  // Reps of THIS movement per round, and rounds completed by the athlete.
+  // Both were discarded before, so a 3-round and a 15-round metcon of the same
+  // duration scored identically.
+  reps     Int?
+  rounds   Float?
 }
 
 model SetMobility {
@@ -279,6 +304,30 @@ model MuscleFatigueCurrent {
   recoveryTargetAt DateTime?
 
   @@id([userId, muscleId])
+}
+
+// Whole-body fatigue, distinct from any single muscle. A long run leaves every
+// muscle rating fine while the athlete is wrecked; readiness reads this too.
+model SystemicFatigue {
+  userId           String    @id
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level            Float     @default(0)
+  updatedAt        DateTime  @updatedAt
+  recoveryTargetAt DateTime?
+}
+
+// Rolling best estimated 1RM per user + exercise. Fatigue scoring needs load
+// RELATIVE to what the athlete can lift — 100 kg is a warm-up for one person
+// and a limit single for another.
+model ExerciseStrengthEstimate {
+  userId     String
+  exerciseId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+  e1rm       Float
+  updatedAt  DateTime @updatedAt
+
+  @@id([userId, exerciseId])
 }
 
 model MuscleFatigueLog {
