@@ -5,6 +5,11 @@ import { useFatigueStore } from '../store/useFatigueStore'
 import { profileService } from '../services/profile.service'
 import { useNotifications } from '../hooks/useNotifcations'
 import { FormState, LoadTrend, TrainingLoad } from '../types'
+import {
+  NotificationPreferences,
+  deviceTimezone,
+  notificationService,
+} from '../services/notification.service'
 
 //   Reusable row components 
 function StatCard({ value, label, color = 'text-white' }: {
@@ -390,6 +395,8 @@ export default function Profile() {
   const [pushEnabled, setPushEnabled]       = useState(false)
   const [pushBusy, setPushBusy]             = useState(false)
   const [testBusy, setTestBusy]             = useState(false)
+  const [coachBusy, setCoachBusy]           = useState(false)
+  const [prefs, setPrefs]                   = useState<NotificationPreferences | null>(null)
 
   useEffect(() => {
     profileService.getProfile()
@@ -402,6 +409,7 @@ export default function Profile() {
 
   useEffect(() => {
     isPushSubscribed().then(setPushEnabled)
+    notificationService.getPreferences().then(setPrefs).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -462,6 +470,9 @@ export default function Profile() {
     }
   }
 
+  // The master switch. Turning it on subscribes the device AND opts into the
+  // essential tier — those are the baseline notifications, and a subscription
+  // with nothing enabled would be a toggle that visibly does nothing.
   const handleTogglePush = async (next: boolean) => {
     setPushBusy(true)
     try {
@@ -471,15 +482,38 @@ export default function Profile() {
           alert('Could not enable push notifications. On iPhone, make sure you opened this from the home screen icon (not Safari), and use iOS 16.4+.')
           return
         }
+        // The device's zone travels with the opt-in: nothing timed can be
+        // scheduled until the server knows what "9am" means for this user.
+        setPrefs(await notificationService.updatePreferences({
+          pushEnabled: true,
+          essentialEnabled: true,
+          timezone: deviceTimezone(),
+        }))
         setPushEnabled(true)
       } else {
         await unsubscribeFromPush()
+        setPrefs(await notificationService.updatePreferences({
+          pushEnabled: false,
+          coachEnabled: false,
+        }))
         setPushEnabled(false)
       }
     } catch (err: any) {
       alert(`Push ${next ? 'subscription' : 'unsubscription'} failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`)
     } finally {
       setPushBusy(false)
+    }
+  }
+
+  // AI coaching nudges — a separate, explicit opt-in on top of push
+  const handleToggleCoach = async (next: boolean) => {
+    setCoachBusy(true)
+    try {
+      setPrefs(await notificationService.updatePreferences({ coachEnabled: next }))
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Could not update coaching notifications.')
+    } finally {
+      setCoachBusy(false)
     }
   }
 
@@ -711,6 +745,28 @@ export default function Profile() {
                 : 'Off — add to Home Screen first on iPhone'}
             right={
               <Toggle value={pushEnabled} onChange={handleTogglePush} />
+            }
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          {/* The AI tier, opted into separately. It suspends itself when
+              ignored; the essential ones above keep running regardless. */}
+          <SettingsRow
+            icon="🤖"
+            label="AI Coaching Nudges"
+            sublabel={
+              !pushEnabled ? 'Turn on Push Notifications first' :
+              coachBusy ? 'Updating...' :
+              prefs?.coachSuspendedAt ? 'Paused — you weren’t opening them' :
+              prefs?.coachEnabled ? `Adaptive, up to ${prefs.dailyCap}/day` :
+              'Off — coaching messages timed to your training'
+            }
+            right={
+              <Toggle
+                value={Boolean(prefs?.coachEnabled) && !prefs?.coachSuspendedAt}
+                onChange={pushEnabled ? handleToggleCoach : () => {}}
+              />
             }
           />
 

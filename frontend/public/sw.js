@@ -42,30 +42,71 @@ self.addEventListener('push', (event) => {
       // Center in an hour. renotify makes the replacement still buzz.
       tag: data.tag || 'somatrack',
       renotify: true,
-      data: { url: data.url || '/' }
+      data: { url: data.url || '/', nid: data.nid }
     })
+      // Show first, THEN report. A failed ack must never cost the user the
+      // notification itself — and on iOS, not showing one revokes permission.
+      .then(() => ack(data.nid, 'displayed'))
   )
 })
 
 // ── tap ──
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const target = (event.notification.data && event.notification.data.url) || '/'
+  const info = event.notification.data || {}
+  const target = info.url || '/'
 
   // Focus the app if it is already open. openWindow() unconditionally would
   // spawn a second window and lose whatever workout was on screen.
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ('focus' in client) {
-          if ('navigate' in client && target !== '/') client.navigate(target)
-          return client.focus()
+    Promise.all([
+      ack(info.nid, 'clicked'),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+        for (const client of clients) {
+          if ('focus' in client) {
+            if ('navigate' in client && target !== '/') client.navigate(target)
+            return client.focus()
+          }
         }
-      }
-      return self.clients.openWindow(target)
-    })
+        return self.clients.openWindow(target)
+      })
+    ])
   )
 })
+
+// ── dismissed ──
+// Weak signal: iOS fires this inconsistently, so it informs the history screen
+// but never feeds the engagement backoff.
+self.addEventListener('notificationclose', (event) => {
+  const info = event.notification.data || {}
+  event.waitUntil(ack(info.nid, 'dismissed'))
+})
+
+/**
+ * Report a notification's fate to the server.
+ *
+ * This is the only delivery receipt web push provides: a push service returning
+ * 201 means it accepted the payload, not that any phone rendered it. Without
+ * this the app cannot tell a working subscription from a ghost.
+ *
+ * Requires network at the moment of display, so a missing ack means "not
+ * confirmed", never "definitely not delivered".
+ */
+async function ack(nid, event) {
+  if (!nid) return
+  try {
+    const config = await readConfig()
+    if (!config || !config.apiUrl) return
+
+    await fetch(`${config.apiUrl}/push/ack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nid, event })
+    })
+  } catch (err) {
+    // Offline, or the worker was killed early. Nothing to recover here.
+  }
+}
 
 // ── subscription rotation ──
 // iOS silently replaces a push subscription now and then (OS updates, long idle
