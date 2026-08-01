@@ -1,6 +1,19 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { rpeColor, exerciseEmoji, cycleRpe } from './helpers'
+
+// How each suggestion was arrived at. Shown because a number that changes
+// itself is unsettling unless the athlete can see the reasoning — and because
+// "up 2.5 kg, you hit this at RPE 7" is coaching, where a silent bump is not.
+const BASIS_STYLE: Record<string, { label: string; color: string }> = {
+  progression: { label: 'PROGRESS',  color: '#4ADE80' },
+  repeat:      { label: 'REPEAT',    color: '#00D4AA' },
+  deload:      { label: 'BACK OFF',  color: '#FACC15' },
+  return:      { label: 'EASING IN', color: '#A78BFA' },
+  estimate:    { label: 'ESTIMATE',  color: '#888888' },
+  default:     { label: 'NEW',       color: '#888888' },
+}
 
 // ── small stepper button ──────────────────────────────────────────────────
 function Step({ children, onClick, disabled }: {
@@ -24,9 +37,15 @@ function Step({ children, onClick, disabled }: {
 export default function PlanSets() {
   const navigate = useNavigate()
   const {
-    selectedExercises,
+    selectedExercises, suggestionsLoading, loadSuggestions,
     updateSet, addSet, removeSet, setExerciseRest, removeExerciseAt,
   } = useWorkoutStore()
+
+  // Pull history-based numbers once the plan is on screen. Until this lands the
+  // per-modality defaults show, so the screen is usable either way.
+  useEffect(() => {
+    loadSuggestions()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Aggregate stats
   const totalSets = selectedExercises.reduce(
@@ -99,9 +118,11 @@ export default function PlanSets() {
                         rounded-card p-3.5 mb-4">
           <span className="text-base leading-snug">💡</span>
           <p className="text-dark-200 text-[12.5px] leading-relaxed">
-            Tap −/+ to adjust each value. Tap{' '}
-            <span className="text-brand-teal">copy to remaining</span>{' '}
-            to apply a set's numbers to the sets below it.
+            {suggestionsLoading
+              ? 'Checking what you lifted last time…'
+              : <>Tap −/+ to adjust each value. Tap{' '}
+                  <span className="text-brand-teal">copy to remaining</span>{' '}
+                  to apply a set's numbers to the sets below it.</>}
           </p>
         </div>
 
@@ -129,6 +150,29 @@ export default function PlanSets() {
                     {se.sets.length} set{se.sets.length > 1 ? 's' : ''}
                   </span>
                 </div>
+
+                {/* Why these numbers. A load that moves on its own is unnerving
+                    unless the reasoning is visible. */}
+                {se.suggestion && !se.skipped && (
+                  <div className="px-4 pb-3 -mt-1">
+                    <div className="flex items-start gap-2">
+                      <span className="text-[9.5px] font-bold tracking-wider px-1.5 py-0.5
+                                       rounded-badge flex-shrink-0 mt-[1px]"
+                        style={{
+                          color: BASIS_STYLE[se.suggestion.basis]?.color ?? '#888888',
+                          background: `${BASIS_STYLE[se.suggestion.basis]?.color ?? '#888888'}1f`,
+                        }}>
+                        {BASIS_STYLE[se.suggestion.basis]?.label ?? 'PLAN'}
+                      </span>
+                      <p className="text-dark-300 text-[11.5px] leading-snug">
+                        {se.suggestion.note}
+                        {se.edited && (
+                          <span className="text-dark-400"> · you’ve edited these</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Column headers */}
                 <div className="grid grid-cols-[30px_1fr_1fr_64px_30px] gap-2 px-4 py-1 items-center">

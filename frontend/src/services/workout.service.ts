@@ -1,6 +1,25 @@
 import api from './api'
 
+export interface PlanSuggestion {
+  exerciseId: string
+  sets: { reps: number; weight: number; rpe: number; restSeconds: number }[]
+  /** How the numbers were arrived at — drives the note shown on the plan screen */
+  basis: 'progression' | 'repeat' | 'deload' | 'return' | 'estimate' | 'default'
+  note: string
+  e1rm: number | null
+  lastPerformed: string | null
+}
+
 export const workoutService = {
+  // What the athlete should actually be lifting, from their own history.
+  // Batched: the plan screen needs every exercise at once.
+  getPlanSuggestions: async (
+    exercises: { exerciseId: string; fallback: PlanSuggestion['sets'] }[]
+  ): Promise<PlanSuggestion[]> => {
+    const res = await api.post('/workout/plan-suggestions', { exercises })
+    return res.data.data
+  },
+
   startSession: async (data?: { notes?: string }) => {
     const res = await api.post('/workout/sessions', data ?? {})
     return res.data.data

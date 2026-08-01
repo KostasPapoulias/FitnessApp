@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { Exercise, WorkoutSession } from '../types'
-import { workoutService } from '../services/workout.service'
+import { PlanSuggestion, workoutService } from '../services/workout.service'
 
 interface PlannedSet {
   reps: number
@@ -14,6 +14,19 @@ interface SelectedExercise {
   sets: PlannedSet[]
   workoutExerciseId?: string // set after session starts
   skipped?: boolean
+  /**
+   * False until the athlete changes a number themselves. Server suggestions
+   * only overwrite untouched sets — arriving mid-edit and resetting someone's
+   * typing would be worse than showing no suggestion at all.
+   */
+  edited?: boolean
+  /** Why the suggested numbers are what they are, shown on the plan screen. */
+  suggestion?: {
+    basis: 'progression' | 'repeat' | 'deload' | 'return' | 'estimate' | 'default'
+    note: string
+    e1rm: number | null
+    lastPerformed: string | null
+  }
 }
 
 export type CardioTarget = { type: 'distance' | 'time'; value: number }
@@ -71,6 +84,9 @@ interface WorkoutStore {
   addSet: (exIdx: number) => void
   removeSet: (exIdx: number, setIdx: number) => void
   setExerciseRest: (exIdx: number, restSeconds: number) => void
+  /** Replace untouched defaults with numbers built from the athlete's history. */
+  loadSuggestions: () => Promise<void>
+  suggestionsLoading: boolean
   removeExerciseAt: (exIdx: number) => void
   toggleSkip: (exIdx: number) => void
   swapExercise: (exIdx: number, exercise: Exercise) => void
@@ -119,6 +135,14 @@ let finishInFlight: Promise<any> | null = null
 
 const DEFAULT_SET: PlannedSet = { reps: 10, weight: 20, rpe: 7, restSeconds: 90 }
 
+// Strip the sets off a server suggestion, keeping only the explanation
+const toMeta = (s: PlanSuggestion): SelectedExercise['suggestion'] => ({
+  basis: s.basis,
+  note: s.note,
+  e1rm: s.e1rm,
+  lastPerformed: s.lastPerformed,
+})
+
 // Exercise modality → backend SetType enum
 const MODALITY_SET_TYPE: Record<string, string> = {
   Strength: 'STRENGTH',
@@ -131,6 +155,7 @@ const MODALITY_SET_TYPE: Record<string, string> = {
 export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   activeSession: null,
   selectedExercises: [],
+  suggestionsLoading: false,
   sessionId: null,
   sessionStartTime: null,
   currentExerciseIndex: 0,
@@ -192,6 +217,9 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
       i !== exIdx ? e : {
         ...e,
+        // Touching a number marks the exercise as the athlete's, so a
+        // suggestion still in flight cannot overwrite what they just typed
+        edited: true,
         sets: e.sets.map((s, j) => j !== setIdx ? s : { ...s, ...patch })
       }
     )
@@ -213,6 +241,47 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       }
     )
   })),
+
+  // Fetched when the plan screen opens rather than on each exercise tap: the
+  // numbers aren't on screen during selection, and a request per tap would put
+  // latency in the middle of browsing.
+  loadSuggestions: async () => {
+    const { selectedExercises } = get()
+    // Strength and calisthenics are the only modalities with reps × load to
+    // progress. Cardio targets and metcon formats are planned differently.
+    const eligible = selectedExercises.filter(e =>
+      e.exercise.modality === 'Strength' || e.exercise.modality === 'Calisthenics'
+    )
+    if (eligible.length === 0) return
+
+    set({ suggestionsLoading: true })
+    try {
+      const suggestions = await workoutService.getPlanSuggestions(
+        eligible.map(e => ({ exerciseId: e.exercise.id, fallback: e.sets }))
+      )
+      const byId = new Map(suggestions.map(s => [s.exerciseId, s]))
+
+      set(state => ({
+        selectedExercises: state.selectedExercises.map(e => {
+          const suggestion = byId.get(e.exercise.id)
+          if (!suggestion) return e
+          // Never overwrite numbers the athlete has already changed
+          if (e.edited) return { ...e, suggestion: toMeta(suggestion) }
+          return {
+            ...e,
+            sets: suggestion.sets,
+            suggestion: toMeta(suggestion),
+          }
+        }),
+        suggestionsLoading: false,
+      }))
+    } catch (err) {
+      // A failed suggestion just leaves the modality defaults in place — the
+      // athlete can still plan and train.
+      console.error('loadSuggestions error:', err)
+      set({ suggestionsLoading: false })
+    }
+  },
 
   setExerciseRest: (exIdx, restSeconds) => set(state => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
