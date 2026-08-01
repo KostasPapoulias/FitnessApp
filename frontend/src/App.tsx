@@ -33,31 +33,32 @@ const Protected = ({ children }: { children: React.ReactNode }) => {
 
 export default function App() {
   const { fetchMe, isAuthenticated } = useAuthStore()
-  const { requestPermission, scheduleInactivityReminder, notifyReminder } = useNotifications()
+  const { requestPermission, scheduleInactivityReminder, ensurePushSubscription } = useNotifications()
 
   // On app load, verify token is still valid
   useEffect(() => {
     const token = localStorage.getItem('somatrack_token')
     if (token) fetchMe()
   }, [])
+
+  // Native only: the scheduled inactivity reminder is a Capacitor local
+  // notification. On the web this used to fire requestPermission() on load,
+  // outside any user gesture — iOS ignores that and it spends the one prompt
+  // the app gets, so permission is now asked for by the Profile toggle instead.
   useEffect(() => {
-      if (isAuthenticated) {
-        requestPermission().then((granted) => {
-          if (granted) scheduleInactivityReminder(3)
-        })
-      }
+    if (!isAuthenticated || !Capacitor.isNativePlatform()) return
 
-    }, [isAuthenticated])
+    requestPermission().then((granted) => {
+      if (granted) scheduleInactivityReminder(3)
+    })
+  }, [isAuthenticated])
 
-  // Recurring reminder every minute while logged in, desktop/mobile web only (not the native app)
+  // Re-register this device's push subscription on launch. The server prunes an
+  // endpoint as soon as it 410s while the browser keeps handing the same one
+  // back, so without this the two drift apart and push dies silently.
   useEffect(() => {
     if (!isAuthenticated || Capacitor.isNativePlatform()) return
-
-    const interval = setInterval(() => {
-      notifyReminder()
-    }, 60_000)
-
-    return () => clearInterval(interval)
+    ensurePushSubscription()
   }, [isAuthenticated])
 
   return (

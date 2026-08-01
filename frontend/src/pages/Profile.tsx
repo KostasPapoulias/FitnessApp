@@ -378,7 +378,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { readinessScore, systemicFatigue, trainingLoad, fetchTrainingLoad } = useFatigueStore()
-  const { testNotificationNow, subscribeToPush, unsubscribeFromPush, isPushSubscribed } = useNotifications()
+  const { sendTestPush, subscribeToPush, unsubscribeFromPush, isPushSubscribed } = useNotifications()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -389,6 +389,7 @@ export default function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [pushEnabled, setPushEnabled]       = useState(false)
   const [pushBusy, setPushBusy]             = useState(false)
+  const [testBusy, setTestBusy]             = useState(false)
 
   useEffect(() => {
     profileService.getProfile()
@@ -442,13 +443,23 @@ export default function Profile() {
     navigate('/login')
   }
 
-  const handleTestNotifications = async () => {
-    const ok = await testNotificationNow()
-    if (!ok) {
-      alert('Notification permission was denied or unsupported on this browser/device.')
-      return
+  // Asks the SERVER to push to this account's devices. An in-page notification
+  // would prove nothing about the case that matters — app closed, screen locked
+  // — since only a push routed through APNs exercises that path.
+  const handleTestPush = async () => {
+    setTestBusy(true)
+    try {
+      const res = await sendTestPush()
+      const count = res?.data?.sent ?? 0
+      alert(
+        `Test push sent to ${count} device${count === 1 ? '' : 's'}.\n\n` +
+        'Lock the phone or swipe the app away — it should still arrive.'
+      )
+    } catch (err: any) {
+      alert(err?.response?.data?.error || err?.message || 'Test push failed.')
+    } finally {
+      setTestBusy(false)
     }
-    alert('Test notification triggered. If nothing appeared, check OS/browser notification settings.')
   }
 
   const handleTogglePush = async (next: boolean) => {
@@ -691,25 +702,31 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="🔔"
-            label="Test Notifications"
-            sublabel="Send a test notification now"
-            onClick={handleTestNotifications}
-          />
-
-          <div className="h-px bg-dark-700 mx-4" />
-
-          <SettingsRow
             icon="📲"
             label="Push Notifications"
             sublabel={pushBusy
               ? 'Updating...'
               : pushEnabled
-                ? 'On — reminder every minute, even on lock screen'
-                : 'Off'}
+                ? 'On — arrives with the app closed or the phone locked'
+                : 'Off — add to Home Screen first on iPhone'}
             right={
               <Toggle value={pushEnabled} onChange={handleTogglePush} />
             }
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          {/* Sends from the server, not the page — the only way to check that
+              delivery works when nothing of the app is running. */}
+          <SettingsRow
+            icon="🔔"
+            label="Send Test Push"
+            sublabel={testBusy
+              ? 'Sending...'
+              : pushEnabled
+                ? 'Then lock the phone — it should still arrive'
+                : 'Turn on Push Notifications first'}
+            onClick={pushEnabled && !testBusy ? handleTestPush : undefined}
           />
 
           <div className="h-px bg-dark-700 mx-4" />
