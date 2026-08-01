@@ -1,13 +1,18 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
 import { getUserReadiness } from './readiness.service'
+import { getTrainingLoad } from './training-load.service'
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
   // Same readiness calculation the Home/Profile screens show, so the AI
   // never quotes a different number than the UI.
-  const { readinessScore: readiness, muscles: effectiveFatigue, fitnessLevel } =
+  const { readinessScore: readiness, muscles: effectiveFatigue, fitnessLevel, systemicFatigue } =
     await getUserReadiness(userId)
+
+  // Weeks-long trend, not today's soreness — this is what tells the coach
+  // whether to push, hold, or back off.
+  const load = await getTrainingLoad(userId)
 
   // Get latest sleep
   const sleep = await prisma.sleepLog.findFirst({
@@ -57,6 +62,11 @@ Goal: ${profile?.goal ?? 'general fitness'}
 
 ## Current Body State
 Overall readiness score: ${readiness}%
+Systemic (whole-body) fatigue: ${systemicFatigue}% — cardiovascular and central
+cost of recent training. This is separate from local muscle damage: a long run
+or a metcon loads it heavily while leaving individual muscles fairly fresh, so
+high systemic fatigue with low muscle fatigue means easy aerobic work and
+technique, not another hard session.
 
 High fatigue muscles (🔴 need rest):
 ${highFatigue.length > 0
@@ -72,6 +82,20 @@ Recovered muscles (🟢 ready to train):
 ${recovered.length > 0
   ? recovered.map(f => `  - ${f.muscleName}: ${f.fatigueLevel}% fatigued`).join('\n')
   : '  None'}
+
+## Training Load Trend (weeks, not today)
+${load.established
+  ? `Fitness (6-week accumulated load): ${load.fitness}
+Fatigue (last week's load): ${load.fatigue}
+Form (fitness − fatigue): ${load.form} — ${load.formState}
+Acute:chronic ratio: ${load.ratio ?? 'not enough history'} — ${load.trend}
+Load this week: ${load.weeklyLoad} vs ${load.previousWeeklyLoad} the week before
+${load.trend === 'ramping'
+  ? 'RAMPING TOO FAST: recent load is far above what they are conditioned for. This is the strongest known predictor of overuse injury — advise easing back even if they feel fine today.'
+  : load.trend === 'detraining'
+  ? 'Training has tailed off well below their established level — fitness is slipping, encourage consistency over intensity.'
+  : 'Load progression is in a sensible range.'}`
+  : `Not enough history yet (${load.sessionCount} finished session${load.sessionCount === 1 ? '' : 's'}). Do not quote fitness, form or ratio numbers — say you need a couple more weeks of training logged.`}
 
 ## Today's Health Data
 Sleep: ${sleep ? `${(sleep.durationMin / 60).toFixed(1)}h (score: ${sleep.sleepScore ?? 'not rated'})` : 'Not logged'}
