@@ -2,10 +2,13 @@ import prisma from './prisma'
 import { isPushConfigured } from './webpush'
 import { sendToSubscriptions } from './pushSender'
 
-// Debug cadence. One a minute is deliberately obnoxious — it is here to prove
-// delivery while the phone is locked and the app is closed, not to be shipped.
-// Override with PUSH_REMINDER_INTERVAL_MS, or switch the whole loop off with
-// PUSH_REMINDER_ENABLED=false, without touching code.
+// Delivery-proving debug loop, OFF unless explicitly switched on. It fires a
+// ping on a fixed interval regardless of what the athlete is doing, which is
+// useful for exactly one thing: confirming a locked phone still receives push.
+// Real reminders are trigger-driven and live elsewhere.
+//
+//   PUSH_REMINDER_ENABLED=true    turn the debug loop back on
+//   PUSH_REMINDER_INTERVAL_MS     cadence, default 60s
 const DEFAULT_INTERVAL_MS = 60_000
 const MIN_INTERVAL_MS = 10_000
 
@@ -13,16 +16,13 @@ const intervalMs = Math.max(
   MIN_INTERVAL_MS,
   Number(process.env.PUSH_REMINDER_INTERVAL_MS) || DEFAULT_INTERVAL_MS
 )
-const enabled = process.env.PUSH_REMINDER_ENABLED !== 'false'
+const enabled = process.env.PUSH_REMINDER_ENABLED === 'true'
 
 export const startPushReminder = () => {
   if (!isPushConfigured) return
-  if (!enabled) {
-    console.log('🔕 Push reminder loop disabled (PUSH_REMINDER_ENABLED=false)')
-    return
-  }
+  if (!enabled) return
 
-  console.log(`🔔 Push reminder loop every ${Math.round(intervalMs / 1000)}s`)
+  console.log(`🔔 DEBUG push loop active — every ${Math.round(intervalMs / 1000)}s`)
 
   setInterval(async () => {
     try {
