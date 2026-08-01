@@ -1,14 +1,17 @@
 import { PrismaClient } from '@prisma/client';
+// Fatigue-model tuning lives in its own module so it can also be applied
+// without running the whole seed — see scripts/apply-fatigue-tuning.ts.
+import {
+  MUSCLE_HALF_LIVES,
+  damageFor,
+  referenceSpeedFor,
+} from './fatigue-tuning';
 
 const prisma = new PrismaClient();
 
 // ── reference data ─────────────────────────────────────────────────────────
 const MODALITIES = ['Strength', 'Calisthenics', 'Cardio', 'WOD', 'Mobility'];
 const CATEGORIES = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
-const MUSCLES = [
-  'Chest', 'Back', 'Quadriceps', 'Hamstrings', 'Glutes', 'Shoulders', 'Biceps',
-  'Triceps', 'Forearms', 'Abs', 'Calves', 'Lats', 'Traps', 'Obliques', 'Lower Back',
-];
 const EQUIPMENT = [
   'Dumbbell', 'Barbell', 'Kettlebell', 'Bodyweight', 'Treadmill', 'Cable Machine',
   'Machine', 'Pull-up Bar', 'Bench', 'Resistance Band', 'Foam Roller', 'Rower',
@@ -144,8 +147,16 @@ async function main() {
   const categories: Record<string, { id: string }> = {};
   for (const n of CATEGORIES) categories[n] = await upsertByName(prisma.exerciseCategory, n);
 
+  // Recovery half-lives are re-applied on every seed run so tuning them here
+  // propagates without a migration.
   const muscles: Record<string, { id: string }> = {};
-  for (const n of MUSCLES) muscles[n] = await upsertByName(prisma.muscle, n);
+  for (const [name, recoveryHalfLifeHours] of MUSCLE_HALF_LIVES) {
+    muscles[name] = await prisma.muscle.upsert({
+      where: { name },
+      update: { recoveryHalfLifeHours },
+      create: { name, recoveryHalfLifeHours },
+    });
+  }
 
   const equipment: Record<string, { id: string }> = {};
   for (const n of EQUIPMENT) equipment[n] = await upsertByName(prisma.equipment, n);
@@ -155,14 +166,30 @@ async function main() {
   // as a DB constraint, so we look up by name rather than upsert-on-conflict.
   for (const ex of EXERCISES) {
     const modalityId = modalities[ex.modality].id;
+    // Re-applied on every seed run, so tuning the tables above propagates
+    // without another migration.
+    const damageFactor = damageFor(ex.name, ex.modality);
+    const referenceSpeedKmh = referenceSpeedFor(ex.name);
+
     const existing = await prisma.exercise.findFirst({ where: { name: ex.name } });
     const exercise = existing
       ? await prisma.exercise.update({
           where: { id: existing.id },
-          data: { modalityId, description: ex.description ?? null },
+          data: {
+            modalityId,
+            description: ex.description ?? null,
+            damageFactor,
+            referenceSpeedKmh,
+          },
         })
       : await prisma.exercise.create({
-          data: { name: ex.name, modalityId, description: ex.description ?? null },
+          data: {
+            name: ex.name,
+            modalityId,
+            description: ex.description ?? null,
+            damageFactor,
+            referenceSpeedKmh,
+          },
         });
 
     for (const catName of ex.categories ?? []) {
