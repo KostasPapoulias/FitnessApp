@@ -29,6 +29,25 @@ model User {
   pushSubscriptions     PushSubscription[]
   systemicFatigue       SystemicFatigue?
   strengthEstimates     ExerciseStrengthEstimate[]
+  aiUsage               AiUsageDaily[]
+}
+
+// Per-day AI spend, so one user cannot run the bill up without limit. Written
+// from the provider's own token counts after each call rather than an estimate,
+// because prompt size varies with how much history and context a turn carries.
+model AiUsageDaily {
+  userId       String
+  /** UTC calendar day, YYYY-MM-DD. Deliberately a string: the budget resets on
+   *  a day boundary and never needs date arithmetic. */
+  day          String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calls        Int      @default(0)
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costUsd      Float    @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@id([userId, day])
 }
 
 model PushSubscription {

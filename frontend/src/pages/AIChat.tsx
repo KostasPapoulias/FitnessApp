@@ -103,11 +103,17 @@ export default function AIChat() {
         dateTime:    new Date().toISOString()
       }
       setMessages(prev => [...prev, aiMsg])
-    } catch {
+    } catch (err: any) {
+      // 429 is the daily AI budget or the per-minute rate limit. The server
+      // already phrases those for a human, so show its reason rather than
+      // burying a real limit under "something went wrong".
+      const limited = err?.response?.status === 429
       setMessages(prev => [...prev, {
         id:          Date.now().toString() + '_err',
         sender:      'assistant',
-        messageText: 'Sorry, I ran into an error. Please try again.',
+        messageText: limited
+          ? err.response.data?.error ?? 'You have reached today’s AI limit.'
+          : 'Sorry, I ran into an error. Please try again.',
         dateTime:    new Date().toISOString()
       }])
     } finally {

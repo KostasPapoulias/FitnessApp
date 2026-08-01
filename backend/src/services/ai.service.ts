@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
 import { getUserReadiness } from './readiness.service'
 import { getTrainingLoad } from './training-load.service'
+import { assertWithinBudget, recordUsage } from './ai-budget.service'
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
@@ -138,6 +139,9 @@ export const sendMessage = async ({
   message: string
   history: { role: 'user' | 'assistant'; content: string }[]
 }) => {
+  // Refuse before spending anything, not after
+  await assertWithinBudget(userId)
+
   // Build the full context
   const systemContext = await buildUserContext(userId)
 
@@ -167,6 +171,10 @@ export const sendMessage = async ({
     ]
 
     const response = await model.generateContent({ contents })
+
+    // Bill from the provider's own counts before anything else can throw
+    await recordUsage(userId, response.response.usageMetadata)
+
     const replyText = response.response.text().trim()
       ? response.response.text().trim()
       : 'Sorry, I could not generate a response.'
@@ -215,13 +223,17 @@ export const getOrCreateThread = async (userId: string) => {
 
 // Get thread history formatted for ChatGPT
 export const getThreadHistory = async (threadId: string) => {
+  // Newest first, then reversed back into reading order. Ordering ascending and
+  // taking 20 returns the OLDEST twenty messages of the thread — so a long
+  // conversation kept re-sending its opening exchanges and never the turn the
+  // user was actually replying to, while paying for the tokens either way.
   const messages = await prisma.aIChat.findMany({
     where: { threadId },
-    orderBy: { dateTime: 'asc' },
-    take: 20 // last 20 messages for context window
+    orderBy: { dateTime: 'desc' },
+    take: 20
   })
 
-  return messages.map(m => ({
+  return messages.reverse().map(m => ({
     role: m.sender as 'user' | 'assistant',
     content: m.messageText
   }))

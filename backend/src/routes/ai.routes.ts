@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  chat, getHistory, suggestWorkout,
+  chat, getHistory, suggestWorkout, getUsage,
   getThreads, createThread, deleteThread
 } from '../controllers/ai.controller'
 import { verifyToken } from '../middleware/auth.middleware';
@@ -49,5 +49,12 @@ router.get('/history', getHistory);
  * @returns AI-suggested workout based on fatigue
  */
 router.get('/suggest-workout', suggestWorkout);
+
+/**
+ * @route GET /api/ai/usage
+ * @protected
+ * @returns today's AI spend against the daily cap
+ */
+router.get('/usage', getUsage);
 
 export default router;

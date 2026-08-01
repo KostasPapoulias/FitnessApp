@@ -5,6 +5,7 @@ import {
   getOrCreateThread,
   getThreadHistory
 } from '../services/ai.service'
+import { AiBudgetError, getUsageToday } from '../services/ai-budget.service'
 import prisma from '../lib/prisma'
 
 // POST /api/ai/chat
@@ -47,8 +48,28 @@ export const chat = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { reply, threadId: thread.id } })
 
   } catch (error) {
+    // Out of budget or calling too fast is a 429, not a server fault — the
+    // client shows the reason rather than a generic "AI service error".
+    if (error instanceof AiBudgetError) {
+      res.status(429)
+        .set('Retry-After', String(error.retryAfterSeconds))
+        .json({ success: false, error: error.message, retryAfter: error.retryAfterSeconds })
+      return
+    }
+
     console.error('AI chat error:', error)
     res.status(500).json({ success: false, error: 'AI service error' })
+  }
+}
+
+// GET /api/ai/usage
+// Today's AI spend against the daily cap
+export const getUsage = async (req: AuthRequest, res: Response) => {
+  try {
+    res.json({ success: true, data: await getUsageToday(req.userId!) })
+  } catch (error) {
+    console.error('getUsage error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
   }
 }
 
@@ -161,6 +182,13 @@ export const suggestWorkout = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { reply } })
 
   } catch (error) {
+    if (error instanceof AiBudgetError) {
+      res.status(429)
+        .set('Retry-After', String(error.retryAfterSeconds))
+        .json({ success: false, error: error.message, retryAfter: error.retryAfterSeconds })
+      return
+    }
+
     console.error('suggestWorkout error:', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
