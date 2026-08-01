@@ -95,30 +95,38 @@ export const sendTestPush = async (req: AuthRequest, res: Response) => {
     return
   }
 
-  // Goes through the ledger like any other notification, so the test also
-  // exercises the delivery-receipt path — the point is to learn whether the
-  // phone rendered it, not merely whether Apple accepted it.
-  const result = await sendNotification({
-    userId: req.userId!,
-    type: 'test',
-    title: '🔔 SomaTrack test',
-    body: 'Push delivery works. Lock the phone and close the app — the next one should still arrive.',
-    // The tap is the consent; a test that silently no-ops teaches nothing
-    bypassPreferences: true,
-  })
-
-  if (result.status !== 'sent') {
-    res.status(404).json({
-      success: false,
-      error: result.status === 'failed'
-        ? 'No device accepted the push. Toggle Push Notifications off and back on.'
-        : 'No push subscriptions registered for this account. Turn on Push Notifications first.'
+  // Express 4 does not catch rejected promises from handlers: without this the
+  // request hangs until the client times out, leaving the button on "Sending…"
+  try {
+    // Goes through the ledger like any other notification, so the test also
+    // exercises the delivery-receipt path — the point is to learn whether the
+    // phone rendered it, not merely whether Apple accepted it.
+    const result = await sendNotification({
+      userId: req.userId!,
+      type: 'test',
+      title: '🔔 SomaTrack test',
+      body: 'Push delivery works. Lock the phone and close the app — the next one should still arrive.',
+      // The tap is the consent; a test that silently no-ops teaches nothing
+      bypassPreferences: true,
     })
-    return
-  }
 
-  res.json({
-    success: true,
-    data: { sent: result.devices, notificationId: result.notificationId }
-  })
+    if (result.status !== 'sent') {
+      res.status(404).json({
+        success: false,
+        error: result.status === 'failed'
+          ? 'No device accepted the push. Toggle Push Notifications off and back on.'
+          : 'No push subscriptions registered for this account. Turn on Push Notifications first.'
+      })
+      return
+    }
+
+    res.json({
+      success: true,
+      data: { sent: result.devices, notificationId: result.notificationId }
+    })
+
+  } catch (error) {
+    console.error('sendTestPush error:', error)
+    res.status(500).json({ success: false, error: 'Could not send the test push.' })
+  }
 }

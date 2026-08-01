@@ -25,8 +25,22 @@ export const ESSENTIAL_TYPES: NotificationType[] = [
   NOTIFICATION_TYPES.COACH_SUSPENDED,
 ]
 
+/** Only these are AI-planned. Everything else is a rule. */
+export const COACH_TYPES: NotificationType[] = [
+  NOTIFICATION_TYPES.COACH_NUDGE,
+]
+
+/**
+ * Classify by the coach list, not the essential one.
+ *
+ * Membership testing the essential list meant anything unrecognised — a typo in
+ * a rule's type name, or the ad-hoc 'test' type — was silently classified as
+ * coach, gated behind an opt-in that defaults off, and never sent. Defaulting
+ * to essential fails toward "delivered and visible in history" instead of
+ * "silently dropped", which is the failure you can actually notice.
+ */
 export const tierOf = (type: string): 'essential' | 'coach' =>
-  ESSENTIAL_TYPES.includes(type as NotificationType) ? 'essential' : 'coach'
+  COACH_TYPES.includes(type as NotificationType) ? 'coach' : 'essential'
 
 /**
  * Read a user's preferences.

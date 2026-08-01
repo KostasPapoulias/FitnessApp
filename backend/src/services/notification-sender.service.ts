@@ -82,14 +82,28 @@ export const sendNotification = async (req: SendRequest): Promise<SendOutcome> =
       data: {
         status: 'failed',
         failReason: result.removed > 0 ? 'subscription expired' : 'push service rejected',
+        // Release the dedupe key. The unique constraint is permanent, so a
+        // failed row would hold the key forever and every future retry of this
+        // nudge would be rejected as a duplicate — one brief push-service
+        // outage permanently killing that notification for that user.
+        dedupeKey: null,
       }
     })
     return { status: 'failed', reason: 'no device accepted the push' }
   }
 
-  await prisma.notification.update({
-    where: { id: notification.id },
+  // Only advance from `planned`. The service worker can ack `displayed` before
+  // this resolves — sendToSubscriptions waits on the SLOWEST endpoint, so a
+  // phone can render and report back while another endpoint is still hanging.
+  // An unconditional write would overwrite that delivery receipt with `sent`.
+  await prisma.notification.updateMany({
+    where: { id: notification.id, status: 'planned' },
     data: { status: 'sent', sentAt: new Date() }
+  })
+  // sentAt is set regardless of which status won the race
+  await prisma.notification.updateMany({
+    where: { id: notification.id, sentAt: null },
+    data: { sentAt: new Date() }
   })
 
   return { status: 'sent', notificationId: notification.id, devices: result.sent }

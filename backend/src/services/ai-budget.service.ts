@@ -13,10 +13,39 @@ import prisma from '../lib/prisma'
  * does is spend the entire allowance before anyone notices.
  */
 
-// Priced per million tokens. Defaults match Gemini 2.5 Flash Lite; override
-// both when changing model, or the ledger silently under-reports.
-const INPUT_USD_PER_M = Number(process.env.AI_PRICE_INPUT_PER_M) || 0.10
-const OUTPUT_USD_PER_M = Number(process.env.AI_PRICE_OUTPUT_PER_M) || 0.40
+/**
+ * Prices per million tokens, keyed by model.
+ *
+ * A single hardcoded price is a trap: the price constants said Flash Lite while
+ * GEMINI_MODEL defaulted to Flash, so an unset env var meant costs accrued at a
+ * fraction of the real rate and the cap would not trip until well past the
+ * budget — the exact failure this module exists to prevent.
+ *
+ * Verify against current Google pricing when changing model; an unknown model
+ * deliberately bills at the most expensive known rate, so drift over-reports
+ * (send fewer messages) rather than under-reports (spend real money).
+ */
+const MODEL_PRICES: Record<string, { input: number; output: number }> = {
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
+  'gemini-2.5-flash':      { input: 0.30, output: 2.50 },
+  'gemini-2.0-flash':      { input: 0.10, output: 0.40 },
+}
+
+const priceFor = (modelName?: string) => {
+  // Explicit env overrides win, so a price change never needs a deploy
+  const envInput = Number(process.env.AI_PRICE_INPUT_PER_M)
+  const envOutput = Number(process.env.AI_PRICE_OUTPUT_PER_M)
+  if (envInput > 0 && envOutput > 0) return { input: envInput, output: envOutput }
+
+  const key = (modelName ?? '').replace(/^models\//, '').trim()
+  const known = MODEL_PRICES[key]
+  if (known) return known
+
+  // Unknown model: assume the priciest entry rather than guessing low
+  return Object.values(MODEL_PRICES).reduce((worst, price) =>
+    price.output > worst.output ? price : worst
+  )
+}
 
 // ~57 chat messages/day at current prices and context size. Low enough to cap
 // the damage, high enough that real conversation never reaches it.
@@ -67,8 +96,10 @@ const checkRateLimit = (userId: string) => {
  * budget for the day or calling too fast.
  */
 export const assertWithinBudget = async (userId: string) => {
-  checkRateLimit(userId)
-
+  // Budget BEFORE rate limit. Checking the rate first meant a user already out
+  // of budget was told "too many requests, retry in 60s" — advice that will not
+  // work for hours — because each rejected attempt still counted toward the
+  // window and tripped it before the real reason was ever reached.
   const usage = await prisma.aiUsageDaily.findUnique({
     where: { userId_day: { userId, day: utcDay() } }
   })
@@ -84,6 +115,8 @@ export const assertWithinBudget = async (userId: string) => {
       Math.ceil((midnight - now.getTime()) / 1000)
     )
   }
+
+  checkRateLimit(userId)
 }
 
 /**
@@ -95,22 +128,26 @@ export const assertWithinBudget = async (userId: string) => {
  */
 export const recordUsage = async (
   userId: string,
-  usage: { promptTokenCount?: number; candidatesTokenCount?: number } | undefined
+  usage: { promptTokenCount?: number; candidatesTokenCount?: number } | undefined,
+  options: { modelName?: string; isPlanner?: boolean } = {}
 ) => {
+  const price = priceFor(options.modelName)
   const inputTokens = usage?.promptTokenCount ?? 0
   const outputTokens = usage?.candidatesTokenCount ?? 0
   const costUsd =
-    (inputTokens / 1_000_000) * INPUT_USD_PER_M +
-    (outputTokens / 1_000_000) * OUTPUT_USD_PER_M
+    (inputTokens / 1_000_000) * price.input +
+    (outputTokens / 1_000_000) * price.output
 
   const day = utcDay()
+  const plannerCalls = options.isPlanner ? 1 : 0
 
   try {
     await prisma.aiUsageDaily.upsert({
       where: { userId_day: { userId, day } },
-      create: { userId, day, calls: 1, inputTokens, outputTokens, costUsd },
+      create: { userId, day, calls: 1, plannerCalls, inputTokens, outputTokens, costUsd },
       update: {
         calls: { increment: 1 },
+        plannerCalls: { increment: plannerCalls },
         inputTokens: { increment: inputTokens },
         outputTokens: { increment: outputTokens },
         costUsd: { increment: costUsd }

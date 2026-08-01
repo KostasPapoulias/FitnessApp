@@ -172,8 +172,9 @@ export const sendMessage = async ({
 
     const response = await model.generateContent({ contents })
 
-    // Bill from the provider's own counts before anything else can throw
-    await recordUsage(userId, response.response.usageMetadata)
+    // Bill from the provider's own counts before anything else can throw, and
+    // at the price of the model actually used
+    await recordUsage(userId, response.response.usageMetadata, { modelName })
 
     const replyText = response.response.text().trim()
       ? response.response.text().trim()

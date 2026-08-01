@@ -407,9 +407,18 @@ export default function Profile() {
       .finally(() => setIsLoading(false))
   }, [])
 
+  // On requires BOTH: this device holds a subscription, and the server has the
+  // user opted in. Reading only the browser meant anyone who subscribed before
+  // the opt-in model existed saw "On" while the server would never send them
+  // anything — the migration deliberately does not backfill consent.
   useEffect(() => {
-    isPushSubscribed().then(setPushEnabled)
-    notificationService.getPreferences().then(setPrefs).catch(() => {})
+    Promise.all([
+      isPushSubscribed(),
+      notificationService.getPreferences().catch(() => null),
+    ]).then(([subscribed, serverPrefs]) => {
+      if (serverPrefs) setPrefs(serverPrefs)
+      setPushEnabled(subscribed && Boolean(serverPrefs?.pushEnabled))
+    })
   }, [])
 
   useEffect(() => {
@@ -484,12 +493,16 @@ export default function Profile() {
         }
         // The device's zone travels with the opt-in: nothing timed can be
         // scheduled until the server knows what "9am" means for this user.
-        setPrefs(await notificationService.updatePreferences({
+        // Only flip the UI once the server has recorded consent — if this
+        // rejects, the device is subscribed but opted out, and showing On
+        // would promise notifications that never come.
+        const saved = await notificationService.updatePreferences({
           pushEnabled: true,
           essentialEnabled: true,
           timezone: deviceTimezone(),
-        }))
-        setPushEnabled(true)
+        })
+        setPrefs(saved)
+        setPushEnabled(saved.pushEnabled)
       } else {
         await unsubscribeFromPush()
         setPrefs(await notificationService.updatePreferences({
