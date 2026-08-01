@@ -13,7 +13,13 @@ export default function AIChat() {
   const navigate  = useNavigate()
   const { threadId } = useParams<{ threadId: string }>()
   const location  = useLocation()
-  const firstMessage = location.state?.firstMessage as string | undefined
+  // Router state covers in-app navigation; `?ask=` covers arrivals from outside
+  // the app, where no state can be attached — a tapped push notification opens
+  // a URL and nothing else, so the topic has to travel in the query string.
+  const firstMessage =
+    (location.state?.firstMessage as string | undefined) ??
+    new URLSearchParams(location.search).get('ask') ??
+    undefined
 
   const { readinessScore } = useFatigueStore()
   const { isPhone }     = useDeviceType()
