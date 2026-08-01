@@ -17,6 +17,7 @@ import {
   wodHse,
 } from '../services/fatigue-model.service'
 import { normalizeFitnessLevel } from '../services/readiness.service'
+import { SuggestedSet, suggestForExercise } from '../services/workout-progression.service'
 
 const SET_TYPES = ['STRENGTH', 'CALISTHENICS', 'CARDIO', 'WOD', 'MOBILITY'] as const
 
@@ -592,6 +593,59 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
 }
 
 //   GET SESSION HISTORY 
+//   PLAN SUGGESTIONS
+// POST /api/workout/plan-suggestions
+//
+// Given the exercises about to be planned, return what the athlete should
+// actually be lifting for each — built from their own history rather than the
+// one-size-fits-everything table the client used to fall back on.
+//
+// Batched deliberately: the plan screen needs every exercise at once, and doing
+// this per-tap would put a network round trip in the middle of exercise
+// selection for numbers the user is not looking at yet.
+export const getPlanSuggestions = async (req: AuthRequest, res: Response) => {
+  try {
+    const { exercises } = req.body as {
+      exercises?: { exerciseId: string; fallback?: SuggestedSet[] }[]
+    }
+
+    if (!Array.isArray(exercises) || exercises.length === 0) {
+      res.status(400).json({ success: false, error: 'exercises is required' })
+      return
+    }
+
+    // Bounded so a malformed client cannot ask for a thousand lookups
+    const requested = exercises.slice(0, 30)
+
+    const known = await prisma.exercise.findMany({
+      where: { id: { in: requested.map(e => e.exerciseId) } },
+      select: { id: true, modality: { select: { name: true } } },
+    })
+    const modalityById = new Map(known.map(e => [e.id, e.modality.name]))
+
+    const suggestions = await Promise.all(
+      requested
+        .filter(item => modalityById.has(item.exerciseId))
+        .map(item => suggestForExercise(
+          req.userId!,
+          item.exerciseId,
+          modalityById.get(item.exerciseId)!,
+          // The client's own defaults are the floor: the server should not
+          // duplicate the per-modality table that already lives in the store.
+          Array.isArray(item.fallback) && item.fallback.length > 0
+            ? item.fallback
+            : [{ reps: 10, weight: 20, rpe: 7, restSeconds: 90 }]
+        ))
+    )
+
+    res.json({ success: true, data: suggestions })
+
+  } catch (error) {
+    console.error('getPlanSuggestions error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
 // GET /api/workout/sessions
 // Used by Calendar screen
 export const getSessions = async (req: AuthRequest, res: Response) => {

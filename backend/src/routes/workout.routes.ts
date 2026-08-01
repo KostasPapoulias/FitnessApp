@@ -6,11 +6,18 @@ import {
   logSet,
   finishSession,
   getSessions,
-  getSessionById
+  getSessionById,
+  getPlanSuggestions
 } from '../controllers/workout.controller'
 
 const router = Router()
 router.use(verifyToken)
+/**
+ * @route POST /api/workout/plan-suggestions
+ * @protected
+ * @returns per-exercise sets built from the athlete's own history
+ */
+router.post('/plan-suggestions', getPlanSuggestions)
 /**
  * @route POST /api/workout/sessions
  * @protected
