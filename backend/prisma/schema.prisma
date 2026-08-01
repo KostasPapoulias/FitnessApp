@@ -65,6 +65,11 @@ model NotificationPreference {
   ignoredStreak    Int       @default(0)
   coachSuspendedAt DateTime?
 
+  /** Last authenticated request from this user. Notifications are suppressed
+   *  while they are already in the app — a nudge to train that arrives while
+   *  you are mid-set is noise. */
+  lastSeenAt       DateTime?
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -89,6 +94,10 @@ model AiUsageDaily {
   day          String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   calls        Int      @default(0)
+  /** Calls made by the notification planner specifically. Capped separately so
+   *  the planner cannot eat the budget the user needs for chatting, and a
+   *  re-plan loop cannot run all day. */
+  plannerCalls Int      @default(0)
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
   costUsd      Float    @default(0)

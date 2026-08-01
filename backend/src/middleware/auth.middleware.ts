@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest } from '../server';
+import { touchLastSeen } from '../services/notification-window.service';
 
 export const verifyToken = (
   req: AuthRequest, 
@@ -20,6 +21,9 @@ export const verifyToken = (
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: string };
     req.userId = decoded.userId;
     req.user = { id: decoded.userId, email: '' };
+    // Fire and forget, throttled internally: notifications are suppressed while
+    // the user is in the app, and this is the only signal that they are.
+    touchLastSeen(decoded.userId);
     next();
   } catch (error) {
     res.status(401).json({

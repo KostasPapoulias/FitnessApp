@@ -14,7 +14,7 @@ import calendarRoutes from './routes/calendar.routes';
 import profileRoutes from './routes/profile.routes';
 import pushRoutes from './routes/push.routes';
 import notificationRoutes from './routes/notification.routes';
-import { startPushReminder } from './lib/pushReminder';
+import { startNotificationScheduler } from './lib/notificationScheduler';
 
 // Types
 export interface AuthRequest extends Request {
@@ -75,11 +75,18 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+// A rejected promise nobody caught terminates the process on Node 15+, which
+// would take the whole API down over one failed background send. The scheduler
+// and planner both catch internally; this is the last line of defence.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
 // Start server
 app.listen(port, () => {
   console.log(`✅ SomaTrack API listening on http://localhost:${port}`);
   console.log(`   Health check: http://localhost:${port}/health`);
-  startPushReminder();
+  startNotificationScheduler();
 });
 
 export default app;
