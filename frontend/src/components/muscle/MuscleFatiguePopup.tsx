@@ -7,12 +7,16 @@ export default function MuscleFatiguePopup() {
 
   const { muscleName, fatigueLevel, status, recoveryTargetAt } = selectedMuscle
 
-  // Calculate hours until recovery
+  // Time until fully recovered. Recovery is exponential, so the tail of a hard
+  // session runs into days — render those as days rather than "~61h".
   const hoursLeft = recoveryTargetAt
-    ? Math.max(0, Math.round(
-        (new Date(recoveryTargetAt).getTime() - Date.now()) / 3600000
-      ))
+    ? Math.max(0, (new Date(recoveryTargetAt).getTime() - Date.now()) / 3600000)
     : 0
+  const recoveryLabel =
+    hoursLeft <= 0 ? 'Ready' :
+    hoursLeft < 1 ? '<1h' :
+    hoursLeft < 24 ? `~${Math.round(hoursLeft)}h` :
+    `~${Math.round(hoursLeft / 24 * 10) / 10}d`
 
   const statusConfig = {
     recovered: { label: 'Recovered', color: 'text-brand-green', bg: 'bg-brand-green' },
@@ -70,7 +74,7 @@ export default function MuscleFatiguePopup() {
           <div className="bg-dark-700 rounded-lg p-2 text-center">
             <p className="text-dark-300 text-xs">Recovery</p>
             <p className="text-white text-sm font-semibold">
-              {hoursLeft > 0 ? `~${hoursLeft}h` : 'Ready'}
+              {recoveryLabel}
             </p>
           </div>
           <div className="bg-dark-700 rounded-lg p-2 text-center">

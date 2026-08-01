@@ -1,9 +1,14 @@
 import api from './api'
-import { FatigueData } from '../types'
+import { FatigueData, TrainingLoad } from '../types'
 
 export const fatigueService = {
   getCurrent: async (): Promise<FatigueData> => {
     const res = await api.get('/fatigue/current')
+    return res.data.data
+  },
+
+  getTrainingLoad: async (): Promise<TrainingLoad> => {
+    const res = await api.get('/fatigue/load')
     return res.data.data
   },
 

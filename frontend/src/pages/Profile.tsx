@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
 import { profileService } from '../services/profile.service'
 import { useNotifications } from '../hooks/useNotifcations'
+import { FormState, LoadTrend, TrainingLoad } from '../types'
 
 //   Reusable row components 
 function StatCard({ value, label, color = 'text-white' }: {
@@ -13,6 +14,90 @@ function StatCard({ value, label, color = 'text-white' }: {
     <div className="flex-1 bg-dark-700 rounded-xl p-3 text-center">
       <p className={`text-xl font-bold ${color}`}>{value}</p>
       <p className="text-dark-400 text-[10px] mt-1">{label}</p>
+    </div>
+  )
+}
+
+//   Training load
+// Muscle fatigue says how sore you are today. This says whether the last six
+// weeks are building you up or burying you — the acute:chronic ratio is the
+// best-evidenced early warning for overuse injury, so it gets called out.
+function TrainingLoadCard({ load, systemicFatigue }: {
+  load: TrainingLoad | null
+  systemicFatigue: number
+}) {
+  if (!load) return null
+
+  const trendCopy: Record<LoadTrend, { label: string; color: string; note: string }> = {
+    ramping: {
+      label: 'Ramping fast', color: 'text-brand-red',
+      note: 'This week is well above what you are conditioned for. Ease off before something gives.',
+    },
+    building: {
+      label: 'Building', color: 'text-brand-green',
+      note: 'Load is climbing at a sustainable rate. Keep it steady.',
+    },
+    maintaining: {
+      label: 'Maintaining', color: 'text-brand-teal',
+      note: 'Holding your current level. Add a little volume when you feel fresh.',
+    },
+    detraining: {
+      label: 'Tailing off', color: 'text-brand-yellow',
+      note: 'Training has dropped below your usual level — consistency beats intensity here.',
+    },
+  }
+
+  const formCopy: Record<FormState, string> = {
+    fresh: 'Fresh',
+    neutral: 'Neutral',
+    tired: 'Carrying load',
+    overreaching: 'Overreaching',
+  }
+
+  const trend = trendCopy[load.trend]
+
+  return (
+    <div className="bg-dark-800 rounded-card border border-dark-600 p-2">
+      <div className="flex justify-between items-center mb-1">
+        <p className="text-dark-300 text-xs uppercase tracking-wider">Training Load</p>
+        {load.established && (
+          <span className={`text-xs font-semibold ${trend.color}`}>{trend.label}</span>
+        )}
+      </div>
+
+      {!load.established ? (
+        <p className="text-dark-400 text-xs px-1 py-2 leading-relaxed">
+          {load.sessionCount === 0
+            ? 'No finished sessions yet. Log a couple of weeks of training and this will show whether you are building or overreaching.'
+            : `Only ${load.sessionCount} session${load.sessionCount === 1 ? '' : 's'} logged so far — a couple more weeks and this becomes meaningful.`}
+        </p>
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <StatCard value={String(Math.round(load.fitness))} label="Fitness (6wk)" color="text-brand-teal" />
+            <StatCard value={String(Math.round(load.fatigue))} label="Fatigue (1wk)" color="text-brand-orange" />
+            <StatCard
+              value={load.form > 0 ? `+${Math.round(load.form)}` : String(Math.round(load.form))}
+              label={formCopy[load.formState]}
+              color={load.form >= 0 ? 'text-brand-green' : 'text-brand-yellow'}
+            />
+            <StatCard
+              value={`${systemicFatigue}%`}
+              label="Whole-body"
+              color={
+                systemicFatigue >= 70 ? 'text-brand-red' :
+                systemicFatigue >= 35 ? 'text-brand-yellow' : 'text-brand-green'
+              }
+            />
+          </div>
+          <p className="text-dark-400 text-[11px] mt-2 px-1 leading-relaxed">
+            {trend.note}
+            {load.previousWeeklyLoad > 0 && (
+              <> This week {load.weeklyLoad} vs {load.previousWeeklyLoad} last week.</>
+            )}
+          </p>
+        </>
+      )}
     </div>
   )
 }
@@ -292,7 +377,7 @@ function LogNutritionModal({ onSave, onClose }: {
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
-  const { readinessScore } = useFatigueStore()
+  const { readinessScore, systemicFatigue, trainingLoad, fetchTrainingLoad } = useFatigueStore()
   const { testNotificationNow, subscribeToPush, unsubscribeFromPush, isPushSubscribed } = useNotifications()
 
   const [profileData, setProfileData]       = useState<any>(null)
@@ -317,6 +402,10 @@ export default function Profile() {
   useEffect(() => {
     isPushSubscribed().then(setPushEnabled)
   }, [])
+
+  useEffect(() => {
+    fetchTrainingLoad()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveProfile = async (form: any) => {
     const saved = await profileService.updateProfile({
@@ -488,6 +577,9 @@ export default function Profile() {
             />
           </div>
         </div>
+
+        {/* Training load — the weeks-long trend, not today's soreness */}
+        <TrainingLoadCard load={trainingLoad} systemicFatigue={systemicFatigue} />
 
         {/* Body stats */}
         <div className="bg-dark-800 rounded-card border border-dark-600 p-2">

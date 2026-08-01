@@ -42,10 +42,36 @@ export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 export interface FatigueData {
   muscles: MuscleFatigue[]
   readinessScore: number
+  // Whole-body fatigue — the cardiovascular/central cost of recent training,
+  // which no single muscle's level can express. Cardio and metcons load this.
+  systemicFatigue: number
+  systemicRecoveryTargetAt: string | null
   // Server-computed banding — prefer this over re-thresholding readinessScore
   // on the client, so the cutoffs stay in one place (readiness.service.ts).
   readinessStatus: ReadinessStatus
   fitnessLevel: FitnessLevel
+}
+
+// Training load — the weeks-long trend, as opposed to today's soreness
+export type LoadTrend = 'ramping' | 'building' | 'maintaining' | 'detraining'
+export type FormState = 'fresh' | 'neutral' | 'tired' | 'overreaching'
+
+export interface TrainingLoad {
+  /** Chronic load: accumulated fitness, sRPE units per day */
+  fitness: number
+  /** Acute load: recent work not yet absorbed */
+  fatigue: number
+  /** fitness − fatigue; positive is fresh */
+  form: number
+  /** Acute:chronic ratio; null until there is enough history */
+  ratio: number | null
+  trend: LoadTrend
+  formState: FormState
+  weeklyLoad: number
+  previousWeeklyLoad: number
+  sessionCount: number
+  /** False until enough sessions exist for the numbers to mean anything */
+  established: boolean
 }
 
 // Exercise
