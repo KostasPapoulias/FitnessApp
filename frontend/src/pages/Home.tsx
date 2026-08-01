@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
 import MuscleMap from '../components/muscle/MuscleMap'
+import { useDeviceTilt } from '../hooks/useDeviceTilt'
 import MuscleFatiguePopup from '../components/muscle/MuscleFatiguePopup'
 
 export default function Home() {
@@ -9,6 +10,9 @@ export default function Home() {
   const { fetchFatigue, readinessScore, isLoading, selectedMuscle } = useFatigueStore()
   const [side, setSide] = useState<'front' | 'back'>('front')
   const [aiVisible, setAiVisible] = useState(true)
+  // Degrees of counter-rotation from the phone's tilt. Always 0 on desktop,
+  // and on any device that declines the sensor.
+  const tilt = useDeviceTilt()
 
   useEffect(() => {
     fetchFatigue()
@@ -85,11 +89,26 @@ export default function Home() {
           </button>
         </div>
 
-        {/* The SVG map */}
+        {/* The SVG map.
+            On a phone it counter-rotates a few degrees against how the device
+            is held, so it reads as hanging level with the ground rather than
+            being painted on the screen. Transform only — no layout is affected,
+            so nothing below it moves. */}
         <div className="w-full max-w-[220px] h-[360px] mt-12">
           {isLoading
             ? <div className="w-full h-full bg-dark-800 rounded-2xl animate-pulse" />
-            : <MuscleMap side={side} />
+            : (
+              <div
+                className="w-full h-full"
+                style={{
+                  transform: `rotate(${tilt}deg) translateX(${tilt * 0.9}px)`,
+                  transformOrigin: '50% 22%',   // pivots near the shoulders, like it hangs from there
+                  willChange: tilt === 0 ? undefined : 'transform',
+                }}
+              >
+                <MuscleMap side={side} />
+              </div>
+            )
           }
         </div>
 
