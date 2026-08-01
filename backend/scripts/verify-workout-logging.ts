@@ -168,6 +168,212 @@ async function main() {
       check('fully-recovered muscle reads as 0, not its stored 80',
         getEffectiveFatigueLevel(rec) === 0, `got ${getEffectiveFatigueLevel(rec)}`)
     }
+
+    // ── a metcon fatigues EVERY movement in it, not just the first ────────
+    // The live view logged one set at the store's current exercise index,
+    // which a WOD never advances, so movements 2..n were silently ignored.
+    console.log('\n[WOD covers every movement]')
+    const wodMoves = await prisma.exercise.findMany({
+      where: { modality: { name: 'WOD' } },
+      include: { muscleLinks: true },
+      take: 3,
+    })
+    if (wodMoves.length === 3) {
+      const s4 = await prisma.workoutSession.create({ data: { userId: user.id } })
+      const repsPerRound = [5, 10, 15]
+      for (const [i, move] of wodMoves.entries()) {
+        const we = await prisma.workoutExercise.create({
+          data: { sessionId: s4.id, exerciseId: move.id, orderIndex: i + 1 },
+        })
+        const st = await prisma.workoutSet.create({
+          data: { workoutExerciseId: we.id, setNumber: 1, setType: 'WOD', rpe: 8 },
+        })
+        await prisma.setWOD.create({
+          data: { setId: st.id, time: 720, reps: repsPerRound[i], rounds: 8 },
+        })
+      }
+      const metcon = await finishViaController(prisma, user.id, s4.id, 720)
+      const hit = new Set(metcon.musclesAffected.map((m: any) => m.muscleId))
+      const expected = new Set(wodMoves.flatMap(m => m.muscleLinks.map(l => l.muscleId)))
+      const missed = [...expected].filter(id => !hit.has(id))
+      check('every movement in the metcon contributes fatigue',
+        missed.length === 0, `${missed.length} of ${expected.size} muscles got nothing`)
+
+      // The movements share one clock, so scoring them individually would
+      // multiply the workout by the number of movements.
+      const s5 = await prisma.workoutSession.create({ data: { userId: user.id } })
+      const soloWe = await prisma.workoutExercise.create({
+        data: { sessionId: s5.id, exerciseId: wodMoves[0].id, orderIndex: 1 },
+      })
+      const soloSet = await prisma.workoutSet.create({
+        data: { workoutExerciseId: soloWe.id, setNumber: 1, setType: 'WOD', rpe: 8 },
+      })
+      await prisma.setWOD.create({
+        data: { setId: soloSet.id, time: 720, reps: 30, rounds: 8 },
+      })
+      const solo = await finishViaController(prisma, user.id, s5.id, 720)
+      const total = (r: any) => r.musclesAffected.reduce((a: number, m: any) => a + m.delta, 0)
+      // Same duration, same total reps — the metcon spread over three movements
+      // may land on more muscles, but must not cost several times as much.
+      check('a 3-movement metcon is scored once, not once per movement',
+        total(metcon) < total(solo) * 2.5,
+        `3-movement ${Math.round(total(metcon))} vs 1-movement ${Math.round(total(solo))}`)
+    }
+
+    // ── cardio produces real fatigue, and loads the systemic channel ──────
+    console.log('\n[cardio]')
+    const cardioEx = await prisma.exercise.findFirst({
+      where: { modality: { name: 'Cardio' } }, include: { muscleLinks: true },
+    })
+    if (cardioEx) {
+      const runSession = async (seconds: number, rpe: number) => {
+        const s = await prisma.workoutSession.create({ data: { userId: user.id } })
+        const we = await prisma.workoutExercise.create({
+          data: { sessionId: s.id, exerciseId: cardioEx.id, orderIndex: 1 },
+        })
+        const st = await prisma.workoutSet.create({
+          data: { workoutExerciseId: we.id, setNumber: 1, setType: 'CARDIO', rpe },
+        })
+        await prisma.setCardio.create({ data: { setId: st.id, time: seconds, distance: seconds / 300 } })
+        return finishViaController(prisma, user.id, s.id, seconds)
+      }
+
+      const short = await runSession(180, 6)     // 3 minute jog
+      check('a short run still registers on the muscles it uses',
+        short.musclesAffected.length > 0 && short.musclesAffected.some((m: any) => m.delta > 0),
+        `musclesAffected=${short.musclesAffected.length}`)
+      check('cardio contributes no kg volume', short.totalVolume === 0, `got ${short.totalVolume}`)
+      check('cardio produces systemic load', short.systemicLoad > 0, `got ${short.systemicLoad}`)
+
+      const hard = await runSession(3600, 8)     // an hour, hard
+      const shortDelta = short.musclesAffected.reduce((a: number, m: any) => a + m.delta, 0)
+      const hardDelta = hard.musclesAffected.reduce((a: number, m: any) => a + m.delta, 0)
+      check('an hour hard costs far more than three easy minutes',
+        hardDelta > shortDelta * 5, `${Math.round(shortDelta)} vs ${Math.round(hardDelta)}`)
+
+      const sys = await prisma.systemicFatigue.findUnique({ where: { userId: user.id } })
+      check('systemic fatigue is persisted for the user', (sys?.level ?? 0) > 0,
+        `level=${sys?.level}`)
+      check('systemic fatigue has a recovery target', sys?.recoveryTargetAt != null)
+
+      const { getUserReadiness } = await import('../src/services/readiness.service')
+      const readiness = await getUserReadiness(user.id)
+      check('readiness reflects systemic fatigue after cardio',
+        readiness.systemicFatigue > 0 && readiness.readinessScore < 100,
+        `score=${readiness.readinessScore} systemic=${readiness.systemicFatigue}`)
+    }
+
+    // ── relative load: the same session costs a strong and a weak lifter alike
+    console.log('\n[relative load]')
+    if (strength) {
+      const benchSession = async (weight: number, e1rm: number) => {
+        await prisma.exerciseStrengthEstimate.upsert({
+          where: { userId_exerciseId: { userId: user.id, exerciseId: strength.id } },
+          update: { e1rm }, create: { userId: user.id, exerciseId: strength.id, e1rm },
+        })
+        const s = await prisma.workoutSession.create({ data: { userId: user.id } })
+        const we = await prisma.workoutExercise.create({
+          data: { sessionId: s.id, exerciseId: strength.id, orderIndex: 1 },
+        })
+        const st = await prisma.workoutSet.create({
+          data: { workoutExerciseId: we.id, setNumber: 1, setType: 'STRENGTH', rpe: 8 },
+        })
+        await prisma.setStrength.create({ data: { setId: st.id, reps: 5, weight } })
+        const r = await finishViaController(prisma, user.id, s.id, 600)
+        return r.musclesAffected.reduce((a: number, m: any) => a + m.delta, 0)
+      }
+      // Same relative effort at double the absolute load: under the old
+      // tonnage model the strong lifter accrued exactly twice the fatigue.
+      const weak = await benchSession(60, 72)
+      const strong = await benchSession(120, 144)
+      check('doubling absolute load at the same relative effort does not double fatigue',
+        Math.abs(strong - weak) < weak * 0.2, `weak ${weak.toFixed(1)} vs strong ${strong.toFixed(1)}`)
+
+      const light = await benchSession(40, 144)  // same lifter, easy weight
+      check('a light set costs less than a near-limit one',
+        light < strong * 0.8, `light ${light.toFixed(1)} vs heavy ${strong.toFixed(1)}`)
+    }
+
+    // ── running vs cycling: the damage-profile fix ───────────────────────
+    // impactFactor alone had cycling (quads 0.7) beating running (quads 0.6),
+    // so the model called a bike ride harder on the legs than a run.
+    console.log('\n[mechanical damage profile]')
+    const running = await prisma.exercise.findFirst({ where: { name: 'Running' } })
+    const cycling = await prisma.exercise.findFirst({ where: { name: 'Cycling' } })
+    if (running && cycling) {
+      check('seed applied damage factors',
+        running.damageFactor > cycling.damageFactor,
+        `running ${running.damageFactor} vs cycling ${cycling.damageFactor}`)
+      check('seed applied reference speeds',
+        (cycling.referenceSpeedKmh ?? 0) > (running.referenceSpeedKmh ?? 0),
+        `running ${running.referenceSpeedKmh} vs cycling ${cycling.referenceSpeedKmh}`)
+
+      const legLoad = async (ex: { id: string }, seconds: number, km: number) => {
+        const s = await prisma.workoutSession.create({ data: { userId: user.id } })
+        const we = await prisma.workoutExercise.create({
+          data: { sessionId: s.id, exerciseId: ex.id, orderIndex: 1 },
+        })
+        const st = await prisma.workoutSet.create({
+          data: { workoutExerciseId: we.id, setNumber: 1, setType: 'CARDIO', rpe: 6 },
+        })
+        await prisma.setCardio.create({ data: { setId: st.id, time: seconds, distance: km } })
+        const r = await finishViaController(prisma, user.id, s.id, seconds)
+        const quads = r.musclesAffected.find((m: any) => m.muscleName === 'Quadriceps')
+        return quads?.delta ?? 0
+      }
+
+      // 30 minutes each, at the distance each activity actually covers
+      const ranQuads = await legLoad(running, 1800, 5)
+      const cycledQuads = await legLoad(cycling, 1800, 12.5)
+      check('running beats up the legs harder than cycling of the same length',
+        ranQuads > cycledQuads,
+        `running ${ranQuads.toFixed(1)} vs cycling ${cycledQuads.toFixed(1)}`)
+
+      // Distance has to matter: same clock, more ground covered
+      const shortRun = await legLoad(running, 1800, 4)
+      const longRun = await legLoad(running, 1800, 8)
+      check('covering more ground in the same time costs more',
+        longRun > shortRun * 1.5, `4km ${shortRun.toFixed(1)} vs 8km ${longRun.toFixed(1)}`)
+
+      // …and its absence must not zero the session out (treadmill, no GPS)
+      const noDistance = await legLoad(running, 1800, 0)
+      check('a run logged without distance still counts, on time alone',
+        noDistance > 0, `got ${noDistance.toFixed(1)}`)
+    }
+
+    // ── acute vs chronic training load ───────────────────────────────────
+    console.log('\n[training load]')
+    {
+      const { getTrainingLoad, computeTrainingLoad } = await import('../src/services/training-load.service')
+
+      const live = await getTrainingLoad(user.id)
+      check('training load reads back the sessions just finished',
+        live.sessionCount > 0 && live.fitness > 0,
+        `sessions=${live.sessionCount} fitness=${live.fitness}`)
+
+      // Steady training must not be flagged as a spike — the cold-start bug
+      // scored a consistent 8-week block at 1.58 and called it overreaching.
+      const steady: { daysAgo: number; load: number }[] = []
+      for (let d = 0; d < 56; d++) if (d % 7 < 4) steady.push({ daysAgo: d, load: 200 })
+      const steadyLoad = computeTrainingLoad(steady, steady.length)
+      check('8 steady weeks read as a normal ratio, not a spike',
+        steadyLoad.ratio != null && steadyLoad.ratio > 0.85 && steadyLoad.ratio < 1.2,
+        `ratio ${steadyLoad.ratio} (${steadyLoad.trend})`)
+
+      const spike = steady.map(x => (x.daysAgo < 7 ? { ...x, load: 700 } : x))
+      const spikeLoad = computeTrainingLoad(spike, spike.length)
+      check('a sudden heavy week is flagged as ramping',
+        spikeLoad.trend === 'ramping', `ratio ${spikeLoad.ratio} (${spikeLoad.trend})`)
+
+      const layoff = computeTrainingLoad(steady.filter(x => x.daysAgo >= 14), 32)
+      check('a two-week layoff reads as detraining and fresh',
+        layoff.trend === 'detraining' && layoff.form > 0,
+        `ratio ${layoff.ratio} form ${layoff.form} (${layoff.trend}/${layoff.formState})`)
+
+      const rookie = computeTrainingLoad([{ daysAgo: 1, load: 250 }], 1)
+      check('a single session reports no ratio rather than a false spike',
+        rookie.ratio === null && !rookie.established, `ratio ${rookie.ratio}`)
+    }
   } finally {
     await prisma.user.delete({ where: { id: user.id } })
     console.log(`\ntest user removed`)
