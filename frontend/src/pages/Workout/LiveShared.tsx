@@ -1,4 +1,5 @@
-import { rpeColor, rpeTint } from './helpers'
+import { useState } from 'react'
+import { rpeColor, rpeTint, rpeLabel } from './helpers'
 
 // Payload logged to the store when a set/hold completes
 export interface LogPayload {
@@ -9,6 +10,7 @@ export interface LogPayload {
   duration?: number   // seconds under tension for isometric holds
   distance?: number   // cardio / wod
   time?: number       // cardio / wod
+  rounds?: number     // wod rounds completed
 }
 
 // Callbacks ActiveWorkout hands to every modality view
@@ -95,6 +97,76 @@ export function RpeRow({ value, onPick }: { value: number; onPick: (n: number) =
             }}>{n}</button>
         )
       })}
+    </div>
+  )
+}
+
+// ── end-of-effort RPE prompt ──
+// Cardio and metcons used to ship a hardcoded RPE (6 and 8), which left the
+// fatigue model with no measure of how hard the session actually was — the one
+// input that separates a recovery jog from a threshold run.
+export function EffortPrompt({
+  emoji, label, title, detail, summary, initial = 7, confirmLabel = 'Save & Finish',
+  busy, onConfirm,
+}: {
+  emoji: string
+  label: string
+  title: string
+  detail: string
+  summary?: { value: string; label: string }[]
+  initial?: number
+  confirmLabel?: string
+  busy?: boolean
+  onConfirm: (rpe: number) => void
+}) {
+  const [rpe, setRpe] = useState(initial)
+
+  return (
+    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-10 pb-8 flex flex-col">
+      <div className="text-center">
+        <div className="text-[52px] leading-none">{emoji}</div>
+        <div className="flex items-center justify-center gap-1.5 text-brand-teal text-xs
+                        font-bold tracking-widest mt-3">
+          <span className="w-2 h-2 rounded-full bg-brand-teal" /> {label}
+        </div>
+        <h1 className="text-[24px] font-extrabold leading-tight mt-2">{title}</h1>
+        <p className="text-dark-300 text-sm mt-2 max-w-[300px] mx-auto">{detail}</p>
+      </div>
+
+      {summary && summary.length > 0 && (
+        <div className="grid gap-2.5 mt-6"
+          style={{ gridTemplateColumns: `repeat(${summary.length}, minmax(0, 1fr))` }}>
+          {summary.map(s => (
+            <div key={s.label} className="bg-dark-800 border border-dark-600 rounded-card py-3.5 px-1.5 text-center">
+              <div className="text-xl font-extrabold">{s.value}</div>
+              <div className="text-[10.5px] text-dark-300 mt-1">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-7">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[11px] tracking-widest text-dark-300">HOW HARD WAS IT?</span>
+          <span className="text-[13px] font-bold" style={{ color: rpeColor(rpe) }}>
+            {rpeLabel(rpe, 'standard')}
+          </span>
+        </div>
+        <RpeRow value={rpe} onPick={setRpe} />
+        <p className="text-[12px] text-dark-400 mt-3 leading-relaxed">
+          1 is barely moving, 10 is everything you had. This is what tells the app
+          how much recovery the session actually earned.
+        </p>
+      </div>
+
+      <div className="flex-1" />
+
+      <button onClick={() => onConfirm(rpe)} disabled={busy}
+        className="w-full mt-8 py-[17px] rounded-card bg-brand-teal text-black
+                   text-[17px] font-extrabold active:scale-95 transition-transform
+                   disabled:opacity-50">
+        {busy ? 'Saving…' : confirmLabel}
+      </button>
     </div>
   )
 }

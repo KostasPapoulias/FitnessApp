@@ -20,11 +20,12 @@ export const workoutService = {
     setType: string
     rpe?: number
     restSeconds?: number
-    reps?: number          // STRENGTH / CALISTHENICS
+    reps?: number          // STRENGTH / CALISTHENICS; WOD reps-per-round
     weight?: number        // STRENGTH
     addedWeight?: number   // CALISTHENICS
     distance?: number      // CARDIO / WOD
     time?: number          // CARDIO / WOD
+    rounds?: number        // WOD
     duration?: number      // MOBILITY
   }) => {
     const res = await api.post(`/workout/sessions/${sessionId}/sets`, data)

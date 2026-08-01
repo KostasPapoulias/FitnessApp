@@ -1,26 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore, WodFormat } from '../../store/useWorkoutStore'
 import { fmtTime, exerciseEmoji } from './helpers'
-import { ModalityViewProps, CoachTip, LiveStartGate } from './LiveShared'
+import { ModalityViewProps, CoachTip, LiveStartGate, EffortPrompt } from './LiveShared'
 
 const FORMATS: [WodFormat, string][] = [['amrap', 'AMRAP'], ['fortime', 'For Time'], ['emom', 'EMOM'], ['rounds', 'Rounds']]
+// exIdx -1 marks a demo movement with no WorkoutExercise behind it — nothing to log
 const DEFAULT_MOVES = [
-  { reps: 5, name: 'Pull-Ups' },
-  { reps: 10, name: 'Push-Ups' },
-  { reps: 15, name: 'Air Squats' },
+  { exIdx: -1, reps: 5, name: 'Pull-Ups' },
+  { exIdx: -1, reps: 10, name: 'Push-Ups' },
+  { exIdx: -1, reps: 15, name: 'Air Squats' },
 ]
 
 export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
   const { wodConfig, selectedExercises, completeSet } = useWorkoutStore()
 
-  // planned movements + config (fall back to a Cindy-style default)
-  const moves = selectedExercises.length
-    ? selectedExercises.map(se => ({ reps: se.sets[0]?.reps ?? 10, name: se.exercise.name }))
-    : DEFAULT_MOVES
+  // Planned movements, each keeping its index in the store so the metcon can be
+  // logged against every movement rather than only the first one.
+  const liveMoves = selectedExercises
+    .map((se, exIdx) => ({
+      exIdx,
+      reps: se.sets[0]?.reps ?? 10,
+      name: se.exercise.name,
+      skipped: Boolean(se.skipped),
+    }))
+    .filter(m => !m.skipped)
+  const moves = liveMoves.length ? liveMoves : DEFAULT_MOVES
   const CAP = wodConfig?.capSec ?? 720
   const TARGET = wodConfig?.targetRounds ?? 8
 
   const [started, setStarted] = useState(false)
+  const [rating, setRating] = useState(false)
   const [ending, setEnding] = useState(false)
   const endingRef = useRef(false)
   const [format, setFormat] = useState<WodFormat>(wodConfig?.format ?? 'amrap')
@@ -61,17 +70,36 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
     else setDone(next)
   }
 
+  const roundReps = moves.reduce((a, m) => a + m.reps, 0)
   const partialReps = done.reduce((a, d, i) => a + (d ? (moves[i]?.reps ?? 0) : 0), 0)
   const finished = !running && finishSec != null
 
-  // Log a SetWOD (elapsed time) so the session records the metcon
-  const endSession = async () => {
+  // Log the metcon against EVERY movement in it.
+  //
+  // This used to write a single set, and always at the store's current exercise
+  // index — which a metcon never advances. So a three-movement WOD only ever
+  // fatigued the first movement's muscles, and the score (rounds and reps) was
+  // thrown away entirely. Each movement now carries the shared clock plus its
+  // own reps-per-round; the backend scores the metcon once and splits it by rep
+  // contribution, so it isn't counted once per movement.
+  const endSession = async (rpe: number) => {
     // Ref guard: the summary-set request keeps this button on screen, so a
     // second tap would log the metcon twice and finish twice.
     if (endingRef.current) return
     endingRef.current = true
     setEnding(true)
-    await completeSet({ time: finishSec ?? sec, rpe: 8, restSeconds: 0 })
+
+    const elapsed = finishSec ?? sec
+    // Partial rounds count — a half-finished round is real work
+    const scoredRounds = rounds + (roundReps > 0 ? partialReps / roundReps : 0)
+
+    for (const move of moves) {
+      if (move.exIdx < 0) continue   // demo movement, nothing to log against
+      await completeSet(
+        { time: elapsed, rpe, restSeconds: 0, reps: move.reps, rounds: scoredRounds },
+        { exIdx: move.exIdx, setIdx: 0 }
+      )
+    }
     onFinish()
   }
 
@@ -83,6 +111,26 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
         title={FORMATS.find(f => f[0] === format)?.[1] ?? 'WOD'}
         detail={`${moves.length} movements${format === 'amrap' || format === 'emom' ? ` · ${fmtTime(CAP)} cap` : ` · ${TARGET} rounds`}. 3… 2… 1… press start.`}
         onStart={() => setStarted(true)}
+      />
+    )
+  }
+
+  // ── effort rating (before the sets are written) ──
+  if (rating) {
+    return (
+      <EffortPrompt
+        emoji="🔥"
+        label="METCON DONE"
+        title="Rate the effort"
+        detail="Work density and effort are what make a metcon cost what it does — the clock alone can't tell."
+        summary={[
+          { value: fmtTime(finishSec ?? sec), label: 'time' },
+          { value: String(rounds), label: 'rounds' },
+          { value: String(rounds * roundReps + partialReps), label: 'total reps' },
+        ]}
+        initial={8}
+        busy={ending}
+        onConfirm={endSession}
       />
     )
   }
@@ -114,8 +162,7 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
     clockSub = finished ? `All ${TARGET} rounds done` : (running ? `${TARGET} rounds for reps` : 'Paused')
     if (finished) { clockColor = '#00D4AA'; clockBg = '#0a2a22'; clockBorder = 'rgba(0,212,170,0.4)' }
     roundsValue = `${rounds}/${TARGET}`; roundsLabel = 'Rounds done'
-    const totalReps = moves.reduce((a, m) => a + m.reps, 0)
-    scoreValue = String(rounds * totalReps); scoreLabel = 'Total reps'
+    scoreValue = String(rounds * roundReps); scoreLabel = 'Total reps'
   }
 
   const coachTip = format === 'amrap'
@@ -223,11 +270,10 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
 
       {coachEnabled !== false && <CoachTip text={coachTip} />}
 
-      <button onClick={endSession} disabled={ending}
+      <button onClick={() => setRating(true)}
         className="w-full mt-3 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
-                   text-brand-red text-sm font-bold active:scale-95 transition-transform
-                   disabled:opacity-50">
-        {ending ? 'Ending…' : '■ End Session'}
+                   text-brand-red text-sm font-bold active:scale-95 transition-transform">
+        ■ End Session
       </button>
     </div>
   )

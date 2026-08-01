@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { fmtTime } from './helpers'
-import { ModalityViewProps, CoachTip, LiveStartGate } from './LiveShared'
+import { ModalityViewProps, CoachTip, LiveStartGate, EffortPrompt } from './LiveShared'
 
 interface Split { km: number | null; sec: number; m: number; auto: boolean }
 
@@ -14,6 +14,7 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
   const activity = selectedExercises[currentExerciseIndex]?.exercise.name ?? 'Outdoor Run'
 
   const [started, setStarted] = useState(false)
+  const [rating, setRating] = useState(false)
   const [ending, setEnding] = useState(false)
   const endingRef = useRef(false)
   const [sec, setSec] = useState(0)
@@ -57,8 +58,10 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
   }
   const effort = (d: number) => setSpeed(v => Math.min(4.6, Math.max(1.8, Math.round((v + d) * 100) / 100)))
 
-  // Log a SetCardio (distance in km, time in seconds) so history + fatigue record it
-  const endSession = async () => {
+  // Log a SetCardio (distance in km, time in seconds) so history + fatigue
+  // record it. The RPE comes from the athlete — an easy jog and a threshold
+  // effort of the same length are not the same training load.
+  const endSession = async (rpe: number) => {
     // Ref guard: the summary-set request keeps this button on screen, so a
     // second tap would log the run twice and finish twice.
     if (endingRef.current) return
@@ -69,7 +72,7 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
     await completeSet({
       distance: Math.round((meters / 1000) * 100) / 100,
       time: sec,
-      rpe: 6,
+      rpe,
       restSeconds: 0,
     })
     onFinish()
@@ -108,6 +111,26 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
         title={activity}
         detail={goalLabel ? `Target: ${goalLabel}. Press start when you begin moving.` : 'Free run. Press start when you begin moving.'}
         onStart={() => setStarted(true)}
+      />
+    )
+  }
+
+  // ── effort rating (before the set is written) ──
+  if (rating) {
+    return (
+      <EffortPrompt
+        emoji="🏃"
+        label={`${activity.toUpperCase()} DONE`}
+        title="Rate the effort"
+        detail="Recovery is driven by how hard that felt, not just how long it took."
+        summary={[
+          { value: km.toFixed(2), label: 'km' },
+          { value: fmtTime(sec), label: 'time' },
+          { value: fmtTime(paceSecPerKm), label: 'pace / km' },
+        ]}
+        initial={6}
+        busy={ending}
+        onConfirm={endSession}
       />
     )
   }
@@ -215,11 +238,10 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
           ⚑ Lap
         </button>
       </div>
-      <button onClick={endSession} disabled={ending}
+      <button onClick={() => setRating(true)}
         className="w-full mt-2.5 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
-                   text-brand-red text-sm font-bold active:scale-95 transition-transform
-                   disabled:opacity-50">
-        {ending ? 'Ending…' : '■ End Session'}
+                   text-brand-red text-sm font-bold active:scale-95 transition-transform">
+        ■ End Session
       </button>
     </div>
   )

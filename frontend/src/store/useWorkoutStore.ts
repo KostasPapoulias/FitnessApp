@@ -86,16 +86,23 @@ interface WorkoutStore {
 
   startSession: () => Promise<void>
   registerExercise: (exIdx: number) => Promise<string>
-  completeSet: (data: {
-    rpe?: number
-    restSeconds?: number
-    reps?: number       // strength / calisthenics reps; also carries mobility hold-seconds
-    weight?: number     // strength weight; also carries calisthenics added load
-    addedWeight?: number
-    duration?: number   // mobility hold seconds / calisthenics isometric hold seconds
-    distance?: number   // cardio / wod
-    time?: number       // cardio / wod
-  }) => Promise<boolean>
+  completeSet: (
+    data: {
+      rpe?: number
+      restSeconds?: number
+      reps?: number       // strength / calisthenics reps; also carries mobility
+                          // hold-seconds and WOD reps-per-round
+      weight?: number     // strength weight; also carries calisthenics added load
+      addedWeight?: number
+      duration?: number   // mobility hold seconds / calisthenics isometric hold seconds
+      distance?: number   // cardio / wod
+      time?: number       // cardio / wod
+      rounds?: number     // wod rounds completed
+    },
+    // A metcon is one effort logged against every movement in it, so it needs
+    // to write sets for exercises other than the "current" one.
+    target?: { exIdx: number; setIdx: number }
+  ) => Promise<boolean>
   finishSession: () => Promise<any>
   nextExercise: () => void
 }
@@ -334,7 +341,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     return we.id
   },
 
-  completeSet: async (data) => {
+  completeSet: async (data, target) => {
     const {
       sessionId, selectedExercises,
       currentExerciseIndex, currentSetIndex
@@ -342,8 +349,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     // Capture the target up front — awaits below must not write to a set the
     // user has since navigated away from.
-    const exIdx = currentExerciseIndex
-    const setIdx = currentSetIndex
+    const exIdx = target?.exIdx ?? currentExerciseIndex
+    const setIdx = target?.setIdx ?? currentSetIndex
 
     if (!sessionId) {
       set({ logError: 'The workout hasn’t started yet — that set was not saved.' })
@@ -390,9 +397,16 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         payload.duration = data.duration ?? data.reps ?? 0
         break
       case 'CARDIO':
+        payload.distance = data.distance
+        payload.time = data.time
+        break
       case 'WOD':
         payload.distance = data.distance
         payload.time = data.time
+        // The metcon's score. Without reps-per-round and rounds the backend
+        // only sees a clock, and can't tell 3 rounds from 15.
+        payload.reps = data.reps
+        payload.rounds = data.rounds
         break
       case 'STRENGTH':
       default:
