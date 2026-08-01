@@ -2,7 +2,7 @@ import { Request, Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { isPushConfigured } from '../lib/webpush'
-import { sendPushToUser } from '../lib/pushSender'
+import { sendNotification } from '../services/notification-sender.service'
 
 // GET /api/push/public-key
 // Unauthenticated on purpose: a VAPID public key is public by definition, and
@@ -95,24 +95,30 @@ export const sendTestPush = async (req: AuthRequest, res: Response) => {
     return
   }
 
-  const result = await sendPushToUser(req.userId!, {
+  // Goes through the ledger like any other notification, so the test also
+  // exercises the delivery-receipt path — the point is to learn whether the
+  // phone rendered it, not merely whether Apple accepted it.
+  const result = await sendNotification({
+    userId: req.userId!,
+    type: 'test',
     title: '🔔 SomaTrack test',
     body: 'Push delivery works. Lock the phone and close the app — the next one should still arrive.',
-    // Its own tag, so a test never silently replaces (or is replaced by) the
-    // debug reminder firing every minute alongside it.
-    tag: 'somatrack-test',
-    url: '/'
+    // The tap is the consent; a test that silently no-ops teaches nothing
+    bypassPreferences: true,
   })
 
-  if (result.sent === 0) {
+  if (result.status !== 'sent') {
     res.status(404).json({
       success: false,
-      error: result.removed > 0
-        ? 'This device’s subscription had expired and was removed. Toggle Push Notifications off and back on.'
+      error: result.status === 'failed'
+        ? 'No device accepted the push. Toggle Push Notifications off and back on.'
         : 'No push subscriptions registered for this account. Turn on Push Notifications first.'
     })
     return
   }
 
-  res.json({ success: true, data: result })
+  res.json({
+    success: true,
+    data: { sent: result.devices, notificationId: result.notificationId }
+  })
 }

@@ -13,6 +13,7 @@ import aiRoutes from './routes/ai.routes';
 import calendarRoutes from './routes/calendar.routes';
 import profileRoutes from './routes/profile.routes';
 import pushRoutes from './routes/push.routes';
+import notificationRoutes from './routes/notification.routes';
 import { startPushReminder } from './lib/pushReminder';
 
 // Types
@@ -54,6 +55,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 // 404 handler

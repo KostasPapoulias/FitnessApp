@@ -6,6 +6,7 @@ import {
   subscribe,
   unsubscribe,
 } from '../controllers/push.controller'
+import { ackNotification } from '../controllers/notification.controller'
 import { verifyToken } from '../middleware/auth.middleware'
 
 const router = Router()
@@ -27,6 +28,13 @@ router.get('/public-key', getPublicKey)
  * @returns moves an existing subscription onto its replacement endpoint
  */
 router.post('/rotate', rotateSubscription)
+
+/**
+ * @route POST /api/push/ack
+ * @public — authorised by the notification's UUID, which only that push carried
+ * @returns records that a notification was displayed, tapped or dismissed
+ */
+router.post('/ack', ackNotification)
 
 // ── authenticated routes ──
 router.use(verifyToken)

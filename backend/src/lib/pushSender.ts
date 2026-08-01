@@ -11,6 +11,12 @@ export interface PushPayload {
   tag?: string
   /** Path opened when the notification is tapped */
   url?: string
+  /**
+   * Notification ledger id. The service worker posts it back on display and on
+   * tap, which is the only delivery receipt web push offers — the push service
+   * accepting a payload says nothing about whether a phone ever showed it.
+   */
+  nid?: string
 }
 
 export interface PushResult {

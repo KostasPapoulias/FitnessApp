@@ -30,6 +30,53 @@ model User {
   systemicFatigue       SystemicFatigue?
   strengthEstimates     ExerciseStrengthEstimate[]
   aiUsage               AiUsageDaily[]
+  notificationPref      NotificationPreference?
+  notificationTypePrefs NotificationTypePref[]
+}
+
+// Notification opt-in. EVERY flag defaults false, and there is no backfill:
+// existing users — including anyone who already has a PushSubscription — get
+// nothing until they choose it. A subscription is permission to DELIVER, not
+// permission to send.
+model NotificationPreference {
+  userId           String    @id
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /** Master switch. Off ⇒ nothing sends, whatever else is set. */
+  pushEnabled      Boolean   @default(false)
+  /** Rule-driven notifications: readiness, overreaching, inactivity. Never
+   *  auto-suspends — the overreaching warning matters most exactly when the
+   *  athlete has stopped paying attention. */
+  essentialEnabled Boolean   @default(false)
+  /** AI-planned coaching nudges. Suspends itself when ignored. */
+  coachEnabled     Boolean   @default(false)
+
+  /** IANA zone from the browser. Without it no reminder can be timed to a
+   *  local hour, which is why every timed rule depends on this field. */
+  timezone         String    @default("UTC")
+  /** Local hours. Wraps midnight when start > end, which is the normal case. */
+  quietStartHour   Int       @default(22)
+  quietEndHour     Int       @default(8)
+  /** Hard ceiling the scheduler enforces. The planner proposes; this disposes. */
+  dailyCap         Int       @default(3)
+
+  /** Consecutive coach notifications shown but never opened. Only counts ones
+   *  confirmed DISPLAYED — a push lost to a flat battery is not disinterest. */
+  ignoredStreak    Int       @default(0)
+  coachSuspendedAt DateTime?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// Per-type opt-in, also default-off. Absence of a row means "not enabled".
+model NotificationTypePref {
+  userId  String
+  type    String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled Boolean @default(false)
+
+  @@id([userId, type])
 }
 
 // Per-day AI spend, so one user cannot run the bill up without limit. Written
@@ -412,6 +459,13 @@ model AIChat {
   @@index([threadId, dateTime])
 }
 
+// One row is a notification's entire life: planned → sent → displayed → clicked.
+//
+// Everything reads off this table — the daily cap, per-type cooldowns, dedupe,
+// ghost-subscription detection, the coach's engagement streak, and the history
+// screen. It is also the only honest record of what actually reached the phone:
+// a push service accepting a payload says nothing about delivery, so `sentAt`
+// and `displayedAt` mean genuinely different things.
 model Notification {
   id        String   @id @default(uuid())
   userId    String
@@ -419,7 +473,28 @@ model Notification {
   type      String
   title     String
   body      String
-  status    String   @default("unread")
+  /** planned | sent | displayed | clicked | dismissed | failed */
+  status    String   @default("planned")
+  /** essential | coach */
+  tier      String   @default("essential")
+  /** rule | ai — whether a rule or the planner produced the wording */
+  source    String   @default("rule")
+
+  /** Blocks the same nudge repeating. Typically type + local day. */
+  dedupeKey String?
+  /** When the scheduler should send it. Null ⇒ send on the next tick. */
+  plannedFor DateTime?
+
   createdAt DateTime @default(now())
-  sentAt    DateTime?
+  /** Handed to the push service and accepted. NOT proof of delivery. */
+  sentAt      DateTime?
+  /** The service worker confirmed it rendered. This is the delivery receipt. */
+  displayedAt DateTime?
+  clickedAt   DateTime?
+  dismissedAt DateTime?
+  /** Why a send failed, when it did */
+  failReason  String?
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, status, plannedFor])
 }
