@@ -30,6 +30,37 @@ export interface NotificationRecord {
   failReason: string | null
 }
 
+/**
+ * The types a user can switch individually.
+ *
+ * `coach_nudge` is deliberately absent: the AI tier is controlled by the
+ * `coachEnabled` flag rather than a per-type row, because the suspension and
+ * backoff logic keys off that flag. A type row would let the two disagree.
+ */
+export const NOTIFICATION_CATALOGUE = [
+  {
+    type: 'readiness_ready',
+    icon: '💪',
+    label: 'Recovered and ready',
+    description: 'When your readiness is high and you haven’t trained yet that day.',
+  },
+  {
+    type: 'overreaching',
+    icon: '⚠️',
+    label: 'Injury risk warning',
+    description: 'When your recent load spikes well above what you’re conditioned for.',
+    /** Disabling gets a confirm — it fires exactly when you feel fine and are
+     *  about to train through it, which is when it is easiest to dismiss. */
+    safety: true,
+  },
+  {
+    type: 'inactivity',
+    icon: '🏋️',
+    label: 'Been a while',
+    description: 'When you haven’t logged a session for a few days.',
+  },
+] as const
+
 export const notificationService = {
   getPreferences: async (): Promise<NotificationPreferences> => {
     const res = await api.get('/notifications/preferences')

@@ -7,7 +7,6 @@ import { useNotifications } from '../hooks/useNotifcations'
 import { FormState, LoadTrend, TrainingLoad } from '../types'
 import {
   NotificationPreferences,
-  deviceTimezone,
   notificationService,
 } from '../services/notification.service'
 
@@ -383,7 +382,9 @@ export default function Profile() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { readinessScore, systemicFatigue, trainingLoad, fetchTrainingLoad } = useFatigueStore()
-  const { sendTestPush, subscribeToPush, unsubscribeFromPush, isPushSubscribed } = useNotifications()
+  // Only needs to READ the state here — enabling, testing and per-type choices
+  // all live on the Notifications screen now.
+  const { isPushSubscribed } = useNotifications()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -393,9 +394,6 @@ export default function Profile() {
   const [aiConsent, setAiConsent]           = useState(true)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [pushEnabled, setPushEnabled]       = useState(false)
-  const [pushBusy, setPushBusy]             = useState(false)
-  const [testBusy, setTestBusy]             = useState(false)
-  const [coachBusy, setCoachBusy]           = useState(false)
   const [prefs, setPrefs]                   = useState<NotificationPreferences | null>(null)
 
   useEffect(() => {
@@ -458,76 +456,6 @@ export default function Profile() {
   const handleLogout = () => {
     logout()
     navigate('/login')
-  }
-
-  // Asks the SERVER to push to this account's devices. An in-page notification
-  // would prove nothing about the case that matters — app closed, screen locked
-  // — since only a push routed through APNs exercises that path.
-  const handleTestPush = async () => {
-    setTestBusy(true)
-    try {
-      const res = await sendTestPush()
-      const count = res?.data?.sent ?? 0
-      alert(
-        `Test push sent to ${count} device${count === 1 ? '' : 's'}.\n\n` +
-        'Lock the phone or swipe the app away — it should still arrive.'
-      )
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err?.message || 'Test push failed.')
-    } finally {
-      setTestBusy(false)
-    }
-  }
-
-  // The master switch. Turning it on subscribes the device AND opts into the
-  // essential tier — those are the baseline notifications, and a subscription
-  // with nothing enabled would be a toggle that visibly does nothing.
-  const handleTogglePush = async (next: boolean) => {
-    setPushBusy(true)
-    try {
-      if (next) {
-        const ok = await subscribeToPush()
-        if (!ok) {
-          alert('Could not enable push notifications. On iPhone, make sure you opened this from the home screen icon (not Safari), and use iOS 16.4+.')
-          return
-        }
-        // The device's zone travels with the opt-in: nothing timed can be
-        // scheduled until the server knows what "9am" means for this user.
-        // Only flip the UI once the server has recorded consent — if this
-        // rejects, the device is subscribed but opted out, and showing On
-        // would promise notifications that never come.
-        const saved = await notificationService.updatePreferences({
-          pushEnabled: true,
-          essentialEnabled: true,
-          timezone: deviceTimezone(),
-        })
-        setPrefs(saved)
-        setPushEnabled(saved.pushEnabled)
-      } else {
-        await unsubscribeFromPush()
-        setPrefs(await notificationService.updatePreferences({
-          pushEnabled: false,
-          coachEnabled: false,
-        }))
-        setPushEnabled(false)
-      }
-    } catch (err: any) {
-      alert(`Push ${next ? 'subscription' : 'unsubscription'} failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`)
-    } finally {
-      setPushBusy(false)
-    }
-  }
-
-  // AI coaching nudges — a separate, explicit opt-in on top of push
-  const handleToggleCoach = async (next: boolean) => {
-    setCoachBusy(true)
-    try {
-      setPrefs(await notificationService.updatePreferences({ coachEnabled: next }))
-    } catch (err: any) {
-      alert(err?.response?.data?.error || 'Could not update coaching notifications.')
-    } finally {
-      setCoachBusy(false)
-    }
   }
 
   // Readiness color
@@ -748,54 +676,19 @@ export default function Profile() {
 
           <div className="h-px bg-dark-700 mx-4" />
 
-          <SettingsRow
-            icon="📲"
-            label="Push Notifications"
-            sublabel={pushBusy
-              ? 'Updating...'
-              : pushEnabled
-                ? 'On — arrives with the app closed or the phone locked'
-                : 'Off — add to Home Screen first on iPhone'}
-            right={
-              <Toggle value={pushEnabled} onChange={handleTogglePush} />
-            }
-          />
-
-          <div className="h-px bg-dark-700 mx-4" />
-
-          {/* The AI tier, opted into separately. It suspends itself when
-              ignored; the essential ones above keep running regardless. */}
-          <SettingsRow
-            icon="🤖"
-            label="AI Coaching Nudges"
-            sublabel={
-              !pushEnabled ? 'Turn on Push Notifications first' :
-              coachBusy ? 'Updating...' :
-              prefs?.coachSuspendedAt ? 'Paused — you weren’t opening them' :
-              prefs?.coachEnabled ? `Adaptive, up to ${prefs.dailyCap}/day` :
-              'Off — coaching messages timed to your training'
-            }
-            right={
-              <Toggle
-                value={Boolean(prefs?.coachEnabled) && !prefs?.coachSuspendedAt}
-                onChange={pushEnabled ? handleToggleCoach : () => {}}
-              />
-            }
-          />
-
-          <div className="h-px bg-dark-700 mx-4" />
-
-          {/* Sends from the server, not the page — the only way to check that
-              delivery works when nothing of the app is running. */}
+          {/* One entry point rather than three scattered toggles — what to be
+              notified about, how often and quiet hours all live together now. */}
           <SettingsRow
             icon="🔔"
-            label="Send Test Push"
-            sublabel={testBusy
-              ? 'Sending...'
-              : pushEnabled
-                ? 'Then lock the phone — it should still arrive'
-                : 'Turn on Push Notifications first'}
-            onClick={pushEnabled && !testBusy ? handleTestPush : undefined}
+            label="Notifications"
+            sublabel={
+              !pushEnabled ? 'Off — choose what to be notified about' :
+              prefs?.coachSuspendedAt ? 'On · AI coaching paused' :
+              prefs?.coachEnabled ? `On · AI coaching, up to ${prefs.dailyCap}/day` :
+              `On · up to ${prefs?.dailyCap ?? 3}/day`
+            }
+            right={<span className="text-dark-400 text-lg">›</span>}
+            onClick={() => navigate('/profile/notifications')}
           />
 
           <div className="h-px bg-dark-700 mx-4" />

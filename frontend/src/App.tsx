@@ -10,6 +10,7 @@ import Calendar from './pages/Calendar'
 import AIChat from './pages/AIChat'
 import AIChatHub from './pages/AIChatHub'
 import Profile from './pages/Profile'
+import NotificationSettings from './pages/NotificationSettings'
 import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="ai" element={<AIChatHub />} />
           <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="profile/notifications" element={<NotificationSettings />} />
           <Route path="workout/plan" element={<PlanSets />} />
           <Route path="workout/plan/cardio" element={<CardioPlan />} />
           <Route path="workout/plan/mobility" element={<MobilityPlan />} />
