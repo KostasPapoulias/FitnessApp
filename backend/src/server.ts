@@ -14,7 +14,9 @@ import calendarRoutes from './routes/calendar.routes';
 import profileRoutes from './routes/profile.routes';
 import pushRoutes from './routes/push.routes';
 import notificationRoutes from './routes/notification.routes';
+import securityRoutes from './routes/security.routes';
 import { startNotificationScheduler } from './lib/notificationScheduler';
+import { apiLimiter } from './middleware/rateLimit.middleware';
 
 // Types
 export interface AuthRequest extends Request {
@@ -32,6 +34,13 @@ const port = process.env.PORT || 3001;
 // process) — see src/lib/prisma.ts.
 export { default as prisma } from './lib/prisma';
 
+// Railway terminates TLS at its proxy, so req.ip is the proxy's address unless
+// Express is told to read X-Forwarded-For. Without this every rate limit keys
+// on one IP and a single noisy client locks out everyone. Set to 1 rather than
+// `true`: trusting the whole chain lets a client spoof the header and sidestep
+// the limits entirely.
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
@@ -46,6 +55,10 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'SomaTrack API is running' });
 });
 
+// Backstop against a runaway client or a scraper. Mounted after /health so
+// uptime checks are never throttled.
+app.use('/api', apiLimiter);
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/exercises', exerciseRoutes);
@@ -56,6 +69,7 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/security', securityRoutes);
 
 
 // 404 handler

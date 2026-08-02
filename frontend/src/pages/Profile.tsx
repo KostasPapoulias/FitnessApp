@@ -694,6 +694,16 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
+            icon="🔒"
+            label="Security"
+            sublabel="PIN lock, password, sessions"
+            right={<span className="text-dark-400 text-lg">›</span>}
+            onClick={() => navigate('/profile/security')}
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
             icon="📊"
             label="Export Data"
             sublabel="Download your workout history"

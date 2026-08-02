@@ -11,6 +11,7 @@ import AIChat from './pages/AIChat'
 import AIChatHub from './pages/AIChatHub'
 import Profile from './pages/Profile'
 import NotificationSettings from './pages/NotificationSettings'
+import SecuritySettings from './pages/SecuritySettings'
 import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
@@ -26,6 +27,8 @@ import StartWorkout from './pages/Workout/StartWorkout'
 import ExerciseDetail from './pages/Workout/ExerciseDetail'
 import { useNotifications } from './hooks/useNotifcations'
 import { Capacitor } from '@capacitor/core'
+import PinLock from './components/security/PinLock'
+import { useAppLock } from './hooks/useAppLock'
 // Protected route wrapper
 const Protected = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore()
@@ -35,6 +38,7 @@ const Protected = ({ children }: { children: React.ReactNode }) => {
 export default function App() {
   const { fetchMe, isAuthenticated } = useAuthStore()
   const { requestPermission, scheduleInactivityReminder, ensurePushSubscription } = useNotifications()
+  const { locked, unlock } = useAppLock(isAuthenticated)
 
   // On app load, verify token is still valid
   useEffect(() => {
@@ -61,6 +65,10 @@ export default function App() {
     if (!isAuthenticated || Capacitor.isNativePlatform()) return
     ensurePushSubscription()
   }, [isAuthenticated])
+
+  // Sits over everything once unlocked state is known. Rendered before the
+  // router so no screen — and no data on it — is ever visible behind it.
+  if (locked) return <PinLock onUnlock={unlock} />
 
   return (
     <BrowserRouter>
@@ -90,6 +98,7 @@ export default function App() {
           <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
           <Route path="profile/notifications" element={<NotificationSettings />} />
+          <Route path="profile/security" element={<SecuritySettings />} />
           <Route path="workout/plan" element={<PlanSets />} />
           <Route path="workout/plan/cardio" element={<CardioPlan />} />
           <Route path="workout/plan/mobility" element={<MobilityPlan />} />
