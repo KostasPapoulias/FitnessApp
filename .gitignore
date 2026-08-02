@@ -63,6 +63,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Working notes and session records — local only, not part of the codebase
+docs/
+
 # Capacitor
 /node_modules
 /www
