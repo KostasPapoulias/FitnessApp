@@ -15,6 +15,13 @@ model User {
   email                 String                  @unique
   password              String
   createdAt             DateTime                @default(now())
+  /**
+   * Bumped to invalidate every token this user holds. Tokens carry the value
+   * they were signed with, so incrementing it makes all of them stale at once
+   * — the only way to revoke a stateless JWT before it expires. Changing a
+   * password bumps it too, so a stolen token dies with the password.
+   */
+  tokenVersion          Int                     @default(0)
   profile               UserProfile?
   settings              Settings?
   biometrics            Biometric[]
@@ -137,6 +144,17 @@ model Settings {
   inactivityDaysThreshold Int      @default(3)
   theme                   String   @default("dark")
   aiConsentEnabled        Boolean  @default(true)
+
+  /**
+   * Optional screen lock. Bcrypt-hashed like a password — a PIN is short
+   * enough to brute force offline if it were ever stored reversibly.
+   * Null means the user has not set one.
+   */
+  pinHash                 String?
+  /** Consecutive wrong entries. A 4-digit PIN is 10,000 guesses without this. */
+  pinFailedAttempts       Int      @default(0)
+  /** Set after too many failures; entry is refused until it passes. */
+  pinLockedUntil          DateTime?
 }
 
 model Biometric {

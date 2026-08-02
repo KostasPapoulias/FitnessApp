@@ -1,5 +1,7 @@
 import { Response } from 'express';
 import bcrypt from 'bcrypt';
+import { JWT_SECRET, JWT_EXPIRES_IN } from '../lib/env';
+import { normalizeEmail, validatePassword } from '../services/credentials.service';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../server';
 import { AuthRequest } from '../server';
@@ -15,17 +17,33 @@ interface LoginBody {
   password: string;
 }
 
+/**
+ * Tokens carry the user's tokenVersion at issue time. The middleware compares
+ * it against the stored value, so incrementing that column revokes every token
+ * outstanding for the user — the only way to retire a stateless JWT early.
+ */
+const signToken = (userId: string, tokenVersion: number): string =>
+  jwt.sign(
+    { userId, tv: tokenVersion },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
+  );
+
 // POST /api/auth/register
 export const register = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { email, password, name } = req.body as RegisterBody;
+    const { email: rawEmail, password, name } = req.body as RegisterBody;
 
-    // Validate input
-    if (!email || !password) {
-      res.status(400).json({
-        success: false,
-        error: 'Email and password are required',
-      });
+    // Normalised so one address cannot become several accounts
+    const email = normalizeEmail(rawEmail);
+    if (!email) {
+      res.status(400).json({ success: false, error: 'Enter a valid email address.' });
+      return;
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.ok) {
+      res.status(400).json({ success: false, error: passwordCheck.error });
       return;
     }
 
@@ -64,20 +82,17 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         id: true,
         email: true,
         profile: true,
+        tokenVersion: true,
       },
     });
 
-    // Create token
-    const token = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '7d' }
-    );
+    const token = signToken(user.id, user.tokenVersion);
+    const { tokenVersion: _tv, ...safeUser } = user;
 
     res.status(201).json({
       success: true,
       data: {
-        user,
+        user: safeUser,
         token,
       },
     });
@@ -93,10 +108,9 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
 // POST /api/auth/login
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body as LoginBody;
+    const { email: rawEmail, password } = req.body as LoginBody;
 
-    // Validate input
-    if (!email || !password) {
+    if (!rawEmail || !password) {
       res.status(400).json({
         success: false,
         error: 'Email and password are required',
@@ -104,16 +118,21 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        password: true,
-        profile: true,
-      },
-    });
+    // Look up normalised first. Accounts created before normalisation may hold
+    // a mixed-case address, so fall back to the raw value rather than locking
+    // those people out of their own accounts.
+    const normalized = normalizeEmail(rawEmail);
+    const select = {
+      id: true,
+      email: true,
+      password: true,
+      profile: true,
+      tokenVersion: true,
+    };
+
+    const user =
+      (normalized && await prisma.user.findUnique({ where: { email: normalized }, select })) ||
+      await prisma.user.findUnique({ where: { email: String(rawEmail).trim() }, select });
 
     if (!user) {
       res.status(401).json({
@@ -134,15 +153,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Create token
-    const token = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '7d' }
-    );
+    const token = signToken(user.id, user.tokenVersion);
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    // Neither the hash nor the token version belongs in a response
+    const { password: _, tokenVersion: _tv, ...userWithoutPassword } = user;
 
     res.json({
       success: true,

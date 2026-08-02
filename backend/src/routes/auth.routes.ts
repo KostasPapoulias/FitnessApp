@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { register, login, me } from '../controllers/auth.controller';
 import { verifyToken } from '../middleware/auth.middleware';
+import { authLimiter, registerLimiter } from '../middleware/rateLimit.middleware';
 //import prisma from '../lib/prisma';
 
 const router = Router();
@@ -11,7 +12,7 @@ const router = Router();
  * @body email, password, name
  * @returns user and JWT token
  */
-router.post('/register', register);
+router.post('/register', registerLimiter, authLimiter, register);
 
 /**
  * @route POST /api/auth/login
@@ -19,7 +20,7 @@ router.post('/register', register);
  * @body email, password
  * @returns user and JWT token
  */
-router.post('/login', login);
+router.post('/login', authLimiter, login);
 
 /**
  * @route GET /api/auth/me
