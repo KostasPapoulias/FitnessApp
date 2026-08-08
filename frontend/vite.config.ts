@@ -19,6 +19,12 @@ export default defineConfig({
     },
   },
 },
+  // MapLibre parses vector tiles in a worker and creates it as a module worker.
+  // Vite's default 'iife' output cannot carry that worker's own imports, so it
+  // is emitted as ESM to match.
+  worker: {
+    format: 'es',
+  },
   build: {
     outDir: 'dist',
     sourcemap: true,

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Map as MapLibreMap, Marker,
+  AJAXError, Map as MapLibreMap, Marker, setWorkerUrl,
   type ErrorEvent, type GeoJSONSource,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { TrackPoint, splitOnGaps } from '../lib/geo'
 import api from '../services/api'
 
@@ -17,6 +18,20 @@ import api from '../services/api'
  * tool: a pan that drags the view off the athlete is pure annoyance, and every
  * touch it swallows is a touch the screen lock was meant to stop.
  */
+
+/**
+ * Point MapLibre at its own worker.
+ *
+ * Left alone it derives the worker's URL at runtime by concatenating onto
+ * `import.meta.url`, which is a reference no bundler can see — so the worker
+ * file is never emitted, the fetch 404s, and no tile is ever parsed. The map
+ * still paints the style's background colour, which is why the failure looks
+ * like a blank map rather than a broken one. Importing it as a worker makes
+ * Rollup bundle it with its own dependencies and hand back a real URL.
+ *
+ * Module scope, so it is set before any Map can be constructed.
+ */
+setWorkerUrl(maplibreWorkerUrl)
 
 const ROUTE_SOURCE = 'route'
 const ROUTE_LAYER = 'route-line'
@@ -49,10 +64,19 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
   const marker = useRef<Marker | null>(null)
   const ready = useRef(false)
   const [failed, setFailed] = useState<string | null>(null)
+  /**
+   * Why the map is empty, when it is empty but still standing.
+   *
+   * A refused style and a refused tile look identical on a phone — both leave a
+   * dark rectangle — and the difference decides whether the key or its origin
+   * allowlist is at fault. There is no console on a run, so it goes on screen.
+   */
+  const [diagnostic, setDiagnostic] = useState<string | null>(null)
 
   // ── build the map once ──
   useEffect(() => {
     let cancelled = false
+    let watchdog: number | undefined
 
     const build = async () => {
       try {
@@ -74,8 +98,18 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
           attributionControl: { compact: true },
         })
 
+        // A style that never arrives fires no 'load' and, if the request was
+        // cancelled rather than refused, no 'error' either — the map just sits
+        // there being a dark rectangle. Say so rather than let it look normal.
+        watchdog = window.setTimeout(() => {
+          if (!cancelled && !ready.current) {
+            setDiagnostic(previous => previous ?? 'Map style did not load')
+          }
+        }, 10_000)
+
         instance.on('load', () => {
           if (cancelled) return
+          window.clearTimeout(watchdog)
           instance.addSource(ROUTE_SOURCE, { type: 'geojson', data: toGeoJson(getPoints()) })
           instance.addLayer({
             id: ROUTE_LAYER,
@@ -93,9 +127,24 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
         })
 
         instance.on("error", (event: ErrorEvent) => {
-          // A tile 403 means the key is restricted to another origin, which is
-          // worth saying plainly rather than showing an empty grey box.
-          console.error('Map error:', event.error?.message ?? event)
+          const error = event.error
+          console.error('Map error:', error?.message ?? event)
+
+          // Anything that is not a failed request is a style or render
+          // complaint the user can do nothing about, and a badge they cannot
+          // act on is just noise on top of a run.
+          if (!(error instanceof AJAXError)) return
+
+          const resource =
+            error.url.includes('/style.json') ? 'style'
+            : error.url.includes('/fonts/') ? 'labels'
+            : 'tiles'
+
+          setDiagnostic(
+            error.status === 401 || error.status === 403
+              ? `Map ${resource} refused (${error.status}) — key or its allowed origins`
+              : `Map ${resource} failed (${error.status})`
+          )
         })
 
         map.current = instance
@@ -108,6 +157,7 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
 
     return () => {
       cancelled = true
+      window.clearTimeout(watchdog)
       marker.current?.remove()
       map.current?.remove()
       map.current = null
@@ -159,9 +209,20 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
   }
 
   return (
-    <div
-      ref={container}
-      className={`rounded-card overflow-hidden border border-dark-600 bg-dark-800 ${className ?? ''}`}
-    />
+    <div className={`relative ${className ?? ''}`}>
+      <div
+        ref={container}
+        className="absolute inset-0 rounded-card overflow-hidden border border-dark-600 bg-dark-800"
+      />
+      {diagnostic && (
+        // Top-left: the accuracy readout owns the right, the GPS pill the
+        // bottom-left, and MapTiler's attribution the bottom-right.
+        <div className="absolute left-2 top-2 max-w-[72%] px-2.5 py-1.5 rounded-btn
+                        bg-dark-900/85 border border-brand-red/40 text-[11px]
+                        text-brand-red font-semibold leading-snug pointer-events-none">
+          {diagnostic}
+        </div>
+      )}
+    </div>
   )
 }
