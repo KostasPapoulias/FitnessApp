@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { securityService } from '../services/security.service'
+import { useWorkoutStore } from '../store/useWorkoutStore'
 
 /**
  * Whether the app should be showing its PIN screen.
@@ -61,7 +62,15 @@ export const useAppLock = (isAuthenticated: boolean) => {
       }
       const away = hiddenSince.current ? Date.now() - hiddenSince.current : 0
       hiddenSince.current = null
-      if (away > GRACE_MS) {
+
+      // Never lock over a live session. Pressing the side button mid-run is
+      // reflexive — pocketing the phone at a crossing — and coming back to a
+      // PIN pad on top of a running clock is the opposite of what this gate is
+      // for: the phone never left the owner's hand. Read rather than
+      // subscribed, so an active workout does not re-render the lock gate.
+      const inSession = useWorkoutStore.getState().sessionId !== null
+
+      if (away > GRACE_MS && !inSession) {
         sessionStorage.removeItem(UNLOCK_KEY)
         setLocked(true)
       }

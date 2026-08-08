@@ -15,6 +15,7 @@ import profileRoutes from './routes/profile.routes';
 import pushRoutes from './routes/push.routes';
 import notificationRoutes from './routes/notification.routes';
 import securityRoutes from './routes/security.routes';
+import configRoutes from './routes/config.routes';
 import { startNotificationScheduler } from './lib/notificationScheduler';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 
@@ -70,6 +71,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/security', securityRoutes);
+app.use('/api/config', configRoutes);
 
 
 // 404 handler
