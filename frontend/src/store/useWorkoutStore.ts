@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { Exercise, WorkoutSession } from '../types'
+import { Exercise, WorkoutSession, WorkoutTemplate } from '../types'
 import { PlanSuggestion, workoutService } from '../services/workout.service'
+import { TemplateInput, templateService } from '../services/template.service'
 
 interface PlannedSet {
   reps: number
@@ -78,6 +79,15 @@ interface WorkoutStore {
   wodConfig: WodConfig | null
   setCardioTarget: (t: CardioTarget | null) => void
   setWodConfig: (c: WodConfig | null) => void
+
+  // Saved plans. Set when the planner was filled from a template, so the
+  // session that follows can be attributed to it and any standby slot closed.
+  sourceTemplateId: string | null
+  sourceScheduledId: string | null
+  /** Fill the planner from a saved plan, ready for the athlete to start it. */
+  loadTemplate: (template: WorkoutTemplate, scheduledId?: string | null) => void
+  /** Freeze what is currently planned as a reusable plan. */
+  saveAsTemplate: (name: string, notes?: string) => Promise<WorkoutTemplate>
 
   // Set / exercise editing (index-based, used by the redesigned flow)
   updateSet: (exIdx: number, setIdx: number, patch: Partial<PlannedSet>) => void
@@ -165,8 +175,84 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   wodConfig: null,
   startError: null,
   logError: null,
+  sourceTemplateId: null,
+  sourceScheduledId: null,
 
   clearErrors: () => set({ startError: null, logError: null }),
+
+  loadTemplate: (template, scheduledId = null) => {
+    const selectedExercises: SelectedExercise[] = template.exercises.map(te => ({
+      exercise: te.exercise,
+      skipped: false,
+      // Marked as edited so loadSuggestions() cannot overwrite a plan the
+      // athlete deliberately chose with numbers derived from their averages.
+      edited: true,
+      sets: te.sets.map(s => ({
+        reps: s.reps ?? 0,
+        weight: s.weight ?? 0,
+        rpe: s.rpe ?? 7,
+        restSeconds: s.restSeconds ?? 90,
+      })),
+    }))
+
+    // Cardio and WOD carry their target outside the set rows, so lift it back
+    // out of the first set rather than losing it on the round trip.
+    const first = template.exercises[0]
+    const firstSet = first?.sets[0]
+    const modality = first?.exercise.modality
+
+    set({
+      selectedExercises,
+      sourceTemplateId: template.id,
+      sourceScheduledId: scheduledId,
+      currentExerciseIndex: 0,
+      currentSetIndex: 0,
+      completedSets: [],
+      cardioTarget:
+        modality === 'Cardio' && firstSet
+          ? firstSet.distance
+            ? { type: 'distance', value: firstSet.distance / 1000 }
+            : firstSet.time
+              ? { type: 'time', value: firstSet.time }
+              : null
+          : null,
+      wodConfig: null,
+      startError: null,
+      logError: null,
+    })
+  },
+
+  saveAsTemplate: async (name, notes) => {
+    const { selectedExercises, cardioTarget } = get()
+
+    const input: TemplateInput = {
+      name,
+      notes: notes ?? null,
+      exercises: selectedExercises
+        .filter(se => !se.skipped)
+        .map(se => ({
+          exerciseId: se.exercise.id,
+          sets: se.sets.map(s => ({
+            reps: s.reps,
+            weight: s.weight,
+            rpe: s.rpe,
+            restSeconds: s.restSeconds,
+            // Cardio's target lives on the plan screen rather than in the set
+            // rows; write it onto the first set so reloading restores it.
+            distance: se.exercise.modality === 'Cardio' && cardioTarget?.type === 'distance'
+              ? cardioTarget.value * 1000
+              : null,
+            time: se.exercise.modality === 'Cardio' && cardioTarget?.type === 'time'
+              ? cardioTarget.value
+              : null,
+          })),
+        })),
+    }
+
+    const template = await templateService.create(input)
+    set({ sourceTemplateId: template.id })
+    return template
+  },
 
   addExercise: (exercise) => {
     if (get().selectedExercises.find(e => e.exercise.id === exercise.id)) return
@@ -204,6 +290,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     wodConfig: null,
     startError: null,
     logError: null,
+    sourceTemplateId: null,
+    sourceScheduledId: null,
   }),
 
   updateSets: (exerciseId, sets) => set(state => ({
@@ -377,6 +465,18 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
             return id ? { ...e, workoutExerciseId: id } : e
           }),
         }))
+
+        // Bind a standby slot to the session fulfilling it, which is also what
+        // advances the plan's "performed" counters. Best-effort: failing to
+        // attribute a session must never stop the athlete training.
+        const { sourceScheduledId } = get()
+        if (sourceScheduledId) {
+          try {
+            await templateService.start(sourceScheduledId, session.id)
+          } catch (err) {
+            console.error('could not attach session to scheduled workout:', err)
+          }
+        }
       } catch (err) {
         console.error('startSession error:', err)
         set({ startError: 'Could not start the workout. Check your connection and retry.' })
@@ -532,9 +632,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const duration = Math.round((Date.now() - startMs) / 1000)
     if (!Number.isFinite(duration) || duration < 0) return null
 
+    const { sourceScheduledId } = get()
+
     finishInFlight = (async () => {
       try {
-        return await doFinish(sessionId, duration, set)
+        return await doFinish(sessionId, duration, set, sourceScheduledId)
       } finally {
         // Cleared on failure too, so a retry from the Finish screen can run
         finishInFlight = null
@@ -549,9 +651,21 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 async function doFinish(
   sessionId: string,
   duration: number,
-  set: (partial: Partial<WorkoutStore>) => void
+  set: (partial: Partial<WorkoutStore>) => void,
+  scheduledId: string | null
 ) {
   const result = await workoutService.finishSession(sessionId, duration)
+
+  // Close the standby slot so the plan stops showing as due. After the finish,
+  // not before: the session is what makes it completed, and a failure here must
+  // not lose the workout that has already been recorded.
+  if (scheduledId) {
+    try {
+      await templateService.close(scheduledId, 'completed')
+    } catch (err) {
+      console.error('could not close scheduled workout:', err)
+    }
+  }
 
   // Wipe the whole selection, not just the session ids: leaving
   // selectedExercises behind lets a back-navigation to /workout/active
@@ -568,6 +682,8 @@ async function doFinish(
     wodConfig: null,
     startError: null,
     logError: null,
+    sourceTemplateId: null,
+    sourceScheduledId: null,
   })
 
   return result

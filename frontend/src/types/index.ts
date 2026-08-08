@@ -150,3 +150,64 @@ export interface PlannedSet {
   rpe: number
   restSeconds: number
 }
+// Saved plans — a workout the athlete intends to do, as opposed to one they
+// did. Sessions stay the factual record; templates are editable intentions.
+export interface TemplateSet {
+  id: string
+  setNumber: number
+  reps: number | null
+  weight: number | null
+  rpe: number | null
+  restSeconds: number | null
+  distance: number | null
+  time: number | null
+  rounds: number | null
+}
+
+export interface TemplateExercise {
+  id: string
+  exerciseId: string
+  exercise: Exercise
+  orderIndex: number
+  notes: string | null
+  sets: TemplateSet[]
+}
+
+export interface WorkoutTemplate {
+  id: string
+  name: string
+  notes: string | null
+  /** An AI-drafted plan stays labelled as one for its whole life. */
+  source: 'user' | 'ai'
+  archivedAt: string | null
+  lastPerformedAt: string | null
+  timesPerformed: number
+  createdAt: string
+  exercises: TemplateExercise[]
+}
+
+export type ScheduledStatus = 'standby' | 'started' | 'completed' | 'skipped' | 'cancelled'
+
+export interface ScheduledWorkout {
+  id: string
+  templateId: string
+  template: WorkoutTemplate
+  scheduledFor: string
+  reminderAt: string | null
+  status: ScheduledStatus
+  sessionId: string | null
+  completedAt: string | null
+}
+
+// Something the AI has drafted and the athlete has not yet accepted. Nothing
+// exists in the app's own tables until one of these is tapped.
+export interface AiProposal {
+  id: string
+  kind: 'create_template' | 'schedule_workout'
+  title: string
+  lines: string[]
+  scheduledFor: string | null
+  reminderAt: string | null
+  expiresAt: string
+  messageId?: string | null
+}
