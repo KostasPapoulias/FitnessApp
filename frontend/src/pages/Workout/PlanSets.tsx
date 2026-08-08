@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { templateService } from '../../services/template.service'
 import { rpeColor, exerciseEmoji, cycleRpe } from './helpers'
 
 // How each suggestion was arrived at. Shown because a number that changes
@@ -285,6 +286,11 @@ export default function PlanSets() {
           >
             + Add Exercise
           </button>
+
+          {/* Keep it, rather than only doing it now. Everything above is
+              already the shape of a plan — this is what stops it evaporating
+              the moment the session ends. */}
+          <SavePlanPanel />
         </div>
 
         {/* Sticky start */}
@@ -301,6 +307,151 @@ export default function PlanSets() {
             ▶ Start Workout — {totalSets} sets
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Save the current plan, and optionally put it on a date.
+ *
+ * Collapsed by default: the overwhelmingly common path through this screen is
+ * "look it over and start", and a form sitting open above the Start button
+ * makes saving feel like a step rather than an option.
+ */
+function SavePlanPanel() {
+  const navigate = useNavigate()
+  const { selectedExercises, saveAsTemplate, sourceTemplateId } = useWorkoutStore()
+
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [when, setWhen] = useState('')
+  const [remind, setRemind] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  const liveCount = selectedExercises.filter(se => !se.skipped).length
+
+  const save = async () => {
+    if (!name.trim()) {
+      setError('Give the plan a name so you can find it again.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const template = await saveAsTemplate(name.trim())
+
+      if (when) {
+        // datetime-local is wall-clock in the athlete's own zone, which is what
+        // they meant; new Date() reads it as local and toISOString converts.
+        const scheduledFor = new Date(when)
+        // An hour's notice is enough to change plans and not so much that it
+        // arrives while the day is still hypothetical.
+        const reminderAt = remind
+          ? new Date(scheduledFor.getTime() - 60 * 60 * 1000).toISOString()
+          : null
+        await templateService.schedule(template.id, scheduledFor.toISOString(), reminderAt)
+      }
+
+      setSaved(true)
+    } catch (err: any) {
+      setError(err?.response?.data?.error ?? 'Could not save that plan. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (liveCount === 0) return null
+
+  if (saved) {
+    return (
+      <div className="rounded-card border border-brand-teal/40 bg-[#0a2a22] px-4 py-3.5">
+        <p className="text-[13px] font-bold text-brand-teal">Plan saved</p>
+        <p className="text-dark-200 text-[12px] mt-1 leading-snug">
+          {when ? 'It is on standby for the date you chose.' : 'You can load it again any time.'}
+        </p>
+        <button
+          onClick={() => navigate('/plans')}
+          className="mt-3 px-4 py-2 rounded-btn border border-dark-600 bg-dark-800
+                     text-white text-[12.5px] font-bold active:scale-95 transition-transform"
+        >
+          View my plans →
+        </button>
+      </div>
+    )
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full py-3.5 rounded-card border border-dark-600 bg-dark-800
+                   text-left px-4 active:scale-[0.99] transition-transform"
+      >
+        <p className="text-[10px] tracking-wide text-dark-400">KEEP THIS WORKOUT</p>
+        <p className="text-[13px] font-semibold mt-0.5">
+          {sourceTemplateId ? 'Save as a new plan →' : 'Save as a plan · schedule it →'}
+        </p>
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-card border border-dark-600 bg-dark-800 px-4 py-4">
+      <p className="text-[10px] tracking-wide text-dark-400">SAVE THIS WORKOUT</p>
+
+      <input
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="Name it — e.g. Upper push A"
+        className="w-full mt-2.5 bg-dark-700 border border-dark-600 rounded-btn px-3.5 py-2.5
+                   text-white text-sm placeholder-dark-400 outline-none
+                   focus:border-brand-teal/60 transition-colors"
+      />
+
+      <label className="block mt-3 text-[11.5px] text-dark-300">
+        Put it on a date (optional)
+        <input
+          type="datetime-local"
+          value={when}
+          onChange={e => setWhen(e.target.value)}
+          className="w-full mt-1.5 bg-dark-700 border border-dark-600 rounded-btn px-3.5 py-2.5
+                     text-white text-sm outline-none focus:border-brand-teal/60 transition-colors"
+        />
+      </label>
+
+      {when && (
+        <label className="flex items-center gap-2.5 mt-3 text-[12.5px] text-dark-200">
+          <input
+            type="checkbox"
+            checked={remind}
+            onChange={e => setRemind(e.target.checked)}
+            className="w-4 h-4 accent-[#00D4AA]"
+          />
+          Remind me an hour before
+        </label>
+      )}
+
+      {error && <p className="mt-2.5 text-[12px] text-brand-red font-semibold">{error}</p>}
+
+      <div className="flex gap-2 mt-3.5">
+        <button
+          onClick={save}
+          disabled={busy}
+          className="flex-1 py-3 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
+                     active:scale-95 transition-transform disabled:opacity-40"
+        >
+          {busy ? 'Saving…' : when ? 'Save & schedule' : 'Save plan'}
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          className="px-4 py-3 rounded-btn border border-dark-600 bg-dark-700
+                     text-white text-[13px] font-bold active:scale-95 transition-transform"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   )

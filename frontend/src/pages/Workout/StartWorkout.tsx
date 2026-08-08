@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFatigueStore } from '../../store/useFatigueStore'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { templateService } from '../../services/template.service'
+import { ScheduledWorkout } from '../../types'
 
 // ── modality catalogue (id → label/desc/CTA), matching the prototype ──
 type ModId = 'strength' | 'calisthenics' | 'cardio' | 'mobility' | 'wod'
@@ -128,6 +130,12 @@ export default function StartWorkout() {
       <h1 className="text-[27px] font-extrabold tracking-tight">Start Workout</h1>
       <p className="text-dark-300 text-[13px] mt-1 mb-5">{todayLabel}</p>
 
+      {/* Standby first. Someone who planned a session already decided what to
+          do — making them rebuild it from the modality grid is the app
+          forgetting on their behalf. */}
+      <StandbyStrip />
+
+
       {/* AI Coach */}
       <div className="bg-[#0a2a22] border border-brand-teal/30 rounded-card p-4 mb-6">
         <div className="flex items-center gap-2.5 mb-2.5">
@@ -221,6 +229,98 @@ export default function StartWorkout() {
                    text-[15px] active:scale-95 transition-transform">
         {activeMod.cta}
       </button>
+    </div>
+  )
+}
+
+/**
+ * What is already lined up, above the "what shall I do today" grid.
+ *
+ * Renders nothing at all when there is neither a standby workout nor a saved
+ * plan — an empty prompt on a screen someone opened to start training is just
+ * an obstacle between them and the barbell.
+ */
+function StandbyStrip() {
+  const navigate = useNavigate()
+  const loadTemplate = useWorkoutStore(s => s.loadTemplate)
+
+  const [next, setNext] = useState<ScheduledWorkout | null>(null)
+  const [planCount, setPlanCount] = useState(0)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    Promise.all([
+      templateService.listScheduled('standby'),
+      templateService.list(false),
+    ])
+      .then(([scheduled, templates]) => {
+        if (cancelled) return
+        setNext(scheduled[0] ?? null)
+        setPlanCount(templates.length)
+      })
+      // A failed lookup just means the strip stays hidden; the rest of the
+      // screen is what the athlete came for.
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setReady(true) })
+
+    return () => { cancelled = true }
+  }, [])
+
+  if (!ready || (!next && planCount === 0)) return null
+
+  if (!next) {
+    return (
+      <button
+        onClick={() => navigate('/plans')}
+        className="w-full mb-6 rounded-card border border-dark-600 bg-dark-800 px-4 py-3.5
+                   text-left active:scale-[0.99] transition-transform"
+      >
+        <p className="text-[10px] tracking-wide text-dark-400">SAVED PLANS</p>
+        <p className="text-[13px] font-semibold mt-0.5">
+          Load one of your {planCount} plan{planCount === 1 ? '' : 's'} →
+        </p>
+      </button>
+    )
+  }
+
+  const when = new Date(next.scheduledFor)
+  const today = new Date()
+  const isToday = when.toDateString() === today.toDateString()
+
+  return (
+    <div className="mb-6 rounded-card border border-brand-teal/40 bg-[#0a2a22] px-4 py-3.5">
+      <p className="text-[10px] tracking-wider text-brand-teal font-bold">
+        {isToday ? 'ON STANDBY · TODAY' : `ON STANDBY · ${when.toLocaleDateString('en-GB', {
+          weekday: 'short', day: 'numeric', month: 'short',
+        }).toUpperCase()}`}
+      </p>
+      <p className="text-white text-sm font-bold mt-0.5">{next.template.name}</p>
+      <p className="text-dark-300 text-[12px] mt-0.5">
+        {next.template.exercises.length} exercises ·{' '}
+        {next.template.exercises.reduce((sum, e) => sum + e.sets.length, 0)} sets
+      </p>
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => {
+            loadTemplate(next.template, next.id)
+            navigate('/workout/plan')
+          }}
+          className="flex-1 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
+                     active:scale-95 transition-transform"
+        >
+          Start this →
+        </button>
+        <button
+          onClick={() => navigate('/plans')}
+          className="px-4 py-2.5 rounded-btn border border-dark-600 bg-dark-800
+                     text-white text-[13px] font-bold active:scale-95 transition-transform"
+        >
+          All plans
+        </button>
+      </div>
     </div>
   )
 }

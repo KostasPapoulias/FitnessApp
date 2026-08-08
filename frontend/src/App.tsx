@@ -9,6 +9,7 @@ import Home from './pages/Home'
 import Calendar from './pages/Calendar'
 import AIChat from './pages/AIChat'
 import AIChatHub from './pages/AIChatHub'
+import Plans from './pages/Plans'
 import Profile from './pages/Profile'
 import NotificationSettings from './pages/NotificationSettings'
 import SecuritySettings from './pages/SecuritySettings'
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="profile/notifications" element={<NotificationSettings />} />
           <Route path="profile/security" element={<SecuritySettings />} />
+          <Route path="plans" element={<Plans />} />
           <Route path="workout/plan" element={<PlanSets />} />
           <Route path="workout/plan/cardio" element={<CardioPlan />} />
           <Route path="workout/plan/mobility" element={<MobilityPlan />} />
