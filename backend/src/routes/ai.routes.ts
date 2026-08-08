@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import {
   chat, getHistory, suggestWorkout, getUsage,
-  getThreads, createThread, deleteThread
+  getThreads, createThread, deleteThread,
+  acceptProposal, dismissProposal
 } from '../controllers/ai.controller'
 import { verifyToken } from '../middleware/auth.middleware';
 
@@ -56,5 +57,19 @@ router.get('/suggest-workout', suggestWorkout);
  * @returns today's AI spend against the daily cap
  */
 router.get('/usage', getUsage);
+
+/**
+ * @route POST /api/ai/proposals/:id/accept
+ * @protected
+ * @returns The plan (and schedule) created from a drafted card. This is the
+ *          only place an AI suggestion becomes real data, and it needs a
+ *          request carrying the athlete's own token.
+ */
+router.post('/proposals/:id/accept', acceptProposal);
+/**
+ * @route POST /api/ai/proposals/:id/reject
+ * @protected — dismisses a drafted card without applying it
+ */
+router.post('/proposals/:id/reject', dismissProposal);
 
 export default router;

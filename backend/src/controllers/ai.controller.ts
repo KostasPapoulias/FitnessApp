@@ -6,6 +6,9 @@ import {
   getThreadHistory
 } from '../services/ai.service'
 import { AiBudgetError, getUsageToday } from '../services/ai-budget.service'
+import {
+  ProposalError, applyProposal, listPendingProposals, rejectProposal,
+} from '../services/ai-tools.service'
 import prisma from '../lib/prisma'
 
 // POST /api/ai/chat
@@ -38,14 +41,14 @@ export const chat = async (req: AuthRequest, res: Response) => {
 
     const history = await getThreadHistory(thread.id)
 
-    const reply = await sendMessage({
+    const { reply, proposals } = await sendMessage({
       userId:   req.userId!,
       threadId: thread.id,
       message:  message.trim(),
       history
     })
 
-    res.json({ success: true, data: { reply, threadId: thread.id } })
+    res.json({ success: true, data: { reply, threadId: thread.id, proposals } })
 
   } catch (error) {
     // Out of budget or calling too fast is a 429, not a server fault — the
@@ -157,7 +160,11 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
       orderBy: { dateTime: 'asc' }
     })
 
-    res.json({ success: true, data: { threadId: thread.id, messages } })
+    // Cards the athlete never acted on come back with the conversation, so
+    // something scrolled past is not silently lost on reload.
+    const proposals = await listPendingProposals(req.userId!, thread.id)
+
+    res.json({ success: true, data: { threadId: thread.id, messages, proposals } })
 
   } catch (error) {
     console.error('getHistory error:', error)
@@ -172,14 +179,14 @@ export const suggestWorkout = async (req: AuthRequest, res: Response) => {
     const thread = await getOrCreateThread(req.userId!)
     const history = await getThreadHistory(thread.id)
 
-    const reply = await sendMessage({
+    const { reply, proposals } = await sendMessage({
       userId:   req.userId!,
       threadId: thread.id,
       message:  'Based on my current muscle fatigue and recovery state, what should I train today? Give me a specific workout suggestion.',
       history
     })
 
-    res.json({ success: true, data: { reply } })
+    res.json({ success: true, data: { reply, proposals } })
 
   } catch (error) {
     if (error instanceof AiBudgetError) {
@@ -190,6 +197,36 @@ export const suggestWorkout = async (req: AuthRequest, res: Response) => {
     }
 
     console.error('suggestWorkout error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+// POST /api/ai/proposals/:id/accept
+// Turn a drafted card into real data. The only route in the AI path that
+// writes to the app's own tables, and it needs the athlete's own token.
+export const acceptProposal = async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await applyProposal(req.userId!, req.params.id)
+    res.json({ success: true, data: result })
+  } catch (error) {
+    if (error instanceof ProposalError) {
+      // Gone or already spent is the user's state, not a fault — 409 so the
+      // client can say what happened instead of showing a generic failure.
+      res.status(error.code === 'not_found' ? 404 : 409)
+        .json({ success: false, error: error.message })
+      return
+    }
+    console.error('acceptProposal error:', error)
+    res.status(500).json({ success: false, error: 'Could not apply that suggestion.' })
+  }
+}
+
+// POST /api/ai/proposals/:id/reject
+export const dismissProposal = async (req: AuthRequest, res: Response) => {
+  try {
+    const dismissed = await rejectProposal(req.userId!, req.params.id)
+    res.json({ success: true, data: { dismissed } })
+  } catch (error) {
+    console.error('dismissProposal error:', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
