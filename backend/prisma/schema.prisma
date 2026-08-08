@@ -39,6 +39,9 @@ model User {
   aiUsage               AiUsageDaily[]
   notificationPref      NotificationPreference?
   notificationTypePrefs NotificationTypePref[]
+  workoutTemplates      WorkoutTemplate[]
+  scheduledWorkouts     ScheduledWorkout[]
+  aiProposals           AiProposal[]
 }
 
 // Notification opt-in. EVERY flag defaults false, and there is no backfill:
@@ -235,6 +238,7 @@ model Exercise {
   media            Media[]
   workoutExercises WorkoutExercise[]
   strengthEstimates ExerciseStrengthEstimate[]
+  templateExercises TemplateExercise[]
   @@unique([name])
 }
 
@@ -297,10 +301,18 @@ model WorkoutSession {
   systemicLoad     Float?
   weatherCondition String?
   notes            String?
+  // Which saved plan this session came from, when it came from one. Kept so
+  // "do it again" can compare like against like, and so a template's
+  // performance history is its own sessions rather than everything the athlete
+  // happened to train that day.
+  templateId       String?
+  template         WorkoutTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
   workoutExercises WorkoutExercise[]
   fatigueLogs      MuscleFatigueLog[]
+  scheduled        ScheduledWorkout?
 
   @@index([userId, dateTime])
+  @@index([templateId])
 }
 
 model WorkoutExercise {
@@ -524,4 +536,150 @@ model Notification {
 
   @@unique([userId, dedupeKey])
   @@index([userId, status, plannedFor])
+}
+// ── saved plans ───────────────────────────────────────────────────────────
+
+/**
+ * A workout the athlete intends to do, as opposed to one they did.
+ *
+ * The distinction the rest of the schema was missing. A WorkoutSession is a
+ * record of the past and everything downstream — fatigue, training load, the
+ * progression suggestions — is derived from it, so it must stay a factual log.
+ * A template is an intention: editable, repeatable, and carrying no training
+ * load of its own until a session is actually run from it.
+ */
+model WorkoutTemplate {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  notes       String?
+  /** user | ai — an AI-drafted plan stays labelled as one for its whole life. */
+  source      String   @default("user")
+
+  /**
+   * Archived rather than deleted. A template that produced sessions is part of
+   * the explanation for how the athlete got here; deleting it would strand
+   * those sessions' templateId and quietly rewrite that history.
+   */
+  archivedAt      DateTime?
+  lastPerformedAt DateTime?
+  timesPerformed  Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  exercises   TemplateExercise[]
+  scheduled   ScheduledWorkout[]
+  sessions    WorkoutSession[]
+
+  @@index([userId, archivedAt])
+}
+
+model TemplateExercise {
+  id         String          @id @default(uuid())
+  templateId String
+  template   WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  exerciseId String
+  exercise   Exercise        @relation(fields: [exerciseId], references: [id])
+  orderIndex Int
+  notes      String?
+  sets       TemplateSet[]
+
+  @@index([templateId])
+  @@index([exerciseId])
+}
+
+/**
+ * One planned set. Deliberately flat rather than mirroring the five-table
+ * SetType split of WorkoutSet: a plan is a target, and the modality-specific
+ * columns a target needs are few enough that a join per modality buys nothing.
+ */
+model TemplateSet {
+  id                 String           @id @default(uuid())
+  templateExerciseId String
+  templateExercise   TemplateExercise @relation(fields: [templateExerciseId], references: [id], onDelete: Cascade)
+  setNumber          Int
+  reps               Int?
+  weight             Float?
+  rpe                Float?
+  restSeconds        Int?
+  /** Cardio / WOD targets. */
+  distance           Float?
+  time               Int?
+  rounds             Float?
+
+  @@unique([templateExerciseId, setNumber])
+}
+
+/**
+ * A template placed on a date — the "standby" state.
+ *
+ * The reminder is not stored here as a time to fire. It creates a row in
+ * Notification, which is the one table that already knows about quiet hours,
+ * daily caps, dedupe and delivery receipts. Two schedulers writing to a phone
+ * is how a user ends up with duplicate nudges at 6am.
+ */
+model ScheduledWorkout {
+  id           String          @id @default(uuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId   String
+  template     WorkoutTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  scheduledFor DateTime
+  reminderAt   DateTime?
+  /** The Notification row backing the reminder, so cancelling can withdraw it. */
+  notificationId String?
+
+  /** standby | started | completed | skipped | cancelled */
+  status       String          @default("standby")
+
+  /** Set once this becomes a real session. One session per scheduled slot. */
+  sessionId    String?         @unique
+  session      WorkoutSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  completedAt  DateTime?
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([userId, status, scheduledFor])
+}
+
+/**
+ * Something the AI has drafted and the athlete has not yet accepted.
+ *
+ * The model never writes to the app's own tables. It writes here, and a row
+ * here does nothing until a request carrying the user's own session confirms
+ * it. That is what keeps a hallucinated 300kg squat or an invented meal out of
+ * the training log: the only path from model output to real data runs through
+ * a tap, and the payload that gets applied is the one that was shown.
+ */
+model AiProposal {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threadId  String?
+  /**
+   * The assistant message this was drafted alongside, so reopening a thread
+   * shows the card attached to the reply that produced it rather than floating
+   * at the end of the conversation.
+   */
+  messageId String?
+  /** create_template | schedule_workout — what applying this row would do. */
+  kind      String
+  /** The validated, ID-resolved draft. Applied verbatim on confirm. */
+  payload   Json
+  /** pending | applied | rejected | expired */
+  status    String   @default("pending")
+  /**
+   * Stale drafts must not be applicable. A card scrolled past on Monday and
+   * tapped on Thursday would schedule a workout reasoned about a body state
+   * three days gone.
+   */
+  expiresAt DateTime
+  appliedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, status])
 }
