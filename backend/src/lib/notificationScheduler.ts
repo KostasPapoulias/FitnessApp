@@ -35,6 +35,32 @@ const TYPE_COOLDOWN_HOURS: Record<string, number> = {
 /** Local hour at which the day's coach plan is generated. */
 const PLAN_HOUR = 6
 
+/**
+ * A nudge whose moment has passed is worse than no nudge — "train at 17:15"
+ * arriving at 22:00 is noise. Drop it rather than queueing it forever.
+ *
+ * Checked before anything can block the send rather than only inside the
+ * window failure: a planned row that is never reachable is a row that sits in
+ * the table for good, and the planner then reads it as "already planned today"
+ * every day after.
+ */
+const MAX_LATENESS_HOURS = 3
+
+const expireIfStale = async (
+  planned: { id: string; plannedFor: Date | null },
+  reason: string
+): Promise<boolean> => {
+  const hoursLate = (Date.now() - (planned.plannedFor?.getTime() ?? 0)) / 3_600_000
+  if (hoursLate <= MAX_LATENESS_HOURS) return false
+
+  await prisma.notification.update({
+    where: { id: planned.id },
+    // dedupeKey released so the same nudge can be planned again another day
+    data: { status: 'failed', failReason: `missed window: ${reason}`, dedupeKey: null },
+  })
+  return true
+}
+
 const runTickForUser = async (userId: string, timezone: string) => {
   // Engagement first: a user whose coach tier should be suspended must not be
   // sent one more nudge before the suspension lands.
@@ -57,49 +83,66 @@ const runTickForUser = async (userId: string, timezone: string) => {
     orderBy: { plannedFor: 'asc' },
     take: 1,
   })
+  const planned = due[0] ?? null
 
   const candidates = await evaluateEssentialRules(userId, timezone)
 
   // Essential rules outrank planned coach nudges: a warning to back off matters
   // more than whatever the planner thought would be nice at 17:15.
-  const chosen = candidates[0]
-  if (!chosen && due.length === 0) return
+  //
+  // Outranking means "goes first", NOT "blocks the rest of the queue". A rule
+  // inside its cooldown is simply not eligible this tick, and treating that as
+  // a reason to stop is what silenced the coach tier completely: readiness_ready
+  // re-qualifies on every tick of every day the user has not trained, so its
+  // 20-hour cooldown returned before a planned nudge was ever looked at.
+  let blockedReason: string | undefined
 
-  if (chosen) {
-    if (await sentWithin(userId, chosen.type, TYPE_COOLDOWN_HOURS[chosen.type] ?? 24)) return
+  for (const candidate of candidates) {
+    if (await sentWithin(userId, candidate.type, TYPE_COOLDOWN_HOURS[candidate.type] ?? 24)) {
+      continue
+    }
 
-    const window = await checkSendWindow(userId, { urgent: chosen.urgent })
-    if (!window.ok) return
+    const window = await checkSendWindow(userId, { urgent: candidate.urgent })
+    if (!window.ok) {
+      // Keep going: a later candidate may be urgent, and urgent passes gates
+      // (the daily cap and the minimum gap) that this one just failed.
+      blockedReason = window.reason
+      continue
+    }
 
     await sendNotification({
       userId,
-      type: chosen.type,
-      title: chosen.title,
-      body: chosen.body,
-      dedupeKey: chosen.dedupeKey,
-      url: chosen.url,
+      type: candidate.type,
+      title: candidate.title,
+      body: candidate.body,
+      dedupeKey: candidate.dedupeKey,
+      url: candidate.url,
       source: 'rule',
     })
     return
   }
 
-  // Planned coach nudge
-  const planned = due[0]
-  const window = await checkSendWindow(userId)
-  if (!window.ok) {
-    // A nudge whose moment has passed is worse than no nudge — "train at 17:15"
-    // arriving at 22:00 is noise. Drop it rather than queueing it forever.
-    const hoursLate = (Date.now() - (planned.plannedFor?.getTime() ?? 0)) / 3_600_000
-    if (hoursLate > 3) {
-      await prisma.notification.update({
-        where: { id: planned.id },
-        data: { status: 'failed', failReason: `missed window: ${window.reason}`, dedupeKey: null },
-      })
-    }
+  if (!planned) return
+
+  // An essential notification just went out ⇒ we returned above. Reaching here
+  // means nothing essential was eligible, so the coach nudge gets its turn.
+  if (blockedReason) {
+    // Every gate an ordinary candidate failed applies to a nudge too — the
+    // window check is strictly more permissive for urgent sends, never less.
+    await expireIfStale(planned, blockedReason)
     return
   }
 
-  if (await sentWithin(userId, planned.type, TYPE_COOLDOWN_HOURS[planned.type] ?? 4)) return
+  const window = await checkSendWindow(userId)
+  if (!window.ok) {
+    await expireIfStale(planned, window.reason ?? 'unknown')
+    return
+  }
+
+  if (await sentWithin(userId, planned.type, TYPE_COOLDOWN_HOURS[planned.type] ?? 4)) {
+    await expireIfStale(planned, `cooldown on ${planned.type}`)
+    return
+  }
 
   // The planner wrote the row; sending it means handing the same content to the
   // one code path that owns delivery, so the ledger stays consistent.

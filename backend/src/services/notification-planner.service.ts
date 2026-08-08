@@ -142,7 +142,7 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
     const context = await buildUserContext(userId)
     const slots = Math.min(MAX_PLANNED, pref.dailyCap)
 
-    const items = await generatePlan(userId, context, slots, timezone)
+    const { items, failure } = await generatePlan(userId, context, slots, timezone)
     if (items.length === 0) return 0
 
     let created = 0
@@ -167,6 +167,11 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
             status: 'planned',
             plannedFor,
             dedupeKey: `coach:${today}:${index}`,
+            // Carried on the row rather than only in the logs. A planner that
+            // fails silently looks identical to one that had nothing to say —
+            // both produce bland text — and the fallback ran unnoticed for days
+            // because the only evidence was a console line on the host.
+            failReason: failure ?? null,
           },
         })
         created++
@@ -183,14 +188,20 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
   }
 }
 
+/** `failure` is set only when the fallback was used, and says why. */
+interface PlanResult {
+  items: PlannedItem[]
+  failure?: string
+}
+
 const generatePlan = async (
   userId: string,
   context: string,
   slots: number,
   timezone: string
-): Promise<PlannedItem[]> => {
+): Promise<PlanResult> => {
   const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey || slots <= 0) return []
+  if (!apiKey || slots <= 0) return { items: [] }
 
   const rawModelName = (process.env.GEMINI_MODEL ?? 'models/gemini-2.5-flash-lite').trim()
   const modelName = rawModelName.startsWith('models/') ? rawModelName : `models/${rawModelName}`
@@ -230,7 +241,7 @@ Rules:
     const parsed = JSON.parse(response.response.text())
     const raw: PlannedItem[] = Array.isArray(parsed?.notifications) ? parsed.notifications : []
 
-    return raw
+    const items = raw
       .slice(0, slots)
       .filter(item =>
         typeof item?.title === 'string' && typeof item?.body === 'string' &&
@@ -242,11 +253,23 @@ Rules:
       )
       .map(item => ({ ...item, hour: Number(item.hour), minute: Number(item.minute) }))
 
+    // The model answered but every item was rejected. Worth distinguishing from
+    // a model that deliberately returned nothing: the first is a bug in the
+    // wording rules, the second is the plan working as intended.
+    if (items.length === 0 && raw.length > 0) {
+      return { items: [], failure: `all ${raw.length} proposed items rejected by filters` }
+    }
+
+    return { items }
+
   } catch (error: any) {
     // Model down, rate limited, safety-filtered, or returned unparseable JSON.
     // One generic nudge is better than a crash and better than silence, but
     // only one — filler does not deserve a full day's allowance.
     console.error('Coach plan generation failed, using fallback:', error.message)
-    return [{ hour: 18, minute: 0, ...FALLBACK_ITEM }]
+    return {
+      items: [{ hour: 18, minute: 0, ...FALLBACK_ITEM }],
+      failure: `planner fallback: ${String(error?.message ?? error).slice(0, 180)}`,
+    }
   }
 }

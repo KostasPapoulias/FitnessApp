@@ -61,27 +61,45 @@ export const unsubscribe = async (req: AuthRequest, res: Response) => {
 // It only ever moves an existing row: an unknown endpoint gets a 404, so this
 // cannot be used to register a subscription against someone else's account.
 export const rotateSubscription = async (req: Request, res: Response) => {
-  const { oldEndpoint, endpoint, keys } = req.body
+  // Express 4 does not catch rejected promises from a handler: a throw in here
+  // leaves the request hanging AND can leave the account with no subscription
+  // at all, which is silent — nothing sends, and the UI still reads "On".
+  try {
+    const { oldEndpoint, endpoint, keys } = req.body
 
-  if (!oldEndpoint || !endpoint || !keys?.p256dh || !keys?.auth) {
-    res.status(400).json({ success: false, error: 'Invalid rotation payload' })
-    return
+    if (!oldEndpoint || !endpoint || !keys?.p256dh || !keys?.auth) {
+      res.status(400).json({ success: false, error: 'Invalid rotation payload' })
+      return
+    }
+
+    const existing = await prisma.pushSubscription.findUnique({ where: { endpoint: oldEndpoint } })
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Unknown subscription' })
+      return
+    }
+
+    // iOS can report a "change" whose new endpoint is the one already on file.
+    // Clearing the duplicate first would then delete the very row being rotated
+    // and leave the update with nothing to write — the device drops off the
+    // account with no trace, since no send was involved to record a failure.
+    if (endpoint !== oldEndpoint) {
+      // The new endpoint can already be on file if a previous rotation half-landed
+      await prisma.pushSubscription.deleteMany({
+        where: { endpoint, id: { not: existing.id } }
+      })
+    }
+
+    await prisma.pushSubscription.update({
+      where: { id: existing.id },
+      data: { endpoint, p256dh: keys.p256dh, auth: keys.auth }
+    })
+
+    res.json({ success: true })
+
+  } catch (error) {
+    console.error('rotateSubscription error:', error)
+    res.status(500).json({ success: false, error: 'Could not rotate the subscription.' })
   }
-
-  const existing = await prisma.pushSubscription.findUnique({ where: { endpoint: oldEndpoint } })
-  if (!existing) {
-    res.status(404).json({ success: false, error: 'Unknown subscription' })
-    return
-  }
-
-  // The new endpoint can already be on file if a previous rotation half-landed
-  await prisma.pushSubscription.deleteMany({ where: { endpoint } })
-  await prisma.pushSubscription.update({
-    where: { id: existing.id },
-    data: { endpoint, p256dh: keys.p256dh, auth: keys.auth }
-  })
-
-  res.json({ success: true })
 }
 
 // POST /api/push/test
