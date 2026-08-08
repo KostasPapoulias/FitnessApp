@@ -14,11 +14,21 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Handle 401 — redirect to login if token expired
+// Handle 401 — redirect to login if token expired.
+//
+// Sign-in and registration are excluded: those endpoints answer 401 for a wrong
+// password, and reloading the page on that answer threw away the error message
+// the form was about to show, so a failed sign-in looked like a button that did
+// nothing at all.
+const CREDENTIAL_ENDPOINTS = ['/auth/login', '/auth/register']
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url ?? ''
+    const isCredentialCheck = CREDENTIAL_ENDPOINTS.some(path => url.includes(path))
+
+    if (error.response?.status === 401 && !isCredentialCheck) {
       localStorage.removeItem('somatrack_token')
       window.location.href = '/login'
     }

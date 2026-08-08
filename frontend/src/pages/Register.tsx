@@ -10,21 +10,35 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
+  // Must match the server (credentials.service.ts). It used to say 6, so a
+  // 6–9 character password passed here and was rejected by the API — and the
+  // catch below reported that as "email may already be in use", which sent
+  // people off changing the one thing that was fine.
+  const MIN_PASSWORD_LENGTH = 10
+
   const handleSubmit = async () => {
     if (!name || !email || !password) {
       setError('Please fill in all fields')
       return
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
       return
     }
     try {
       setError('')
       await register(email, password, name)
       navigate('/')
-    } catch {
-      setError('Registration failed. Email may already be in use.')
+    } catch (err: any) {
+      // The server says exactly what was wrong — too short, not a valid
+      // address, already registered, too many attempts. Guessing on its behalf
+      // is worse than useless when the guess is wrong.
+      setError(
+        err?.response?.data?.error ||
+        (err?.response
+          ? 'Registration failed. Please try again.'
+          : 'Could not reach the server. Check your connection and try again.')
+      )
     }
   }
 
@@ -70,10 +84,15 @@ export default function Register() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
               className="w-full bg-dark-800 border border-dark-600 rounded-btn
                          px-4 py-3 text-white placeholder-dark-400
                          focus:outline-none focus:border-brand-teal"
             />
+            {/* Stated before submitting, not after being rejected */}
+            <p className="text-dark-400 text-xs mt-1.5">
+              At least {MIN_PASSWORD_LENGTH} characters. A short phrase works well.
+            </p>
           </div>
 
           {error && <p className="text-brand-red text-sm">{error}</p>}

@@ -33,10 +33,17 @@ export const authLimiter = rateLimit({
 /**
  * Account creation, kept separate and slower.
  * Registration is the expensive one to abuse: each success is a permanent row.
+ *
+ * Counts only SUCCESSES, for that same reason — a rejected attempt creates
+ * nothing. Counting failures meant someone fixing a too-short password five
+ * times was told the address had created too many accounts, having created
+ * none. The failure side is already covered: authLimiter is mounted on this
+ * route too and counts exactly those.
  */
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 5,
+  skipFailedRequests: true,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: json('Too many accounts created from this address. Try again later.'),

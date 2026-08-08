@@ -18,8 +18,19 @@ export default function Login() {
       setError('')
       await login(email, password)
       navigate('/')
-    } catch {
-      setError('Invalid email or password')
+    } catch (err: any) {
+      // 401 really is "invalid email or password", but a 429 from the rate
+      // limiter is not — reporting it as bad credentials sends someone into a
+      // retry loop that can only make the lockout longer.
+      const status = err?.response?.status
+      setError(
+        status === 401
+          ? 'Invalid email or password'
+          : err?.response?.data?.error ||
+            (err?.response
+              ? 'Could not sign in. Please try again.'
+              : 'Could not reach the server. Check your connection and try again.')
+      )
     }
   }
 

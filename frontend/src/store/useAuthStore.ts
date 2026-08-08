@@ -23,20 +23,33 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       isLoading: false,
 
+      // isLoading is cleared in a finally on both of these. Clearing it only on
+      // the success path left the button disabled and reading "Creating
+      // account…" forever after any rejection — the form could not be corrected
+      // and retried without reloading the app, which is how a rejected password
+      // became an apparent dead end.
       login: async (email, password) => {
         set({ isLoading: true })
-        const res = await api.post('/auth/login', { email, password })
-        const { token, user } = res.data.data
-        localStorage.setItem('somatrack_token', token)
-        set({ token, user, isAuthenticated: true, isLoading: false })
+        try {
+          const res = await api.post('/auth/login', { email, password })
+          const { token, user } = res.data.data
+          localStorage.setItem('somatrack_token', token)
+          set({ token, user, isAuthenticated: true })
+        } finally {
+          set({ isLoading: false })
+        }
       },
 
       register: async (email, password, name) => {
         set({ isLoading: true })
-        const res = await api.post('/auth/register', { email, password, name })
-        const { token, user } = res.data.data
-        localStorage.setItem('somatrack_token', token)
-        set({ token, user, isAuthenticated: true, isLoading: false })
+        try {
+          const res = await api.post('/auth/register', { email, password, name })
+          const { token, user } = res.data.data
+          localStorage.setItem('somatrack_token', token)
+          set({ token, user, isAuthenticated: true })
+        } finally {
+          set({ isLoading: false })
+        }
       },
 
       logout: () => {

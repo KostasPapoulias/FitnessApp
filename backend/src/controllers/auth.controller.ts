@@ -55,7 +55,10 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     if (existingUser) {
       res.status(409).json({
         success: false,
-        error: 'User already exists',
+        // Says what to do next. The client shows this verbatim, and "user
+        // already exists" left people re-typing an address that was never the
+        // problem.
+        error: 'That email is already registered. Sign in instead.',
       });
       return;
     }
