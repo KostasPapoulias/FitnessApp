@@ -12,6 +12,10 @@ export const NOTIFICATION_TYPES = {
   OVERREACHING: 'overreaching',
   INACTIVITY: 'inactivity',
   COACH_SUSPENDED: 'coach_suspended',
+  // The athlete put a workout on a date and asked to be reminded. Essential,
+  // not coach: they requested this specific message, so it must not be
+  // suppressed by the coach tier backing off from unrelated nudges.
+  WORKOUT_REMINDER: 'workout_reminder',
   // ── coach ──
   COACH_NUDGE: 'coach_nudge',
 } as const
@@ -23,6 +27,7 @@ export const ESSENTIAL_TYPES: NotificationType[] = [
   NOTIFICATION_TYPES.OVERREACHING,
   NOTIFICATION_TYPES.INACTIVITY,
   NOTIFICATION_TYPES.COACH_SUSPENDED,
+  NOTIFICATION_TYPES.WORKOUT_REMINDER,
 ]
 
 /** Only these are AI-planned. Everything else is a rule. */
