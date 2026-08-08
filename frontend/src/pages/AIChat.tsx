@@ -7,7 +7,8 @@ import { useDeviceType } from '../hooks/useDeviceType'
 import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { BOTTOM_NAV_HEIGHT, PHONE_MAX_WIDTH, SIDEBAR_WIDTH } from '../constants/layout'
 import { NEW_THREAD } from '../constants/chat'
-import { Message } from '../types'
+import { AiProposal, Message } from '../types'
+import ProposalCard from '../components/chat/ProposalCard'
 
 export default function AIChat() {
   const navigate  = useNavigate()
@@ -29,6 +30,11 @@ export default function AIChat() {
   const isUnsaved = threadId === NEW_THREAD
 
   const [messages,   setMessages]   = useState<Message[]>([])
+  // Cards the coach has drafted and the athlete has not yet acted on. Kept
+  // beside the messages rather than inside them: a proposal has its own
+  // lifecycle — it can be applied, dismissed or expire — while a message never
+  // changes once sent.
+  const [proposals,  setProposals]  = useState<AiProposal[]>([])
   const [input,      setInput]      = useState('')
   const [isLoading,  setIsLoading]  = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(!isUnsaved)
@@ -56,6 +62,11 @@ export default function AIChat() {
         if (data.messages?.length > 0) {
           setMessages(data.messages)
         }
+        // Anything still awaiting a decision comes back with the conversation,
+        // so a card scrolled past is not lost on reload.
+        if (data.proposals?.length > 0) {
+          setProposals(data.proposals)
+        }
       })
       .finally(() => setIsLoadingHistory(false))
   }, [threadId, isUnsaved])
@@ -72,7 +83,7 @@ export default function AIChat() {
   // isn't left behind the newly-raised input bar.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading, keyboardInset])
+  }, [messages, proposals, isLoading, keyboardInset])
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return
@@ -109,6 +120,9 @@ export default function AIChat() {
         dateTime:    new Date().toISOString()
       }
       setMessages(prev => [...prev, aiMsg])
+      if (data.proposals?.length > 0) {
+        setProposals(prev => [...prev, ...data.proposals])
+      }
     } catch (err: any) {
       // 429 is the daily AI budget or the per-minute rate limit. The server
       // already phrases those for a human, so show its reason rather than
@@ -213,6 +227,16 @@ export default function AIChat() {
           <div className="flex flex-col gap-4">
             {messages.map(msg => (
               <MessageBubble key={msg.id} message={msg} />
+            ))}
+            {/* Drafted plans sit after the conversation: they belong to the
+                latest reply, and anchoring them mid-thread would put a live
+                action behind whatever the athlete has since scrolled past. */}
+            {proposals.map(proposal => (
+              <ProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                onResolved={id => setProposals(prev => prev.filter(p => p.id !== id))}
+              />
             ))}
           </div>
         )}
