@@ -7,7 +7,7 @@ function Step({ children, onClick, disabled }: {
 }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className="w-[34px] h-[34px] rounded-[9px] border border-dark-600 bg-dark-700 text-white
+      className="w-[30px] h-[30px] flex-shrink-0 rounded-[9px] border border-dark-600 bg-dark-700 text-white
                  text-lg font-bold flex items-center justify-center active:scale-90 transition-transform
                  disabled:opacity-30">
       {children}
@@ -73,7 +73,7 @@ export default function MobilityPlan() {
                   <p className="text-[10px] tracking-wide text-dark-400 mb-2">HOLD (SEC)</p>
                   <div className="flex items-center justify-center gap-2">
                     <Step onClick={() => se.sets.forEach((_, si) => updateSet(ei, si, { reps: Math.max(5, hold - 5) }))}>−</Step>
-                    <span className="min-w-[40px] text-center text-lg font-extrabold">{hold}</span>
+                    <span className="flex-1 min-w-0 text-center text-lg font-extrabold tabular-nums">{hold}</span>
                     <Step onClick={() => se.sets.forEach((_, si) => updateSet(ei, si, { reps: hold + 5 }))}>+</Step>
                   </div>
                 </div>
@@ -82,7 +82,7 @@ export default function MobilityPlan() {
                   <p className="text-[10px] tracking-wide text-dark-400 mb-2">ROUNDS</p>
                   <div className="flex items-center justify-center gap-2">
                     <Step onClick={() => removeSet(ei, rounds - 1)} disabled={rounds <= 1}>−</Step>
-                    <span className="min-w-[40px] text-center text-lg font-extrabold">{rounds}</span>
+                    <span className="flex-1 min-w-0 text-center text-lg font-extrabold tabular-nums">{rounds}</span>
                     <Step onClick={() => addSet(ei)}>+</Step>
                   </div>
                 </div>
@@ -98,7 +98,7 @@ export default function MobilityPlan() {
         </button>
       </div>
 
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
+      <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
         <button onClick={() => navigate('/workout/active')}
           className="w-full py-[17px] rounded-card bg-brand-teal text-black text-[17px] font-extrabold
                      active:scale-95 transition-transform"

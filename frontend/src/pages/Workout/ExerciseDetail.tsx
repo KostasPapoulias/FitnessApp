@@ -178,7 +178,7 @@ export default function ExerciseDetail() {
       </div>
 
       {/* CTA */}
-                  <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[430px]
+      <div className="fixed bottom-[var(--bottom-nav-h)] left-1/2 -translate-x-1/2 w-full max-w-[430px]
                     z-40 bg-dark-900/95 backdrop-blur border-t border-dark-700
                     px-3 pb-3 pt-1 flex gap-3">
         <button

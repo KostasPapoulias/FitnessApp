@@ -14,7 +14,7 @@ function isHold(name: string) {
 }
 
 const stepBtn =
-  'w-[34px] h-[34px] rounded-[9px] border border-dark-600 bg-dark-700 text-white ' +
+  'w-[30px] h-[30px] rounded-[9px] border border-dark-600 bg-dark-700 text-white ' +
   'text-lg font-bold flex items-center justify-center active:scale-90 transition-transform flex-shrink-0'
 const bigStep =
   'w-12 h-12 rounded-btn border border-dark-600 bg-dark-700 text-white text-2xl font-bold ' +
@@ -173,18 +173,21 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, coachEnabl
             {/* REPS */}
             <div className="px-4 pt-4 pb-1.5 text-center">
               <p className="text-[10px] tracking-widest text-dark-300 mb-3">REPS THIS SET</p>
-              <div className="flex items-center justify-center gap-5">
+              <div className="flex items-center justify-center gap-4">
                 <button className={bigStep} onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: Math.max(0, set.reps - 1) })}>−</button>
-                <span className="min-w-[84px] text-center text-[58px] font-extrabold leading-none">{set.reps}</span>
+                <span className="flex-1 min-w-0 text-center text-[58px] font-extrabold leading-none tabular-nums">{set.reps}</span>
                 <button className={bigStep} onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: set.reps + 1 })}>+</button>
               </div>
             </div>
             <div className="px-4 pt-2 pb-1 grid grid-cols-2 gap-3">
+              {/* The value sits above the buttons rather than between them:
+                  "Bodyweight" needs ~74px, which no half-width column has left
+                  once two 30px steppers are in the same row. */}
               <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3 text-center">
-                <p className="text-[10px] tracking-wide text-dark-400 mb-2">LOAD / ASSIST</p>
-                <div className="flex items-center justify-center gap-2">
+                <p className="text-[10px] tracking-wide text-dark-400 mb-1.5">LOAD / ASSIST</p>
+                <p className="text-sm font-extrabold truncate mb-2" style={{ color: loadColor }}>{loadLabel}</p>
+                <div className="flex items-center justify-center gap-3">
                   <button className={stepBtn} onClick={() => { extra.load = Math.round((extra.load - 2.5) * 10) / 10; rerender() }}>−</button>
-                  <span className="min-w-[74px] text-center text-sm font-extrabold" style={{ color: loadColor }}>{loadLabel}</span>
                   <button className={stepBtn} onClick={() => { extra.load = Math.round((extra.load + 2.5) * 10) / 10; rerender() }}>+</button>
                 </div>
               </div>

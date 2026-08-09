@@ -148,7 +148,7 @@ export default function BrowseCategories() {
 
       {/* Selected tray → Plan Sets */}
       {selectedCount > 0 && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)]
+        <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)]
                         max-w-[390px] bg-dark-800 border border-brand-teal/50 rounded-card
                         p-3 flex items-center gap-3 shadow-2xl z-40">
           <div className="flex gap-1">
@@ -177,7 +177,7 @@ export default function BrowseCategories() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-[90px] left-1/2 -translate-x-1/2 bg-dark-700 border border-dark-500
+        <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-1/2 -translate-x-1/2 bg-dark-700 border border-dark-500
                         text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-2xl z-50
                         whitespace-nowrap">
           {toast}

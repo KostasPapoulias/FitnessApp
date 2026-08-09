@@ -26,7 +26,7 @@ function Step({ children, onClick, disabled }: {
     <button
       onClick={onClick}
       disabled={disabled}
-      className="w-[34px] h-[34px] rounded-[9px] border border-dark-600 bg-dark-700
+      className="w-[30px] h-[30px] flex-shrink-0 rounded-[9px] border border-dark-600 bg-dark-700
                  text-white text-lg font-bold flex items-center justify-center
                  active:scale-90 transition-transform disabled:opacity-30"
     >
@@ -176,7 +176,10 @@ export default function PlanSets() {
                 )}
 
                 {/* Column headers */}
-                <div className="grid grid-cols-[30px_1fr_1fr_64px_30px] gap-2 px-4 py-1 items-center">
+                {/* `minmax(0,1fr)` rather than `1fr`: a bare fr won't shrink
+                    below its content, so the −/+ cells used to push the RPE and
+                    remove columns out past the card's clip on every phone. */}
+                <div className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,1fr)_38px_24px] gap-1 px-4 py-1 items-center">
                   <div />
                   <p className="text-[10px] tracking-wider text-dark-400 text-center">REPS</p>
                   <p className="text-[10px] tracking-wider text-dark-400 text-center">
@@ -189,21 +192,21 @@ export default function PlanSets() {
                 {/* Set rows */}
                 {se.sets.map((s, si) => (
                   <div key={si}>
-                    <div className="grid grid-cols-[30px_1fr_1fr_64px_30px] gap-2 px-4 py-1.5 items-center">
-                      <div className="w-[26px] h-[26px] rounded-badge bg-dark-700 border border-dark-600
-                                      flex items-center justify-center text-xs font-bold text-dark-200">
+                    <div className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,1fr)_38px_24px] gap-1 px-4 py-1.5 items-center">
+                      <div className="w-[22px] h-[22px] rounded-badge bg-dark-700 border border-dark-600
+                                      flex items-center justify-center text-[11px] font-bold text-dark-200">
                         {si + 1}
                       </div>
                       {/* reps */}
                       <div className="flex items-center justify-center gap-1">
                         <Step onClick={() => updateSet(ei, si, { reps: Math.max(1, s.reps - 1) })}>−</Step>
-                        <span className="min-w-[26px] text-center text-[15px] font-bold">{s.reps}</span>
+                        <span className="flex-1 min-w-0 text-center text-[15px] font-bold tabular-nums">{s.reps}</span>
                         <Step onClick={() => updateSet(ei, si, { reps: s.reps + 1 })}>+</Step>
                       </div>
                       {/* weight */}
                       <div className="flex items-center justify-center gap-1">
                         <Step onClick={() => updateSet(ei, si, { weight: Math.max(0, Math.round((s.weight - 2.5) * 10) / 10) })}>−</Step>
-                        <span className="min-w-[30px] text-center text-[15px] font-bold">{s.weight}</span>
+                        <span className="flex-1 min-w-0 text-center text-[15px] font-bold tabular-nums">{s.weight}</span>
                         <Step onClick={() => updateSet(ei, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</Step>
                       </div>
                       {/* rpe */}
@@ -218,7 +221,7 @@ export default function PlanSets() {
                       <button
                         onClick={() => removeSet(ei, si)}
                         disabled={se.sets.length <= 1}
-                        className="w-[26px] h-[26px] rounded-badge text-dark-400 text-base
+                        className="w-[24px] h-[24px] rounded-badge text-dark-400 text-base
                                    flex items-center justify-center disabled:opacity-30"
                       >
                         ×
@@ -242,9 +245,9 @@ export default function PlanSets() {
                 ))}
 
                 {/* Rest row */}
-                <div className="flex items-center justify-between px-4 py-3 mx-4 mt-2
+                <div className="flex items-center justify-between gap-2 py-3 mx-4 mt-2
                                 border-t border-dark-600">
-                  <div className="flex items-center gap-2 text-dark-200 text-[13.5px]">
+                  <div className="flex items-center gap-2 min-w-0 text-dark-200 text-[13.5px]">
                     <span>⏱️</span> Rest between sets
                   </div>
                   <div className="flex items-center gap-1.5">

@@ -64,7 +64,7 @@ export default function Home() {
       </div>
 
       {/* Body map container */}
-      <div className="relative flex-1 flex items-center justify-center px-8">
+      <div className="relative flex-1 flex flex-col items-center justify-center px-8">
 
         {/* Front/Back toggle */}
         <div className="absolute top-1 left-1/2 -translate-x-1/2 z-10
@@ -94,7 +94,11 @@ export default function Home() {
             is held, so it reads as hanging level with the ground rather than
             being painted on the screen. Transform only — no layout is affected,
             so nothing below it moves. */}
-        <div className="w-full max-w-[220px] h-[360px] mt-12">
+        {/* Height flexes instead of sitting at a fixed 360px: on a short phone
+            (or in landscape) a rigid map outgrew this container, and the
+            legend — anchored to the container's bottom — landed on top of it.
+            The floor lets the page scroll rather than squashing the body. */}
+        <div className="w-full max-w-[220px] flex-1 min-h-[240px] max-h-[360px] mt-12 mb-9">
           {isLoading
             ? <div className="w-full h-full bg-dark-800 rounded-2xl animate-pulse" />
             : (

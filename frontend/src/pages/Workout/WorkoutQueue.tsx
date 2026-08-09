@@ -13,7 +13,7 @@ const STATUS_META: Record<string, { label: string; color: string; dot: string }>
 function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className="w-[30px] h-[30px] rounded-[9px] border border-dark-600 bg-dark-700
+      className="w-7 h-7 flex-shrink-0 rounded-[9px] border border-dark-600 bg-dark-700
                  text-white text-lg font-bold flex items-center justify-center
                  active:scale-90 transition-transform">
       {children}
@@ -137,8 +137,8 @@ export default function WorkoutQueue() {
 
               {/* Expanded editor */}
               {expanded && (
-                <div className="mx-3.5 mb-3.5 p-3.5 rounded-btn bg-dark-900 border border-dark-600">
-                  <div className="grid grid-cols-[24px_1fr_1fr_44px_26px] gap-1.5 pb-1.5">
+                <div className="mx-2.5 mb-3.5 p-2.5 rounded-btn bg-dark-900 border border-dark-600">
+                  <div className="grid grid-cols-[16px_minmax(0,1fr)_minmax(0,1fr)_28px_20px] gap-1 pb-1.5">
                     <div />
                     <p className="text-[9px] tracking-wide text-dark-400 text-center">REPS</p>
                     <p className="text-[9px] tracking-wide text-dark-400 text-center">WEIGHT</p>
@@ -149,17 +149,17 @@ export default function WorkoutQueue() {
                     const done = completedSets.some(cs => cs.exerciseId === e.exercise.id && cs.setIndex === si)
                     return (
                       <div key={si}
-                        className="grid grid-cols-[24px_1fr_1fr_44px_26px] gap-1.5 py-1.5 items-center"
+                        className="grid grid-cols-[16px_minmax(0,1fr)_minmax(0,1fr)_28px_20px] gap-1 py-1.5 items-center"
                         style={{ opacity: done ? 0.5 : 1 }}>
                         <div className="text-xs font-bold text-dark-300 text-center">{si + 1}</div>
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-0.5">
                           <MiniStep onClick={() => updateSet(i, si, { reps: Math.max(1, s.reps - 1) })}>−</MiniStep>
-                          <span className="min-w-[20px] text-center text-sm font-bold">{s.reps}</span>
+                          <span className="flex-1 min-w-0 truncate text-center text-[13px] font-bold tabular-nums">{s.reps}</span>
                           <MiniStep onClick={() => updateSet(i, si, { reps: s.reps + 1 })}>+</MiniStep>
                         </div>
-                        <div className="flex items-center justify-center gap-1">
+                        <div className="flex items-center justify-center gap-0.5">
                           <MiniStep onClick={() => updateSet(i, si, { weight: Math.max(0, Math.round((s.weight - 2.5) * 10) / 10) })}>−</MiniStep>
-                          <span className="min-w-[26px] text-center text-sm font-bold">{s.weight}</span>
+                          <span className="flex-1 min-w-0 truncate text-center text-[13px] font-bold tabular-nums">{s.weight}</span>
                           <MiniStep onClick={() => updateSet(i, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</MiniStep>
                         </div>
                         <button onClick={() => updateSet(i, si, { rpe: cycleRpe(s.rpe) })}
@@ -167,7 +167,7 @@ export default function WorkoutQueue() {
                           {s.rpe}
                         </button>
                         <button onClick={() => removeSet(i, si)}
-                          className="w-6 h-6 rounded-[7px] text-dark-400 text-[15px]
+                          className="w-5 h-6 rounded-[7px] text-dark-400 text-[15px]
                                      flex items-center justify-center">×</button>
                       </div>
                     )

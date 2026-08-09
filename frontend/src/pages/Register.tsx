@@ -43,7 +43,8 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 flex flex-col justify-between p-6">
+    <div className="min-h-dvh bg-dark-900 flex flex-col justify-between px-6
+                    pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
       <div className="flex-1 flex flex-col justify-center">
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-white">SomaTrack</h1>

@@ -14,7 +14,7 @@ interface RestTimerProps {
 function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className="w-[30px] h-[30px] rounded-[9px] border border-dark-600 bg-dark-700
+      className="w-[30px] h-[30px] flex-shrink-0 rounded-[9px] border border-dark-600 bg-dark-700
                  text-white text-lg font-bold flex items-center justify-center
                  active:scale-90 transition-transform">
       {children}
@@ -116,8 +116,10 @@ export default function RestTimer({
 
       {/* Ring */}
       <div className="flex justify-center mt-5">
-        <div className="relative w-[280px] h-[280px]">
-          <svg width="280" height="280" viewBox="0 0 280 280" style={{ transform: 'rotate(-90deg)' }}>
+        {/* 280px was the page's full content width at 320px — the ring sat
+            edge to edge with nothing to spare. It scales down instead now. */}
+        <div className="relative w-full max-w-[280px] aspect-square">
+          <svg width="100%" height="100%" viewBox="0 0 280 280" style={{ transform: 'rotate(-90deg)' }}>
             <circle cx="140" cy="140" r={radius} fill="none" stroke="#1E1E1E" strokeWidth="14" />
             <circle cx="140" cy="140" r={radius} fill="none" stroke="#00D4AA" strokeWidth="14"
               strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset}
@@ -163,28 +165,31 @@ export default function RestTimer({
             <p className="text-[10px] tracking-widest text-dark-400">NEXT SET · ADJUST NOW</p>
             <p className="text-xs text-dark-300 max-w-[55%] truncate text-right">{nextName}</p>
           </div>
-          <div className="grid grid-cols-3 gap-2.5">
+          {/* Three steppers across can't hold −/value/+ on one line: at 320px
+              each column is ~68px inside its padding, which the two buttons
+              alone fill. The value takes its own line above them. */}
+          <div className="grid grid-cols-3 gap-1.5">
             {/* reps */}
-            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1.5 py-2.5 text-center">
-              <p className="text-[10px] tracking-wide text-dark-400 mb-2">REPS</p>
+            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
+              <p className="text-[10px] tracking-wide text-dark-400 mb-1">REPS</p>
+              <p className="text-[17px] font-extrabold tabular-nums mb-1.5">{nextSetObj.reps}</p>
               <div className="flex items-center justify-center gap-1.5">
                 <MiniStep onClick={() => updateSet(nEx, nSet, { reps: Math.max(1, nextSetObj.reps - 1) })}>−</MiniStep>
-                <span className="min-w-[22px] text-[17px] font-extrabold">{nextSetObj.reps}</span>
                 <MiniStep onClick={() => updateSet(nEx, nSet, { reps: nextSetObj.reps + 1 })}>+</MiniStep>
               </div>
             </div>
             {/* weight */}
-            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1.5 py-2.5 text-center">
-              <p className="text-[10px] tracking-wide text-dark-400 mb-2">WEIGHT</p>
+            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
+              <p className="text-[10px] tracking-wide text-dark-400 mb-1">WEIGHT</p>
+              <p className="text-[17px] font-extrabold tabular-nums mb-1.5">{nextSetObj.weight}</p>
               <div className="flex items-center justify-center gap-1.5">
                 <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.max(0, Math.round((nextSetObj.weight - 2.5) * 10) / 10) })}>−</MiniStep>
-                <span className="min-w-[28px] text-[17px] font-extrabold">{nextSetObj.weight}</span>
                 <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.round((nextSetObj.weight + 2.5) * 10) / 10 })}>+</MiniStep>
               </div>
             </div>
             {/* rpe */}
-            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1.5 py-2.5 text-center">
-              <p className="text-[10px] tracking-wide text-dark-400 mb-2">RPE</p>
+            <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
+              <p className="text-[10px] tracking-wide text-dark-400 mb-1">RPE</p>
               <button
                 onClick={() => updateSet(nEx, nSet, { rpe: (nextSetObj.rpe % 10) + 1 })}
                 className="text-xl font-extrabold py-1.5"

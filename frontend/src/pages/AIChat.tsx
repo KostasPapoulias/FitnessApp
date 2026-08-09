@@ -173,8 +173,10 @@ export default function AIChat() {
     >
 
       {/* Header with back button */}
+      {/* Fixed to the viewport top, so it sits outside AppLayout's inset and
+          has to clear the status bar itself. */}
       <div className="flex-shrink-0 bg-dark-900
-              px-5 pt-4 pb-3 border-b border-dark-700
+              px-5 pb-3 pt-[calc(1rem+var(--safe-top))] border-b border-dark-700
               flex items-center gap-3">
         <button
           onClick={() => navigate('/ai')}
@@ -266,11 +268,12 @@ export default function AIChat() {
       <div
         className="flex-shrink-0 bg-dark-900 px-4 pt-3 border-t border-dark-700"
         style={{
-          // Clear the home indicator only when the keyboard isn't already
-          // occupying that space.
-          paddingBottom: keyboardInset > 0
+          // Clear the home indicator only when nothing else already covers it:
+          // the keyboard when it's up, and the bottom nav (which now pads
+          // itself out of the inset) when the shell is stacked on top of it.
+          paddingBottom: keyboardInset > 0 || isPhone
             ? 12
-            : 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+            : 'calc(var(--safe-bottom) + 12px)',
         }}
       >
         <div className="flex gap-3 items-end">

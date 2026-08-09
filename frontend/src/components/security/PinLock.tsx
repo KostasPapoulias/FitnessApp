@@ -54,9 +54,13 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     setPin(p => p + key)
   }
 
+  // Scrolls rather than clipping the keypad: in landscape, or with large text,
+  // the pad is taller than the viewport. `safe center` keeps the top reachable
+  // when it does overflow.
   return (
     <div className="fixed inset-0 z-50 bg-dark-900 text-white flex flex-col
-                    items-center justify-center px-8">
+                    items-center [justify-content:safe_center] overflow-y-auto px-8
+                    pt-[calc(2rem+var(--safe-top))] pb-[calc(2rem+var(--safe-bottom))]">
       <div className="text-[44px] leading-none mb-4">🔒</div>
       <h1 className="text-xl font-extrabold">Enter your PIN</h1>
       <p className="text-dark-300 text-[13px] mt-1.5 text-center max-w-[260px]">

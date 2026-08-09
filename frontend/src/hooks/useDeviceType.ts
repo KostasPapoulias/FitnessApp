@@ -9,7 +9,14 @@ const getIsPhone = () => {
   const coarsePointer = window.matchMedia('(pointer: coarse)').matches
   const touchDevice = navigator.maxTouchPoints > 1
 
-  return narrowViewport || (coarsePointer && touchDevice)
+  // Touch alone doesn't make something a phone — a tablet or a touchscreen
+  // laptop matches it too, and both were getting the 430px phone column on a
+  // wide display. The shortest side is what distinguishes them, and unlike
+  // width it survives the device being turned: a phone held landscape is still
+  // narrow one way, a tablet isn't.
+  const shortestSide = Math.min(window.innerWidth, window.innerHeight)
+
+  return narrowViewport || (coarsePointer && touchDevice && shortestSide < PHONE_BREAKPOINT)
 }
 
 export const useDeviceType = () => {

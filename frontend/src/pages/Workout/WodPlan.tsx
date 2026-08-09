@@ -14,7 +14,7 @@ function Step({ children, onClick, disabled }: {
 }) {
   return (
     <button onClick={onClick} disabled={disabled}
-      className="w-[34px] h-[34px] rounded-[9px] border border-dark-600 bg-dark-700 text-white
+      className="w-[30px] h-[30px] flex-shrink-0 rounded-[9px] border border-dark-600 bg-dark-700 text-white
                  text-lg font-bold flex items-center justify-center active:scale-90 transition-transform
                  disabled:opacity-30">
       {children}
@@ -88,7 +88,7 @@ export default function WodPlan() {
           <p className="text-[10px] tracking-wide text-dark-400 mb-2.5">TIME CAP (MIN)</p>
           <div className="flex items-center justify-center gap-2.5">
             <Step onClick={() => setCapMin(v => Math.max(1, v - 1))} disabled={!usesCap}>−</Step>
-            <span className="min-w-[40px] text-center text-2xl font-extrabold">{capMin}</span>
+            <span className="flex-1 min-w-0 text-center text-2xl font-extrabold tabular-nums">{capMin}</span>
             <Step onClick={() => setCapMin(v => v + 1)} disabled={!usesCap}>+</Step>
           </div>
         </div>
@@ -97,7 +97,7 @@ export default function WodPlan() {
           <p className="text-[10px] tracking-wide text-dark-400 mb-2.5">TARGET ROUNDS</p>
           <div className="flex items-center justify-center gap-2.5">
             <Step onClick={() => setTargetRounds(v => Math.max(1, v - 1))} disabled={!usesRounds}>−</Step>
-            <span className="min-w-[40px] text-center text-2xl font-extrabold">{targetRounds}</span>
+            <span className="flex-1 min-w-0 text-center text-2xl font-extrabold tabular-nums">{targetRounds}</span>
             <Step onClick={() => setTargetRounds(v => v + 1)} disabled={!usesRounds}>+</Step>
           </div>
         </div>
@@ -111,9 +111,9 @@ export default function WodPlan() {
           return (
             <div key={se.exercise.id}
               className="flex items-center gap-3 bg-dark-800 border border-dark-600 rounded-card px-4 py-3">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <Step onClick={() => updateSet(ei, 0, { reps: Math.max(1, reps - 1) })}>−</Step>
-                <span className="min-w-[34px] text-center text-lg font-extrabold">{reps}</span>
+                <span className="w-[30px] text-center text-lg font-extrabold tabular-nums">{reps}</span>
                 <Step onClick={() => updateSet(ei, 0, { reps: reps + 1 })}>+</Step>
               </div>
               <span className="flex-1 min-w-0 text-[15px] font-semibold truncate">{se.exercise.name}</span>
@@ -128,7 +128,7 @@ export default function WodPlan() {
         </button>
       </div>
 
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
+      <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
         <button onClick={start}
           className="w-full py-[17px] rounded-card bg-brand-teal text-black text-[17px] font-extrabold
                      active:scale-95 transition-transform"

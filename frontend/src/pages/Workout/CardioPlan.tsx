@@ -60,7 +60,7 @@ export default function CardioPlan() {
     navigate('/workout/active')
   }
 
-  const bigStep = 'w-12 h-12 rounded-btn border border-dark-600 bg-dark-700 text-white text-2xl font-bold ' +
+  const bigStep = 'w-11 h-11 rounded-btn border border-dark-600 bg-dark-700 text-white text-2xl font-bold ' +
     'flex items-center justify-center active:scale-90 transition-transform flex-shrink-0'
 
   return (
@@ -103,15 +103,17 @@ export default function CardioPlan() {
       </div>
 
       {/* stepper */}
-      <div className="bg-dark-800 border border-dark-600 rounded-card p-6 mb-6 text-center">
+      {/* p-6 + gap-6 + a 120px value + two 48px buttons came to 264px against
+          the 230px this card has at 320px. */}
+      <div className="bg-dark-800 border border-dark-600 rounded-card p-5 mb-6 text-center">
         {targetType === 'distance' ? (
           <>
             <p className="text-[10px] tracking-widest text-dark-300 mb-4">TARGET DISTANCE</p>
-            <div className="flex items-center justify-center gap-6">
+            <div className="flex items-center justify-center gap-4">
               <button className={bigStep} onClick={() => setDistanceKm(v => Math.max(0.5, Math.round((v - 0.5) * 2) / 2))}>−</button>
-              <div className="min-w-[120px]">
-                <span className="text-[52px] font-extrabold leading-none">{distanceKm.toFixed(1)}</span>
-                <span className="text-xl font-bold text-dark-300 ml-1">km</span>
+              <div className="flex-1 min-w-0 truncate">
+                <span className="text-[42px] font-extrabold leading-none tabular-nums">{distanceKm.toFixed(1)}</span>
+                <span className="text-lg font-bold text-dark-300 ml-1">km</span>
               </div>
               <button className={bigStep} onClick={() => setDistanceKm(v => Math.round((v + 0.5) * 2) / 2)}>+</button>
             </div>
@@ -119,11 +121,11 @@ export default function CardioPlan() {
         ) : (
           <>
             <p className="text-[10px] tracking-widest text-dark-300 mb-4">TARGET TIME</p>
-            <div className="flex items-center justify-center gap-6">
+            <div className="flex items-center justify-center gap-4">
               <button className={bigStep} onClick={() => setTimeMin(v => Math.max(5, v - 5))}>−</button>
-              <div className="min-w-[120px]">
-                <span className="text-[52px] font-extrabold leading-none">{timeMin}</span>
-                <span className="text-xl font-bold text-dark-300 ml-1">min</span>
+              <div className="flex-1 min-w-0 truncate">
+                <span className="text-[42px] font-extrabold leading-none tabular-nums">{timeMin}</span>
+                <span className="text-lg font-bold text-dark-300 ml-1">min</span>
               </div>
               <button className={bigStep} onClick={() => setTimeMin(v => v + 5)}>+</button>
             </div>
@@ -143,7 +145,7 @@ export default function CardioPlan() {
       </div>
 
       {/* start */}
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
+      <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
         <button onClick={start}
           className="w-full py-[17px] rounded-card bg-brand-teal text-black text-[17px] font-extrabold
                      active:scale-95 transition-transform"

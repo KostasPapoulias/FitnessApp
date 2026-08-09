@@ -253,7 +253,7 @@ export default function ActiveWorkout() {
 
   // Toast shown when a set failed to persist, so a dropped set is never silent
   const errorToast = logError ? (
-    <div className="fixed bottom-4 left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
+    <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
                     rounded-card border border-brand-red/50 bg-[#2a1a1a] shadow-lg">
       <span className="text-base">⚠️</span>
       <p className="flex-1 text-[13px] text-white leading-snug">{logError}</p>

@@ -7,6 +7,19 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* The viewport is `viewport-fit=cover`, so the status bar and the home
+   indicator overlay the page. Everything that touches an edge pads itself out
+   of their way through these — one source of truth, and they resolve to 0px on
+   hardware without insets.
+
+   `--bottom-nav-h` is published by BottomNav once it has measured itself; the
+   value here is only what fixed overlays use on the first paint. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --bottom-nav-h: 78px;
+}
+
 /* Prevent all default browser gestures */
 html, body {
   overscroll-behavior: none;

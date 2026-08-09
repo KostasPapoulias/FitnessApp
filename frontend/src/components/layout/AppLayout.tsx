@@ -66,8 +66,14 @@ export default function AppLayout() {
     <div className={`min-h-dvh bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
       {/* The sidebar renders on !isPhone, so the offset keys off the same flag —
           `lg:pl-72` left a 768–1024px gap where the sidebar covered content. */}
+      {/* The top inset is applied once, here, rather than on each page header:
+          under `viewport-fit=cover` the status bar overlays the page, and every
+          screen's own `pt-4`/`pt-6` is far short of a 59px notch.
+          The bottom clears the real nav rather than a guessed 5rem. */}
       <main
-        className={`flex flex-col min-h-dvh overflow-y-auto ${isPhone ? 'pb-20' : 'pb-8 pl-72'}`}
+        className={`flex flex-col min-h-dvh overflow-y-auto pt-[var(--safe-top)] ${
+          isPhone ? 'pb-[var(--bottom-nav-h)]' : 'pb-8 pl-72'
+        }`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

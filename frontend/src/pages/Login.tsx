@@ -35,7 +35,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 flex flex-col justify-between p-6">
+    <div className="min-h-dvh bg-dark-900 flex flex-col justify-between px-6
+                    pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
 
       {/* Top */}
       <div className="flex-1 flex flex-col justify-center">

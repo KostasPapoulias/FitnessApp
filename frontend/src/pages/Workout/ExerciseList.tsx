@@ -193,7 +193,7 @@ export default function ExerciseList() {
 
       {/* Continue tray */}
       {selectedCount > 0 && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)]
+        <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)]
                         max-w-[390px] bg-dark-800 border border-brand-teal/50 rounded-card p-3
                         flex items-center gap-3 shadow-2xl z-40">
           <div className="flex-1 min-w-0">
