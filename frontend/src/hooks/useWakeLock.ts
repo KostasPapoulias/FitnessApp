@@ -65,12 +65,22 @@ export const useWakeLock = () => {
   // Re-acquire on return to the foreground. Switching apps, a notification
   // pulled down, an incoming call — all release the lock, and none of them
   // should end a run that is still going.
+  //
+  // The poll is not redundant with the visibility listener. A lock can also be
+  // dropped while the page stays visible — a low-battery mode kicking in, the
+  // OS reclaiming it, or a `release` event that never fires at all — and there
+  // is no event for any of those. Without it the screen quietly starts sleeping
+  // again mid-run and nothing in the app knows.
   useEffect(() => {
-    const onVisibility = () => {
-      if (!document.hidden && wanted.current) void acquire()
+    const reacquire = () => {
+      if (!document.hidden && wanted.current && !sentinel.current) void acquire()
     }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
+    document.addEventListener('visibilitychange', reacquire)
+    const poll = window.setInterval(reacquire, 20_000)
+    return () => {
+      document.removeEventListener('visibilitychange', reacquire)
+      clearInterval(poll)
+    }
   }, [acquire])
 
   // A lock outliving the component would keep the screen lit on a screen that

@@ -32,11 +32,16 @@ interface Props {
   /** Shown small, so a lost signal is visible without unlocking. */
   statusLabel: string
   statusOk: boolean
+  /** Whether a screen wake lock is actually held right now. */
+  screenAwake: boolean
+  /** Re-request it. Must be called from a gesture — see the root handler. */
+  onKeepAwake: () => void
   onUnlock: () => void
 }
 
 export default function RunLock({
-  elapsed, distanceKm, pace, avgPace, running, statusLabel, statusOk, onUnlock,
+  elapsed, distanceKm, pace, avgPace, running, statusLabel, statusOk,
+  screenAwake, onKeepAwake, onUnlock,
 }: Props) {
   const [holding, setHolding] = useState(false)
   const timer = useRef<number | null>(null)
@@ -80,6 +85,11 @@ export default function RunLock({
       // the run with it.
       style={{ touchAction: 'none', overscrollBehavior: 'none' }}
       onContextMenu={e => e.preventDefault()}
+      // Every touch on this screen lands here and is otherwise thrown away —
+      // which makes it free to spend on re-taking a wake lock that has been
+      // dropped. iOS only grants one from a gesture, and on a locked screen
+      // this is the only gesture there is.
+      onPointerDown={() => { if (!screenAwake) onKeepAwake() }}
     >
       <div
         className="flex flex-col items-center transition-transform duration-1000"
@@ -154,8 +164,14 @@ export default function RunLock({
           </span>
         </button>
 
+        {/* Whether the screen will actually stay on is the one thing this
+            screen exists for, and it used to be invisible — a wake lock that
+            was never granted looked exactly like one that was, right up until
+            the display went dark and the run stopped recording. */}
         <p className="text-[11px] text-dark-500 mt-5 text-center leading-relaxed max-w-[240px]">
-          Screen locked — taps are ignored while you run.
+          {screenAwake
+            ? 'Screen locked and staying on — taps are ignored while you run.'
+            : 'Screen locked. Your phone may still dim on its own — tap once anywhere to try holding it awake.'}
           <br />
           Hold the ring to get the controls back.
         </p>

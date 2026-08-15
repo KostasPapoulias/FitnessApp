@@ -188,6 +188,8 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
         running={running}
         statusLabel={gps.label}
         statusOk={gps.ok}
+        screenAwake={wakeLock.held}
+        onKeepAwake={wakeLock.request}
         onUnlock={() => setLocked(false)}
       />
     )
@@ -392,7 +394,13 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
 
       {/* controls */}
       <div className="grid grid-cols-2 gap-2.5 mt-4">
-        <button onClick={() => (running ? run.pause() : run.resume())}
+        <button onClick={() => {
+          if (running) return run.pause()
+          // Resuming is a gesture, and a paused run has usually been paused
+          // long enough for the lock to have gone with it.
+          wakeLock.request()
+          run.resume()
+        }}
           className="py-4 rounded-btn text-[15px] font-extrabold active:scale-95 transition-transform"
           style={running
             ? { background: '#2a1a1a', color: '#EF4444', border: '1px solid rgba(239,68,68,0.4)' }
@@ -406,7 +414,15 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
         </button>
       </div>
 
-      <button onClick={() => setLocked(true)}
+      <button
+        onClick={() => {
+          // Re-requested here and not just at Start. By the time anyone locks
+          // the screen the original lock is routinely gone — every trip to the
+          // home screen or the music controls drops it — and this tap is a
+          // fresh user gesture, which is the only thing iOS grants one from.
+          wakeLock.request()
+          setLocked(true)
+        }}
         className="w-full mt-2.5 py-3.5 rounded-btn border border-dark-600 bg-dark-800
                    text-white text-sm font-bold active:scale-95 transition-transform">
         🔒 Lock screen

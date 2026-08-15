@@ -31,6 +31,12 @@ const MAX_OUTPUT_DEG = 5.5
 const DEAD_ZONE_DEG = 1.5
 /** Per-frame approach to the target. Lower is heavier and slower to settle. */
 const EASING = 0.075
+/** Amplitude of the sensorless sway. Under half of what a real tilt can reach. */
+const IDLE_DEG = 2.2
+/** One full sway. Slow enough that it reads as hanging, not as a metronome. */
+const IDLE_PERIOD_MS = 5200
+/** No usable reading for this long and the idle sway takes back over. */
+const SENSOR_GAP_MS = 1500
 /** localStorage key — iOS should only ever be asked once. */
 const PERMISSION_KEY = 'somatrack_tilt_permission'
 
@@ -55,20 +61,29 @@ export const useDeviceTilt = (): number => {
   const current = useRef(0)
 
   useEffect(() => {
-    if (!isPhone) return
-    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return
+    if (typeof window === 'undefined') return
 
     // Someone who has asked for less motion has asked for this too
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
     if (reduced.matches) return
 
+    // The sensor is a phone's, but the sway is not: gating the whole hook on
+    // `isPhone` is why a desktop browser showed a body that never moved, which
+    // is where "it used to swing" gets reported from in the first place.
+    const sensorAvailable = isPhone && 'DeviceOrientationEvent' in window
+
     let frame = 0
     let listening = false
+    let cancelled = false
+    /** When the sensor last produced a usable angle. 0 means never. */
+    let lastReading = 0
 
     const onOrientation = (event: DeviceOrientationEvent) => {
       // gamma is left-right tilt in portrait. Null on devices without the
       // sensor, and on desktop browsers that fire the event with no data.
       if (event.gamma == null) return
+
+      lastReading = performance.now()
 
       const raw = clamp(event.gamma, -MAX_INPUT_DEG, MAX_INPUT_DEG)
       const beyondDeadZone = Math.abs(raw) < DEAD_ZONE_DEG
@@ -80,7 +95,14 @@ export const useDeviceTilt = (): number => {
       target.current = -(beyondDeadZone / MAX_INPUT_DEG) * MAX_OUTPUT_DEG
     }
 
-    const tick = () => {
+    const tick = (now: number) => {
+      // The sensor owns the target while it is reporting; the sway fills every
+      // gap. Driving both through the same easing is what stops the handover
+      // from being a jump — whichever takes over is approached, not snapped to.
+      if (now - lastReading > SENSOR_GAP_MS) {
+        target.current = Math.sin((now / IDLE_PERIOD_MS) * Math.PI * 2) * IDLE_DEG
+      }
+
       const next = current.current + (target.current - current.current) * EASING
       // Below a hundredth of a degree nothing is visible; stop re-rendering
       if (Math.abs(next - current.current) > 0.005) {
@@ -90,49 +112,55 @@ export const useDeviceTilt = (): number => {
       frame = requestAnimationFrame(tick)
     }
 
-    const start = () => {
-      if (listening) return
+    // Runs regardless of the sensor. This is the whole point of the fallback:
+    // nothing below may gate the animation on a permission decision.
+    frame = requestAnimationFrame(tick)
+
+    const listen = () => {
+      if (listening || cancelled || !sensorAvailable) return
       listening = true
       window.addEventListener('deviceorientation', onOrientation)
-      frame = requestAnimationFrame(tick)
+    }
+
+    // iOS 13+ only. The prompt appears solely inside a user gesture, so it has
+    // to wait for the first tap — asking on load is impossible.
+    const requestOnce = async () => {
+      document.removeEventListener('touchend', requestOnce)
+      document.removeEventListener('click', requestOnce)
+      try {
+        const result = await (DeviceOrientationEvent as unknown as OrientationEventStatic)
+          .requestPermission!()
+        localStorage.setItem(PERMISSION_KEY, result)
+        if (result === 'granted') listen()
+      } catch {
+        // Denied, or not called from a real gesture. Either way, drop it —
+        // this is decoration and must never nag.
+        localStorage.setItem(PERMISSION_KEY, 'denied')
+      }
     }
 
     const stored = localStorage.getItem(PERMISSION_KEY) as PermissionState | null
 
-    if (!needsPermission()) {
+    if (!sensorAvailable) {
+      // Sway only. Nothing to ask for and nothing to listen to.
+    } else if (!needsPermission() || stored === 'granted') {
       // Android and everything else: no gate, just listen
-      start()
-    } else if (stored === 'granted') {
-      start()
+      listen()
     } else if (stored !== 'denied') {
-      // iOS 13+. The prompt only appears inside a user gesture, so it has to
-      // wait for the first tap — asking is impossible on load.
-      const requestOnce = async () => {
-        document.removeEventListener('touchend', requestOnce)
-        document.removeEventListener('click', requestOnce)
-        try {
-          const result = await (DeviceOrientationEvent as unknown as OrientationEventStatic)
-            .requestPermission!()
-          localStorage.setItem(PERMISSION_KEY, result)
-          if (result === 'granted') start()
-        } catch {
-          // Denied, or not called from a real gesture. Either way, drop it —
-          // this is decoration and must never nag.
-          localStorage.setItem(PERMISSION_KEY, 'denied')
-        }
-      }
       document.addEventListener('touchend', requestOnce, { once: true })
       document.addEventListener('click', requestOnce, { once: true })
-
-      return () => {
-        document.removeEventListener('touchend', requestOnce)
-        document.removeEventListener('click', requestOnce)
-      }
     }
 
+    // One cleanup for every path. The permission branch used to return its own
+    // early, which meant a granted iOS session left the orientation listener
+    // and the frame loop running after Home unmounted — and started a second
+    // loop on the way back in.
     return () => {
+      cancelled = true
+      document.removeEventListener('touchend', requestOnce)
+      document.removeEventListener('click', requestOnce)
       window.removeEventListener('deviceorientation', onOrientation)
-      if (frame) cancelAnimationFrame(frame)
+      cancelAnimationFrame(frame)
     }
   }, [isPhone])
 
