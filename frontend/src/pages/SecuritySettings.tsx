@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PinStatus, securityService } from '../services/security.service'
 import { useAuthStore } from '../store/useAuthStore'
+import { rememberPinEnabled } from '../hooks/useAppLock'
 
 function Section({ title, subtitle, children }: {
   title: string; subtitle?: string; children: React.ReactNode
@@ -36,7 +37,15 @@ export default function SecuritySettings() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
 
-  const refresh = () => securityService.getPinStatus().then(setStatus).catch(() => {})
+  // The launch gate reads a cached copy of `enabled` so it can paint the pad on
+  // the first frame. This screen is the only place that changes it, so every
+  // read of the real status writes the cache back — a PIN removed here and not
+  // mirrored would leave the next launch stuck behind a pad with no PIN to open
+  // it.
+  const refresh = () =>
+    securityService.getPinStatus()
+      .then(s => { setStatus(s); rememberPinEnabled(s.enabled) })
+      .catch(() => {})
   useEffect(() => { refresh() }, [])
 
   const reset = () => {

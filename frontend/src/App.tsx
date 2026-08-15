@@ -26,6 +26,7 @@ import MobilityPlan from './pages/Workout/MobilityPlan'
 import WodPlan from './pages/Workout/WodPlan'
 // Layout
 import AppLayout from './components/layout/AppLayout'
+import Splash from './components/layout/Splash'
 import StartWorkout from './pages/Workout/StartWorkout'
 import ExerciseDetail from './pages/Workout/ExerciseDetail'
 import { useNotifications } from './hooks/useNotifcations'
@@ -57,9 +58,9 @@ const Protected = ({ children }: { children: React.ReactNode }) => {
 }
 
 export default function App() {
-  const { fetchMe, isAuthenticated, user } = useAuthStore()
+  const { fetchMe, isAuthenticated, isBootstrapping, user } = useAuthStore()
   const { requestPermission, scheduleInactivityReminder, ensurePushSubscription } = useNotifications()
-  const { locked, unlock } = useAppLock(isAuthenticated)
+  const { locked, checked: lockChecked, unlock } = useAppLock(isAuthenticated)
 
   // On app load, verify token is still valid
   useEffect(() => {
@@ -87,9 +88,20 @@ export default function App() {
     ensurePushSubscription()
   }, [isAuthenticated])
 
-  // Sits over everything once unlocked state is known. Rendered before the
-  // router so no screen — and no data on it — is ever visible behind it.
+  // Order matters, and this is the whole fix for the launch flicker.
+  //
+  // The PIN pad goes first and does not wait for the server: `useAppLock`
+  // believes a device-local flag on the first frame, so a locked phone opens
+  // straight onto the pad instead of onto a slice of the app that a lock then
+  // drops over. Rendered before the router, so no screen — and no data on it —
+  // is ever visible behind it.
+  //
+  // Then the splash, which covers the gap where the app knows there is a token
+  // but not yet whether it is still good or whether this device is locked.
+  // Rendering the router during that window is what put Login on screen for a
+  // moment before bouncing a perfectly signed-in user back into the app.
   if (locked) return <PinLock onUnlock={unlock} />
+  if (isBootstrapping || (isAuthenticated && !lockChecked)) return <Splash />
 
   return (
     <BrowserRouter>

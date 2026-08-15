@@ -8,6 +8,8 @@ interface AuthStore {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  /** True only while the stored token is being revalidated on a cold launch. */
+  isBootstrapping: boolean
 
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
@@ -15,13 +17,30 @@ interface AuthStore {
   fetchMe: () => Promise<void>
 }
 
+/**
+ * The request interceptor authorises from `somatrack_token`, so that key — not
+ * the persisted store — is what decides whether this device is signed in.
+ * A 401 wipes it without touching the store, and the two must not disagree.
+ */
+const storedToken = (): string | null =>
+  typeof localStorage === 'undefined' ? null : localStorage.getItem('somatrack_token')
+
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
       user: null,
-      token: null,
-      isAuthenticated: false,
+      // Seeded from the token that is already on the device.
+      //
+      // Starting these at null/false meant every cold launch began signed out:
+      // `Protected` bounced to /login, Login painted, `fetchMe` came back a
+      // moment later and bounced it straight back in. Nothing was wrong — the
+      // app just rendered its answer before it had asked the question. A token
+      // on disk is grounds to assume a session; `fetchMe` and the 401
+      // interceptor both revoke it if the assumption turns out to be wrong.
+      token: storedToken(),
+      isAuthenticated: !!storedToken(),
       isLoading: false,
+      isBootstrapping: !!storedToken(),
 
       // isLoading is cleared in a finally on both of these. Clearing it only on
       // the success path left the button disabled and reading "Creating
@@ -54,7 +73,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         localStorage.removeItem('somatrack_token')
-        set({ user: null, token: null, isAuthenticated: false })
+        set({ user: null, token: null, isAuthenticated: false, isBootstrapping: false })
       },
 
       fetchMe: async () => {
@@ -62,13 +81,23 @@ export const useAuthStore = create<AuthStore>()(
           const res = await api.get('/auth/me')
           set({ user: res.data.data, isAuthenticated: true })
         } catch {
+          localStorage.removeItem('somatrack_token')
           set({ user: null, token: null, isAuthenticated: false })
+        } finally {
+          // Whatever the answer, the launch-time guess has been settled and the
+          // app can stop holding its splash.
+          set({ isBootstrapping: false })
         }
       }
     }),
     {
       name: 'somatrack_auth',
-      partialize: (state) => ({ token: state.token, user: state.user })
+      // The user, not the token. Restoring the profile synchronously is what
+      // keeps `Protected`'s onboarding gate from bouncing a returning user
+      // through the form while `fetchMe` is still in flight. The token is
+      // deliberately left to `somatrack_token` alone — persisting it in two
+      // places let a 401 clear one and not the other.
+      partialize: (state) => ({ user: state.user })
     }
   )
 )
