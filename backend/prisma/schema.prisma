@@ -42,6 +42,7 @@ model User {
   workoutTemplates      WorkoutTemplate[]
   scheduledWorkouts     ScheduledWorkout[]
   aiProposals           AiProposal[]
+  seenHints             SeenHint[]
 }
 
 // Notification opt-in. EVERY flag defaults false, and there is no backfill:
@@ -130,6 +131,11 @@ model UserProfile {
   userId      String   @id
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
+  /**
+   * Superseded by `birthDate` — an age written once is wrong a year later, and
+   * nothing was re-asking. Kept because existing rows still carry it; read it
+   * only as a fallback when birthDate is null.
+   */
   age         Int?
   weight      Float?
   height      Float?
@@ -137,6 +143,71 @@ model UserProfile {
   phoneNumber String?
   fitnessLevel String?
   goal        String?
+
+  birthDate           DateTime?
+  /** Sessions per week the athlete actually trains, as self-reported. */
+  trainingDaysPerWeek Int?
+  /** Years of consistent training. Fractional so "six months" is expressible. */
+  experienceYears     Float?
+
+  /**
+   * The onboarding gate. Null means the required questions are unanswered and
+   * the app redirects to /onboarding — bodyweight in particular is not
+   * optional, since fatigue scoring silently assumed 70 kg without it.
+   */
+  onboardingCompletedAt DateTime?
+  /**
+   * Equipment + injuries are offered after the gate lifts. Null only stops the
+   * Home prompt card from being dismissed for good; it never blocks anything.
+   */
+  optionalStageDoneAt   DateTime?
+
+  equipment   UserEquipment[]
+  injuries    UserInjury[]
+}
+
+// What the athlete can actually train with. Absence of rows means "unanswered",
+// NOT "owns nothing" — an empty set would filter the catalogue down to nothing,
+// so callers must treat an empty list as no filter at all.
+model UserEquipment {
+  userId      String
+  equipmentId String
+  profile     UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  equipment   Equipment   @relation(fields: [equipmentId], references: [id])
+  createdAt   DateTime    @default(now())
+
+  @@id([userId, equipmentId])
+}
+
+// A body area to train around. Deliberately does NOT feed the fatigue model:
+// a muscle showing red with no workout behind it is not explainable in the UI.
+// It filters and warns on exercises, nothing more.
+model UserInjury {
+  id         String    @id @default(uuid())
+  userId     String
+  profile    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  /** Null when the limitation does not map onto a catalogued muscle. */
+  muscleId   String?
+  muscle     Muscle?   @relation(fields: [muscleId], references: [id])
+  label      String
+  /** 'avoid' hides matching exercises; 'caution' shows them with a warning. */
+  severity   String    @default("caution")
+  activeFrom DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@index([userId, resolvedAt])
+}
+
+// One row per coach-mark the user has dismissed. A row means "seen"; absence
+// means "show it". Storing dismissals server-side rather than in localStorage
+// keeps the tour from replaying on every new device.
+model SeenHint {
+  userId  String
+  hintKey String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seenAt  DateTime @default(now())
+
+  @@id([userId, hintKey])
 }
 
 model Settings {
@@ -191,6 +262,7 @@ model Muscle {
   exerciseLinks    MuscleExercise[]
   fatigueLogs      MuscleFatigueLog[]
   fatigueCurrent   MuscleFatigueCurrent[]
+  injuries         UserInjury[]
 }
 
 model MusclePath {
@@ -230,6 +302,15 @@ model Exercise {
   // run). Null when distance is meaningless for the movement — jump rope,
   // or anything logged on a clock alone — which falls back to duration.
   referenceSpeedKmh Float?
+  // Working load for a set of ~10, as a FRACTION OF BODYWEIGHT, for a trained
+  // adult male reference athlete. This is what makes a first-time suggestion
+  // sane: without it every strength movement opened at the same 60 kg, so a
+  // lateral raise and a back squat were offered identically.
+  //
+  // Per-movement rather than per-muscle on purpose — a leg press and a leg
+  // extension load the same muscle and differ by nearly a factor of ten.
+  // Null for anything not loaded with external weight.
+  loadFactor       Float?
   createdByUserId  String?
   createdByUser    User?                @relation("CustomExercises", fields: [createdByUserId], references: [id])
   muscleLinks      MuscleExercise[]
@@ -266,6 +347,7 @@ model Equipment {
   name          String              @unique
   description   String?
   exerciseLinks EquipmentExercise[]
+  userLinks     UserEquipment[]
 }
 
 model EquipmentExercise {
