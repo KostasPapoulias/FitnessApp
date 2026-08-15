@@ -20,11 +20,24 @@ import { AuthRequest } from '../server'
 
 /**
  * Dark by default — the app has no light theme, and a bright basemap under a
- * route line is unreadable next to the rest of the UI. `dataviz-dark` is the
- * quieter of MapTiler's dark styles: fewer labels and POIs competing with the
- * one line that matters.
+ * route line is unreadable next to the rest of the UI.
+ *
+ * NOT `dataviz-dark`, which this used to default to and which is why the map
+ * looked like a black rectangle with the tiles loading perfectly well. That
+ * style paints its background at hsl(0,0%,16%) and its roads at 16%, 17% and
+ * 20% of the same hue — it is built as a neutral base for a data overlay to sit
+ * on, so rendering almost nothing visible is the point of it. On a 190px map on
+ * a phone it is indistinguishable from a failure, and it produces no error to
+ * say otherwise.
+ *
+ * `streets-v2-dark` is dark enough to sit in this UI and still has contrast:
+ * a blue-grey ground with roads at 33% and water at 52%, so a run through a
+ * neighbourhood reads as a run through a neighbourhood.
+ *
+ * If MAPTILER_STYLE is set in the environment it wins — but check what it is
+ * before blaming the map for being empty.
  */
-const MAP_STYLE = process.env.MAPTILER_STYLE || 'dataviz-dark'
+const MAP_STYLE = process.env.MAPTILER_STYLE || 'streets-v2-dark'
 
 // GET /api/config/map
 export const getMapConfig = async (_req: AuthRequest, res: Response): Promise<void> => {
@@ -44,6 +57,10 @@ export const getMapConfig = async (_req: AuthRequest, res: Response): Promise<vo
     success: true,
     data: {
       styleUrl: `https://api.maptiler.com/maps/${MAP_STYLE}/style.json?key=${key}`,
+      // Echoed so an empty-looking map can name the style it drew. A basemap
+      // that renders nothing and a basemap that failed to load look the same
+      // on a phone, and this is the cheapest way to tell them apart.
+      style: MAP_STYLE,
     },
   })
 }

@@ -1,22 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  AJAXError, Map as MapLibreMap, Marker, setWorkerUrl,
+  AJAXError, LngLatBounds, Map as MapLibreMap, Marker, setWorkerUrl,
   type ErrorEvent, type GeoJSONSource,
 } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
-import { TrackPoint, splitOnGaps } from '../lib/geo'
+import { RouteSegment, TrackPoint, splitOnGaps } from '../lib/geo'
 import api from '../services/api'
 
 /**
- * The live route.
+ * A route on a basemap, live or finished.
  *
- * Imported lazily by the cardio screen — MapLibre is by far the heaviest thing
- * in the app, and someone lifting weights should never pay for it.
+ * LIVE (`getPoints` + `pointCount`): the track is read on demand from a ref
+ * that changes many times a minute, and the camera follows the athlete.
  *
- * The map is deliberately NOT interactive. During a run it is a readout, not a
- * tool: a pan that drags the view off the athlete is pure annoyance, and every
- * touch it swallows is a touch the screen lock was meant to stop.
+ * FINISHED (`route`): a stored set of gap-segmented coordinates, framed once so
+ * the whole run is on screen. Same component because the map, the style, the
+ * failure handling and the line styling are identical, and a second copy of
+ * this would drift from the first within a release.
+ *
+ * Imported lazily by both callers — MapLibre is by far the heaviest thing in
+ * the app, and someone lifting weights should never pay for it.
+ *
+ * The map is deliberately NOT interactive during a run: a pan that drags the
+ * view off the athlete is pure annoyance, and every touch it swallows is a
+ * touch the screen lock was meant to stop. A finished run is a different
+ * matter — there, panning and zooming is the whole point.
  */
 
 /**
@@ -37,41 +46,82 @@ const ROUTE_SOURCE = 'route'
 const ROUTE_LAYER = 'route-line'
 const BRAND_TEAL = '#00D4AA'
 
+/** How long a map may stay blank before it has to explain itself. */
+const WATCHDOG_MS = 10_000
+
 interface Props {
-  /** Read on demand — the track lives in a ref, not in state. */
-  getPoints: () => TrackPoint[]
-  /** Bumps whenever a point is added, which is what drives a redraw. */
-  pointCount: number
-  /** Keep the camera on the athlete. */
+  /** Live: read on demand — the track lives in a ref, not in state. */
+  getPoints?: () => TrackPoint[]
+  /** Live: bumps whenever a point is added, which is what drives a redraw. */
+  pointCount?: number
+  /** Live: keep the camera on the athlete. */
   follow?: boolean
+  /** Finished: a stored route, already segmented on gaps. */
+  route?: RouteSegment[]
+  /** Finished: allow the athlete to look around their own run. */
+  interactive?: boolean
   className?: string
 }
 
-const toGeoJson = (points: TrackPoint[]) => ({
+const emptyFeature = () => ({
   type: 'Feature' as const,
   properties: {},
-  geometry: {
-    type: 'MultiLineString' as const,
-    coordinates: splitOnGaps(points).map(segment =>
-      segment.map(p => [p.lng, p.lat] as [number, number])
-    ),
-  },
+  geometry: { type: 'MultiLineString' as const, coordinates: [] as RouteSegment[] },
 })
 
-export default function RouteMap({ getPoints, pointCount, follow = true, className }: Props) {
+const toFeature = (segments: RouteSegment[]) => ({
+  ...emptyFeature(),
+  geometry: { type: 'MultiLineString' as const, coordinates: segments },
+})
+
+/** Live points become the same shape a stored route already has. */
+const fromPoints = (points: TrackPoint[]): RouteSegment[] =>
+  splitOnGaps(points).map(segment =>
+    segment.map(p => [p.lng, p.lat] as [number, number])
+  )
+
+const boundsOf = (segments: RouteSegment[]): LngLatBounds | null => {
+  const bounds = new LngLatBounds()
+  let any = false
+  for (const segment of segments) {
+    for (const position of segment) {
+      bounds.extend(position)
+      any = true
+    }
+  }
+  return any ? bounds : null
+}
+
+const dot = (color: string, size: number) => {
+  const element = document.createElement('div')
+  element.style.cssText =
+    `width:${size}px;height:${size}px;border-radius:50%;background:${color};` +
+    `border:2px solid #000;box-shadow:0 0 0 5px rgba(0,212,170,0.25)`
+  return element
+}
+
+export default function RouteMap({
+  getPoints, pointCount = 0, follow = true, route, interactive, className,
+}: Props) {
   const container = useRef<HTMLDivElement | null>(null)
   const map = useRef<MapLibreMap | null>(null)
   const marker = useRef<Marker | null>(null)
   const ready = useRef(false)
+  const framed = useRef(false)
   const [failed, setFailed] = useState<string | null>(null)
   /**
    * Why the map is empty, when it is empty but still standing.
    *
-   * A refused style and a refused tile look identical on a phone — both leave a
-   * dark rectangle — and the difference decides whether the key or its origin
-   * allowlist is at fault. There is no console on a run, so it goes on screen.
+   * A refused style, a refused tile and a worker that never started all look
+   * identical on a phone — every one of them leaves a dark rectangle — and the
+   * difference decides whether the key, its origin allowlist, or the build is
+   * at fault. There is no console on a run, so it goes on screen.
    */
   const [diagnostic, setDiagnostic] = useState<string | null>(null)
+
+  const isLive = typeof getPoints === 'function'
+  const currentSegments = (): RouteSegment[] =>
+    isLive ? fromPoints(getPoints!()) : (route ?? [])
 
   // ── build the map once ──
   useEffect(() => {
@@ -84,17 +134,24 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
         // the frontend. It is public the moment a tile loads either way.
         const { data } = await api.get('/config/map')
         const styleUrl: string = data?.data?.styleUrl
+        const styleName: string = data?.data?.style ?? 'unknown'
         if (!styleUrl) throw new Error('no style')
-        if (cancelled || !container.current) return
+        if (cancelled) return
+        if (!container.current) {
+          // Nothing to attach to and nothing that will retry, so this would
+          // otherwise be a permanently blank box with no explanation at all.
+          setDiagnostic('Map container went away before the map was built')
+          return
+        }
 
         const instance = new MapLibreMap({
           container: container.current,
           style: styleUrl,
           center: [23.7275, 37.9838],
           zoom: 15,
-          interactive: false,
+          interactive: interactive ?? false,
           // MapTiler's terms require attribution; it comes from the style, and
-          // compacting it keeps it legible on a 190px-tall map.
+          // compacting it keeps it legible on a small map.
           attributionControl: { compact: true },
         })
 
@@ -103,14 +160,26 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
         // there being a dark rectangle. Say so rather than let it look normal.
         watchdog = window.setTimeout(() => {
           if (!cancelled && !ready.current) {
-            setDiagnostic(previous => previous ?? 'Map style did not load')
+            setDiagnostic(previous => previous ?? `Style "${styleName}" did not load (timed out)`)
           }
-        }, 10_000)
+        }, WATCHDOG_MS)
 
         instance.on('load', () => {
           if (cancelled) return
           window.clearTimeout(watchdog)
-          instance.addSource(ROUTE_SOURCE, { type: 'geojson', data: toGeoJson(getPoints()) })
+
+          // Re-measure before drawing anything.
+          //
+          // This map is mounted from a lazy chunk into a container that is
+          // often still being laid out — a Suspense fallback swapping out, a
+          // sheet animating in, a screen that changed height when the GPS pill
+          // appeared. MapLibre sizes its canvas once at construction, and a
+          // canvas sized against a container that was 0px high renders
+          // perfectly correctly to nowhere: no error, no warning, no tile
+          // failure, just nothing on screen. resize() is cheap and rules the
+          // whole class of that out.
+          instance.resize()
+          instance.addSource(ROUTE_SOURCE, { type: 'geojson', data: emptyFeature() })
           instance.addLayer({
             id: ROUTE_LAYER,
             type: 'line',
@@ -124,26 +193,65 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
           })
           ready.current = true
           draw()
+
+          // A map that loaded its style, parsed its tiles and still shows
+          // nothing has exactly one common cause left, and it is invisible from
+          // the console: a canvas with no area. Measure it once the first frame
+          // has settled and say so on screen, because "blank" on its own is not
+          // something anyone can act on.
+          instance.once('idle', () => {
+            if (cancelled) return
+            const canvas = instance.getCanvas()
+            const box = container.current?.getBoundingClientRect()
+            const width = Math.round(box?.width ?? 0)
+            const height = Math.round(box?.height ?? 0)
+
+            if (width < 2 || height < 2) {
+              setDiagnostic(`Map has no room to draw — container is ${width}×${height}px`)
+              return
+            }
+            if (canvas.width < 2 || canvas.height < 2) {
+              setDiagnostic(`Map canvas is ${canvas.width}×${canvas.height} inside ${width}×${height}px`)
+              return
+            }
+            // Everything measured fine, so anything still wrong is worth
+            // knowing the numbers for.
+            console.info(
+              `[RouteMap] style "${styleName}" drew into ${width}×${height}px ` +
+              `(canvas ${canvas.width}×${canvas.height}, dpr ${window.devicePixelRatio})`
+            )
+          })
         })
 
-        instance.on("error", (event: ErrorEvent) => {
+        instance.on('error', (event: ErrorEvent) => {
           const error = event.error
           console.error('Map error:', error?.message ?? event)
 
-          // Anything that is not a failed request is a style or render
-          // complaint the user can do nothing about, and a badge they cannot
-          // act on is just noise on top of a run.
-          if (!(error instanceof AJAXError)) return
+          // Every failure gets a badge now. The previous version reported only
+          // AJAXErrors and returned on everything else, which is precisely how
+          // a dead worker or a refused WebGL context produced a black rectangle
+          // with nothing to go on — the two failures that leave no network
+          // trace were the two that stayed silent.
+          if (error instanceof AJAXError) {
+            const resource =
+              error.url.includes('/style.json') ? 'style'
+              : error.url.includes('/fonts/') ? 'labels'
+              : error.url.includes('/sprite') ? 'icons'
+              : 'tiles'
 
-          const resource =
-            error.url.includes('/style.json') ? 'style'
-            : error.url.includes('/fonts/') ? 'labels'
-            : 'tiles'
+            setDiagnostic(
+              error.status === 401 || error.status === 403
+                ? `Map ${resource} refused (${error.status}) — key or its allowed origins`
+                : `Map ${resource} failed (${error.status})`
+            )
+            return
+          }
 
+          const message = error?.message ?? String(event)
           setDiagnostic(
-            error.status === 401 || error.status === 403
-              ? `Map ${resource} refused (${error.status}) — key or its allowed origins`
-              : `Map ${resource} failed (${error.status})`
+            /webgl|context|gpu/i.test(message) ? `Map cannot draw here — ${message}`
+            : /worker/i.test(message) ? `Map worker failed — ${message}`
+            : `Map error — ${message}`
           )
         })
 
@@ -159,34 +267,51 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
       cancelled = true
       window.clearTimeout(watchdog)
       marker.current?.remove()
+      marker.current = null
       map.current?.remove()
       map.current = null
       ready.current = false
+      framed.current = false
     }
     // Built once for the life of the screen; new points are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── redraw on new points ──
+  // ── redraw ──
   const draw = () => {
     const instance = map.current
     if (!instance || !ready.current) return
 
-    const points = getPoints()
-    if (points.length === 0) return
-
+    const segments = currentSegments()
     const source = instance.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined
-    source?.setData(toGeoJson(points))
+    source?.setData(toFeature(segments))
 
-    const last = points[points.length - 1]
-    const position: [number, number] = [last.lng, last.lat]
+    if (segments.length === 0) return
+
+    // A finished run is framed once, whole. Fitting it on every redraw would
+    // fight the athlete the moment they zoomed in on a corner of it.
+    if (!isLive) {
+      if (framed.current) return
+      const bounds = boundsOf(segments)
+      if (!bounds) return
+      instance.fitBounds(bounds, { padding: 28, duration: 0, maxZoom: 16 })
+      framed.current = true
+
+      const first = segments[0][0]
+      const lastSegment = segments[segments.length - 1]
+      const last = lastSegment[lastSegment.length - 1]
+      new Marker({ element: dot(BRAND_TEAL, 12) }).setLngLat(first).addTo(instance)
+      new Marker({ element: dot('#FFFFFF', 12) }).setLngLat(last).addTo(instance)
+      return
+    }
+
+    const lastSegment = segments[segments.length - 1]
+    const position = lastSegment[lastSegment.length - 1]
 
     if (!marker.current) {
-      const dot = document.createElement('div')
-      dot.style.cssText =
-        `width:14px;height:14px;border-radius:50%;background:${BRAND_TEAL};` +
-        `border:2px solid #000;box-shadow:0 0 0 5px rgba(0,212,170,0.25)`
-      marker.current = new Marker({ element: dot }).setLngLat(position).addTo(instance)
+      marker.current = new Marker({ element: dot(BRAND_TEAL, 14) })
+        .setLngLat(position)
+        .addTo(instance)
       instance.jumpTo({ center: position, zoom: 16 })
       return
     }
@@ -197,7 +322,7 @@ export default function RouteMap({ getPoints, pointCount, follow = true, classNa
     if (follow) instance.easeTo({ center: position, duration: 800 })
   }
 
-  useEffect(draw, [pointCount, follow])
+  useEffect(draw, [pointCount, follow, route])
 
   if (failed) {
     return (
