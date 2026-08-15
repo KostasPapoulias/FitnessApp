@@ -14,13 +14,14 @@ import { useDeviceType } from './useDeviceType'
  * in a Home Screen web app. The one platform wrinkle is iOS 13+, which requires
  * an explicit permission grant triggered by a user gesture.
  *
- * There is always a slow idle sway underneath, and the sensor only overrides it
- * while it is actually reporting. The gyroscope is absent far more often than
- * anyone expects — a desktop browser, a declined iOS prompt, a dev server on
- * plain http (Chrome gates the sensor behind a secure context), or simply a
- * phone lying flat on a bench — and every one of those used to leave the body
- * frozen. A decoration that is dead still is indistinguishable from a broken
- * one, which is exactly how this kept getting reported as a regression.
+ * Phone and gyroscope only. There is no time-based fallback animation: with no
+ * sensor the element is meant to sit still, because the movement is supposed to
+ * be the phone's, not a loop playing at it.
+ *
+ * If it appears dead on a phone, the sensor is the thing to check before the
+ * code — a declined iOS prompt is remembered in `PERMISSION_KEY` and never asked
+ * again, and Chrome only delivers `deviceorientation` in a secure context, so a
+ * dev server on plain http over the LAN gets nothing at all.
  */
 
 /** Real tilt beyond this contributes nothing more. */
@@ -31,12 +32,6 @@ const MAX_OUTPUT_DEG = 5.5
 const DEAD_ZONE_DEG = 1.5
 /** Per-frame approach to the target. Lower is heavier and slower to settle. */
 const EASING = 0.075
-/** Amplitude of the sensorless sway. Under half of what a real tilt can reach. */
-const IDLE_DEG = 2.2
-/** One full sway. Slow enough that it reads as hanging, not as a metronome. */
-const IDLE_PERIOD_MS = 5200
-/** No usable reading for this long and the idle sway takes back over. */
-const SENSOR_GAP_MS = 1500
 /** localStorage key — iOS should only ever be asked once. */
 const PERMISSION_KEY = 'somatrack_tilt_permission'
 
@@ -61,29 +56,21 @@ export const useDeviceTilt = (): number => {
   const current = useRef(0)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!isPhone) return
+    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return
 
     // Someone who has asked for less motion has asked for this too
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
     if (reduced.matches) return
 
-    // The sensor is a phone's, but the sway is not: gating the whole hook on
-    // `isPhone` is why a desktop browser showed a body that never moved, which
-    // is where "it used to swing" gets reported from in the first place.
-    const sensorAvailable = isPhone && 'DeviceOrientationEvent' in window
-
     let frame = 0
     let listening = false
     let cancelled = false
-    /** When the sensor last produced a usable angle. 0 means never. */
-    let lastReading = 0
 
     const onOrientation = (event: DeviceOrientationEvent) => {
       // gamma is left-right tilt in portrait. Null on devices without the
       // sensor, and on desktop browsers that fire the event with no data.
       if (event.gamma == null) return
-
-      lastReading = performance.now()
 
       const raw = clamp(event.gamma, -MAX_INPUT_DEG, MAX_INPUT_DEG)
       const beyondDeadZone = Math.abs(raw) < DEAD_ZONE_DEG
@@ -95,14 +82,7 @@ export const useDeviceTilt = (): number => {
       target.current = -(beyondDeadZone / MAX_INPUT_DEG) * MAX_OUTPUT_DEG
     }
 
-    const tick = (now: number) => {
-      // The sensor owns the target while it is reporting; the sway fills every
-      // gap. Driving both through the same easing is what stops the handover
-      // from being a jump — whichever takes over is approached, not snapped to.
-      if (now - lastReading > SENSOR_GAP_MS) {
-        target.current = Math.sin((now / IDLE_PERIOD_MS) * Math.PI * 2) * IDLE_DEG
-      }
-
+    const tick = () => {
       const next = current.current + (target.current - current.current) * EASING
       // Below a hundredth of a degree nothing is visible; stop re-rendering
       if (Math.abs(next - current.current) > 0.005) {
@@ -112,14 +92,14 @@ export const useDeviceTilt = (): number => {
       frame = requestAnimationFrame(tick)
     }
 
-    // Runs regardless of the sensor. This is the whole point of the fallback:
-    // nothing below may gate the animation on a permission decision.
-    frame = requestAnimationFrame(tick)
-
+    // Started with the listener, not before it: with no sensor reporting there
+    // is nothing for the loop to ease towards, and a frame loop that only ever
+    // computes zero is a wasted wake-up on every frame the phone paints.
     const listen = () => {
-      if (listening || cancelled || !sensorAvailable) return
+      if (listening || cancelled) return
       listening = true
       window.addEventListener('deviceorientation', onOrientation)
+      frame = requestAnimationFrame(tick)
     }
 
     // iOS 13+ only. The prompt appears solely inside a user gesture, so it has
@@ -141,9 +121,7 @@ export const useDeviceTilt = (): number => {
 
     const stored = localStorage.getItem(PERMISSION_KEY) as PermissionState | null
 
-    if (!sensorAvailable) {
-      // Sway only. Nothing to ask for and nothing to listen to.
-    } else if (!needsPermission() || stored === 'granted') {
+    if (!needsPermission() || stored === 'granted') {
       // Android and everything else: no gate, just listen
       listen()
     } else if (stored !== 'denied') {
