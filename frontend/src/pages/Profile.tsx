@@ -244,7 +244,12 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end">
+    // Above BottomNav's z-50, not level with it. A sheet rises from the bottom
+    // of the screen and the nav is fixed to that same edge, so at equal z the
+    // nav — rendered after <main> — painted over the footer and swallowed the
+    // Save button whole. A modal belongs over the nav in any case: the scrim
+    // covers it, so it should not stay lit and tappable underneath.
+    <div className="fixed inset-0 z-[60] flex items-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
                       rounded-t-2xl border-t border-dark-600
@@ -357,7 +362,7 @@ function LogSleepModal({ onSave, onClose }: {
   const [score, setScore]   = useState(75)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end">
+    <div className="fixed inset-0 z-[60] flex items-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
                       rounded-t-2xl border-t border-dark-600 p-5 pb-20">
@@ -419,7 +424,7 @@ function LogNutritionModal({ onSave, onClose }: {
   const [calories, setCalories] = useState(2500)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end">
+    <div className="fixed inset-0 z-[60] flex items-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
                       rounded-t-2xl border-t border-dark-600 p-5 pb-20">
