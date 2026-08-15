@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../server';
 import { buildEffectiveFatigueMap } from '../services/fatigue.service';
+import { rankByConstraints, getTrainingConstraints } from '../services/training-constraints.service';
 import { AuthRequest } from '../server';
 
 // Get all exercises
@@ -54,8 +55,14 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
     })
     const fatigueMap = buildEffectiveFatigueMap(fatigueCurrent)
 
+    // Equipment the athlete has, and anything they are training around. Both
+    // are no-ops until the optional onboarding stage has been answered.
+    const constraints = await getTrainingConstraints(req.userId!)
+    const { ranked, hiddenCount, missingEquipmentCount } =
+      rankByConstraints(exercises, constraints)
+
     // Add fatigue warning to each exercise
-    const exercisesWithFatigue = exercises.map(exercise => {
+    const exercisesWithFatigue = ranked.map(exercise => {
       const maxFatigue = Math.max(
         0,
         ...exercise.muscleLinks.map(
@@ -77,11 +84,26 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
         equipment: exercise.equipmentLinks.map(el => el.equipment.name),
         isCustom: exercise.createdByUserId !== null,
         fatigueWarning: maxFatigue >= 70, //  show red warning
-        maxMuscleFatigue: Math.round(maxFatigue)
+        maxMuscleFatigue: Math.round(maxFatigue),
+        // Loads a muscle the athlete flagged as "work around it". Shown, but
+        // the client marks it.
+        injuryCaution: exercise.caution,
+        // Needs kit they did not tick. Still listed — sorted to the bottom —
+        // so the catalogue never looks like it is missing exercises.
+        needsMissingEquipment: exercise.needsMissingEquipment
       }
     })
 
-    res.json({ success: true, data: exercisesWithFatigue })
+    // Surfaced so the client can explain itself: hiddenByInjury is the only
+    // thing actually removed, and unavailable counts what got demoted.
+    res.json({
+      success: true,
+      data: exercisesWithFatigue,
+      meta: {
+        hiddenByInjury: hiddenCount,
+        needsMissingEquipment: missingEquipmentCount
+      }
+    })
 
   } catch (error) {
     console.error('getExercises error:', error)

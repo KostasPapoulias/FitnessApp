@@ -1,10 +1,68 @@
 import { Router } from 'express';
 import { getProfile, updateProfile, logSleep, logNutrition, deleteAccount } from '../controllers/profile.controller';
+import {
+  getOnboardingOptions,
+  getOnboardingState,
+  completeOnboarding,
+  setUserEquipment,
+  setUserInjuries,
+  dismissHint,
+  resetHints,
+} from '../controllers/onboarding.controller';
 import { verifyToken } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.use(verifyToken);
+
+/**
+ * @route GET /api/profile/onboarding/options
+ * @protected
+ * @returns equipment catalogue + muscle list for the optional stage
+ */
+router.get('/onboarding/options', getOnboardingOptions);
+
+/**
+ * @route GET /api/profile/onboarding/state
+ * @protected
+ * @returns gate status, optional-stage answers, dismissed coach-marks
+ */
+router.get('/onboarding/state', getOnboardingState);
+
+/**
+ * @route PUT /api/profile/onboarding
+ * @protected
+ * @returns profile with onboardingCompletedAt stamped
+ */
+router.put('/onboarding', completeOnboarding);
+
+/**
+ * @route PUT /api/profile/equipment
+ * @protected
+ * @returns the stored equipment id set
+ */
+router.put('/equipment', setUserEquipment);
+
+/**
+ * @route PUT /api/profile/injuries
+ * @protected
+ * @returns active injuries
+ */
+router.put('/injuries', setUserInjuries);
+
+/**
+ * @route POST /api/profile/hints/:hintKey
+ * @protected
+ * @returns the dismissed hint key
+ */
+router.post('/hints/:hintKey', dismissHint);
+
+/**
+ * @route DELETE /api/profile/hints
+ * @protected
+ * @returns confirmation the tour will replay
+ */
+router.delete('/hints', resetHints);
 
 /**
  * @route GET /api/profile
