@@ -13,6 +13,14 @@ import { useDeviceType } from './useDeviceType'
  * Uses DeviceOrientationEvent directly — no Capacitor plugin needed, this works
  * in a Home Screen web app. The one platform wrinkle is iOS 13+, which requires
  * an explicit permission grant triggered by a user gesture.
+ *
+ * There is always a slow idle sway underneath, and the sensor only overrides it
+ * while it is actually reporting. The gyroscope is absent far more often than
+ * anyone expects — a desktop browser, a declined iOS prompt, a dev server on
+ * plain http (Chrome gates the sensor behind a secure context), or simply a
+ * phone lying flat on a bench — and every one of those used to leave the body
+ * frozen. A decoration that is dead still is indistinguishable from a broken
+ * one, which is exactly how this kept getting reported as a regression.
  */
 
 /** Real tilt beyond this contributes nothing more. */

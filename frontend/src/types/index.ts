@@ -9,12 +9,19 @@ export interface User {
 export interface UserProfile {
   userId: string
   name: string
+  /** Legacy. Prefer birthDate — an age stored once goes stale silently. */
   age?: number
   weight?: number
   height?: number
   gender?: string
   fitnessLevel?: string
   goal?: string
+  birthDate?: string | null
+  trainingDaysPerWeek?: number | null
+  experienceYears?: number | null
+  /** Null means the onboarding gate has not been passed. */
+  onboardingCompletedAt?: string | null
+  optionalStageDoneAt?: string | null
 }
 
 export interface Settings {
@@ -86,6 +93,10 @@ export interface Exercise {
   isCustom: boolean
   fatigueWarning: boolean
   maxMuscleFatigue: number
+  /** Loads a muscle flagged "work around it" in Training Setup. */
+  injuryCaution?: boolean
+  /** Needs kit not ticked in Training Setup. Still listed, sorted last. */
+  needsMissingEquipment?: boolean
 }
 
 export interface ExerciseCategory {

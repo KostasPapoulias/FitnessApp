@@ -18,6 +18,14 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --bottom-nav-h: 78px;
+
+  /* Padding the full inset clears the notch but wastes the band of screen
+     beside the camera, which on a 59px inset is a visible empty stripe above
+     every header. These two ride a little into the inset instead — still clear
+     of the clock and the home indicator, just not deferentially so.
+     `max()` keeps them at 0 on hardware that has no inset to eat into. */
+  --page-top: max(0px, calc(var(--safe-top) - 14px));
+  --nav-bottom: max(0px, calc(var(--safe-bottom) - 6px));
 }
 
 /* Prevent all default browser gestures */

@@ -55,7 +55,12 @@ export default function ExerciseList() {
     return matchesSearch && matchesSub
   })
 
-  const aiPicks = filtered.filter(ex => !ex.fatigueWarning).slice(0, 3).map(ex => ex.name)
+  // Suggestions must be things they can actually do today: fresh enough, not
+  // loading an injury, and not requiring kit they never listed.
+  const aiPicks = filtered
+    .filter(ex => !ex.fatigueWarning && !ex.injuryCaution && !ex.needsMissingEquipment)
+    .slice(0, 3)
+    .map(ex => ex.name)
   const isSelected = (id: string) => selectedExercises.some(se => se.exercise.id === id)
 
   const toggleExercise = (exercise: Exercise) => {
@@ -175,6 +180,18 @@ export default function ExerciseList() {
                       </p>
                       {exercise.fatigueWarning && (
                         <p className="text-brand-red text-xs mt-0.5">⚠ High muscle fatigue — not recommended</p>
+                      )}
+                      {exercise.injuryCaution && (
+                        <p className="text-brand-yellow text-xs mt-0.5">
+                          ⚠ Loads an area you're working around
+                        </p>
+                      )}
+                      {/* Says why this one sank to the bottom. Without the
+                          line it just looks like an odd sort order. */}
+                      {exercise.needsMissingEquipment && (
+                        <p className="text-dark-400 text-xs mt-0.5">
+                          Needs equipment you haven't listed
+                        </p>
                       )}
                     </div>
                     <button

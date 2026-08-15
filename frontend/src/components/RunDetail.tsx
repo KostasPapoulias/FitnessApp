@@ -84,8 +84,10 @@ export default function RunDetail({ setId, title, onClose }: Props) {
     <div className="fixed inset-0 z-50 bg-dark-900 text-white overflow-y-auto"
          style={{ overscrollBehavior: 'contain' }}>
       {/* header */}
+      {/* This sheet is `fixed`, so it sits outside AppLayout and gets none of
+          its safe-area padding — the back button landed under the clock. */}
       <div className="sticky top-0 z-10 bg-dark-900/95 backdrop-blur border-b border-dark-700
-                      px-4 py-3 flex items-center gap-3">
+                      px-4 pb-3 pt-[calc(0.75rem+var(--page-top))] flex items-center gap-3">
         <button
           onClick={onClose}
           className="w-9 h-9 rounded-btn border border-dark-600 bg-dark-800
@@ -100,7 +102,10 @@ export default function RunDetail({ setId, title, onClose }: Props) {
         </div>
       </div>
 
-      <div className="px-4 pb-10">
+      {/* The bottom nav is `fixed` at the same z-index and paints after this
+          sheet, so it covers whatever the scroll ends on — which was always the
+          last split. Scroll has to run out above the nav, not behind it. */}
+      <div className="px-4 pb-[calc(var(--bottom-nav-h)+1.5rem)]">
         {loading && (
           <p className="text-center text-dark-400 text-sm py-16">Loading the run…</p>
         )}

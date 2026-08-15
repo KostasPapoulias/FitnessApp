@@ -1,7 +1,8 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import BottomNav from './BottomNav'
 import { useDeviceType } from '../../hooks/useDeviceType'
+import { useOnboardingStore } from '../../store/useOnboardingStore'
 
 const SWIPE_ROUTES = ['/', '/calendar', '/ai', '/profile']
 
@@ -9,6 +10,14 @@ export default function AppLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { isPhone } = useDeviceType()
+  const fetchOnboardingState = useOnboardingStore(s => s.fetchState)
+
+  // Fetched here rather than on Home, because coach-marks live on screens a
+  // user can reach directly — landing on Calendar first would otherwise leave
+  // every hint permanently hidden behind `loaded === false`.
+  useEffect(() => {
+    fetchOnboardingState()
+  }, [])
 
   const touchStartX  = useRef(0)
   const touchStartY  = useRef(0)
@@ -71,7 +80,7 @@ export default function AppLayout() {
           screen's own `pt-4`/`pt-6` is far short of a 59px notch.
           The bottom clears the real nav rather than a guessed 5rem. */}
       <main
-        className={`flex flex-col min-h-dvh overflow-y-auto pt-[var(--safe-top)] ${
+        className={`flex flex-col min-h-dvh overflow-y-auto pt-[var(--page-top)] ${
           isPhone ? 'pb-[var(--bottom-nav-h)]' : 'pb-8 pl-72'
         }`}
         onTouchStart={onTouchStart}

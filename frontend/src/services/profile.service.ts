@@ -8,12 +8,16 @@ export const profileService = {
 
   updateProfile: async (data: {
     name?: string
+    /** Legacy. Send birthDate instead — the recovery model prefers it. */
     age?: number
     weight?: number
     height?: number
     gender?: string
     fitnessLevel?: string
     goal?: string
+    birthDate?: string
+    trainingDaysPerWeek?: number
+    experienceYears?: number
   }) => {
     const res = await api.put('/profile', data)
     return res.data.data

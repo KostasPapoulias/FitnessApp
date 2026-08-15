@@ -11,6 +11,8 @@ import AIChat from './pages/AIChat'
 import AIChatHub from './pages/AIChatHub'
 import Plans from './pages/Plans'
 import Profile from './pages/Profile'
+import Onboarding from './pages/Onboarding'
+import TrainingSetup from './pages/TrainingSetup'
 import NotificationSettings from './pages/NotificationSettings'
 import SecuritySettings from './pages/SecuritySettings'
 import BrowseCategories from './pages/Workout/BrowseCategories'
@@ -31,13 +33,31 @@ import { Capacitor } from '@capacitor/core'
 import PinLock from './components/security/PinLock'
 import { useAppLock } from './hooks/useAppLock'
 // Protected route wrapper
+//
+// Two gates, in order. Unauthenticated users go to /login; authenticated users
+// who have never answered the required onboarding questions go to /onboarding.
+//
+// The second gate applies to EXISTING accounts too, deliberately. Until a user
+// records a bodyweight, calisthenics load is scored against a hardcoded 70 kg —
+// grandfathering old accounts past this would keep that wrong number in their
+// history indefinitely.
 const Protected = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuthStore()
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
+  const { isAuthenticated, user } = useAuthStore()
+
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+
+  // `user` is briefly null on a cold load while fetchMe resolves. Redirecting
+  // on that would bounce already-onboarded users through the form on every
+  // launch, so an unknown profile waits rather than guesses.
+  if (user && !user.profile?.onboardingCompletedAt) {
+    return <Navigate to="/onboarding" replace />
+  }
+
+  return <>{children}</>
 }
 
 export default function App() {
-  const { fetchMe, isAuthenticated } = useAuthStore()
+  const { fetchMe, isAuthenticated, user } = useAuthStore()
   const { requestPermission, scheduleInactivityReminder, ensurePushSubscription } = useNotifications()
   const { locked, unlock } = useAppLock(isAuthenticated)
 
@@ -82,6 +102,17 @@ export default function App() {
           isAuthenticated ? <Navigate to="/" replace /> : <Register />
         } />
 
+        {/* Authenticated but pre-onboarding. Outside AppLayout on purpose —
+            the bottom nav would offer escape routes past a gate whose whole
+            job is to not be escapable. */}
+        <Route path="/onboarding" element={
+          !isAuthenticated
+            ? <Navigate to="/login" replace />
+            : user?.profile?.onboardingCompletedAt
+              ? <Navigate to="/" replace />
+              : <Onboarding />
+        } />
+
         {/* Protected routes — all inside AppLayout (has BottomNav) */}
         <Route path="/" element={
           <Protected><AppLayout /></Protected>
@@ -98,6 +129,7 @@ export default function App() {
           <Route path="ai" element={<AIChatHub />} />
           <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="training-setup" element={<TrainingSetup />} />
           <Route path="profile/notifications" element={<NotificationSettings />} />
           <Route path="profile/security" element={<SecuritySettings />} />
           <Route path="plans" element={<Plans />} />

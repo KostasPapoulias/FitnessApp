@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
+import { useOnboardingStore } from '../store/useOnboardingStore'
 import { profileService } from '../services/profile.service'
+import {
+  cmToFeetInches, feetInchesToCm, kgToLb, lbToKg,
+} from '../services/onboarding.service'
+import {
+  BirthDateField, ChipRow, DateParts, INPUT_BASE, LIMITS, NumberField,
+  num, resolveBirthDate, toDateParts, within,
+} from '../components/forms/Fields'
 import { useNotifications } from '../hooks/useNotifcations'
 import { FormState, LoadTrend, TrainingLoad } from '../types'
 import {
@@ -145,113 +153,194 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   )
 }
 
-//   Edit Profile Modal 
-function EditProfileModal({ profile, onSave, onClose }: {
-  profile: any; onSave: (data: any) => void; onClose: () => void
-}) {
-  const [form, setForm] = useState({
-    name:        profile?.name        ?? '',
-    age:         profile?.age         ?? '',
-    weight:      profile?.weight      ?? '',
-    height:      profile?.height      ?? '',
-    gender:      profile?.gender      ?? '',
-    fitnessLevel: profile?.fitnessLevel ?? 'intermediate',
-    goal:        profile?.goal        ?? 'hypertrophy',
-  })
+//   Edit Profile Modal
+//
+// Writes the same columns onboarding does, through the same field components,
+// so the two cannot drift. It previously asked for a plain `age`, which the
+// recovery model no longer reads — it prefers `birthDate` — so editing it
+// changed nothing the athlete could observe.
+const SEX_OPTIONS = [
+  { value: 'male',              label: 'Male' },
+  { value: 'female',            label: 'Female' },
+  { value: 'other',             label: 'Other' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+] as const
 
-  const set = (key: string, val: string) =>
-    setForm(f => ({ ...f, [key]: val }))
+const LEVEL_OPTIONS = [
+  { value: 'beginner',     label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced',     label: 'Advanced' },
+] as const
+
+const GOAL_OPTIONS = [
+  { value: 'hypertrophy', label: 'Build muscle' },
+  { value: 'strength',    label: 'Get stronger' },
+  { value: 'endurance',   label: 'Endurance' },
+  { value: 'weight_loss', label: 'Lose weight' },
+] as const
+
+function EditProfileModal({ profile, imperial, onSave, onClose }: {
+  profile: any
+  imperial: boolean
+  onSave: (data: any) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState<string>(profile?.name ?? '')
+  const [birth, setBirth] = useState<DateParts>(toDateParts(profile?.birthDate))
+  const [sex, setSex] = useState<string | null>(profile?.gender ?? null)
+  const [level, setLevel] = useState<string | null>(profile?.fitnessLevel ?? null)
+  const [goal, setGoal] = useState<string | null>(profile?.goal ?? null)
+  const [days, setDays] = useState<number | null>(profile?.trainingDaysPerWeek ?? null)
+  const [years, setYears] = useState<string>(
+    profile?.experienceYears != null ? String(profile.experienceYears) : ''
+  )
+
+  // Seeded in whichever unit the athlete reads, converted back on save. The
+  // stored value is always metric.
+  const [cm, setCm] = useState(profile?.height != null ? String(Math.round(profile.height)) : '')
+  const [kg, setKg] = useState(profile?.weight != null ? String(profile.weight) : '')
+  const [feet, setFeet] = useState(
+    profile?.height != null ? String(cmToFeetInches(profile.height).feet) : ''
+  )
+  const [inches, setInches] = useState(
+    profile?.height != null ? String(cmToFeetInches(profile.height).inches) : ''
+  )
+  const [lb, setLb] = useState(
+    profile?.weight != null ? String(Math.round(kgToLb(profile.weight) * 10) / 10) : ''
+  )
+
+  const birthResolved = resolveBirthDate(birth)
+
+  const heightCm = imperial
+    ? (within(num(feet), LIMITS.feet) && within(num(inches), LIMITS.inches)
+        ? feetInchesToCm(num(feet)!, num(inches)!) : null)
+    : (within(num(cm), LIMITS.cm) ? num(cm) : null)
+
+  const weightKg = imperial
+    ? (within(num(lb), LIMITS.lb) ? lbToKg(num(lb)!) : null)
+    : (within(num(kg), LIMITS.kg) ? num(kg) : null)
+
+  // Bodyweight is load-bearing for calisthenics scoring, so it may not be
+  // cleared to nothing once set. Everything else may be left blank.
+  const valid =
+    name.trim() !== '' &&
+    weightKg !== null &&
+    heightCm !== null &&
+    (birth.day === '' && birth.month === '' && birth.year === '' ? true : birthResolved.date !== null)
+
+  const save = () => {
+    const y = num(years)
+    onSave({
+      name: name.trim(),
+      gender: sex ?? undefined,
+      fitnessLevel: level ?? undefined,
+      goal: goal ?? undefined,
+      height: Math.round(heightCm! * 10) / 10,
+      weight: Math.round(weightKg! * 10) / 10,
+      ...(birthResolved.date ? { birthDate: birthResolved.date.toISOString() } : {}),
+      ...(days != null ? { trainingDaysPerWeek: days } : {}),
+      ...(y != null ? { experienceYears: y } : {}),
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
-                      rounded-t-2xl border-t border-dark-600 p-3 pt-1 pb-20
-                      max-h-[90dvh] overflow-y-auto">
+                      rounded-t-2xl border-t border-dark-600
+                      max-h-[92dvh] flex flex-col">
 
-        <div className="flex justify-between items-center mb-1">
+        {/* Sticky so the title and close stay reachable on a long scroll. */}
+        <div className="flex justify-between items-center px-5 pt-4 pb-3
+                        border-b border-dark-700 flex-shrink-0">
           <h2 className="text-white text-lg font-bold">Edit Profile</h2>
-          <button onClick={onClose} className="text-dark-400 text-2xl leading-none">×</button>
+          <button onClick={onClose}
+                  className="text-dark-400 text-2xl leading-none w-8 h-8
+                             flex items-center justify-center -mr-2">×</button>
         </div>
 
-        <div className="flex flex-col gap-2">
-          {[
-            { key: 'name',   label: 'Name',       type: 'text',   placeholder: 'Your name' },
-            { key: 'age',    label: 'Age',         type: 'number', placeholder: '25' },
-            { key: 'weight', label: 'Weight (kg)', type: 'number', placeholder: '80' },
-            { key: 'height', label: 'Height (cm)', type: 'number', placeholder: '180' },
-          ].map(field => (
-            <div key={field.key}>
-              <label className="text-dark-300 text-xs mb-1 block">{field.label}</label>
-              <input
-                type={field.type}
-                value={(form as any)[field.key]}
-                onChange={e => set(field.key, e.target.value)}
-                placeholder={field.placeholder}
-                className="w-full bg-dark-700 border border-dark-600 rounded-btn
-                           px-4 py-3 text-white text-sm placeholder-dark-500
-                           focus:outline-none focus:border-brand-teal"
-              />
-            </div>
-          ))}
+        <div className="overflow-y-auto px-5 py-5 flex flex-col gap-5">
 
-          {/* Gender */}
           <div>
-            <label className="text-dark-300 text-xs mb-1.5 block">Gender</label>
-            <div className="flex gap-2">
-              {['Male', 'Female', 'Other'].map(g => (
-                <button key={g}
-                  onClick={() => set('gender', g.toLowerCase())}
-                  className={`flex-1 py-2.5 rounded-btn text-sm border transition-all
-                             ${form.gender === g.toLowerCase()
-                               ? 'bg-brand-teal text-black border-brand-teal'
-                               : 'bg-dark-700 text-dark-300 border-dark-600'}`}>
-                  {g}
-                </button>
-              ))}
-            </div>
+            <label className="text-dark-300 text-xs mb-1.5 block">Name</label>
+            <input
+              type="text" value={name} onChange={e => setName(e.target.value)}
+              placeholder="Your name"
+              className={`${INPUT_BASE} border-dark-600 focus:border-brand-teal`}
+            />
           </div>
 
-          {/* Fitness level */}
+          <BirthDateField value={birth} onChange={setBirth} error={birthResolved.error} />
+
+          {/* Height + weight, in whichever unit they read */}
+          {imperial ? (
+            <>
+              <div>
+                <label className="text-dark-300 text-xs mb-1.5 block">Height</label>
+                <div className="flex gap-2.5">
+                  <NumberField value={feet} onChange={setFeet} unit="ft"
+                               placeholder="5" limits={LIMITS.feet} />
+                  <NumberField value={inches} onChange={setInches} unit="in"
+                               placeholder="10" limits={LIMITS.inches} />
+                </div>
+              </div>
+              <NumberField label="Weight" value={lb} onChange={setLb} unit="lb"
+                           placeholder="165" limits={LIMITS.lb} decimal />
+            </>
+          ) : (
+            <>
+              <NumberField label="Height" value={cm} onChange={setCm} unit="cm"
+                           placeholder="175" limits={LIMITS.cm} />
+              <NumberField label="Weight" value={kg} onChange={setKg} unit="kg"
+                           placeholder="75" limits={LIMITS.kg} decimal />
+            </>
+          )}
+
           <div>
-            <label className="text-dark-300 text-xs mb-1.5 block">Fitness Level</label>
-            <div className="flex gap-2">
-              {['beginner', 'intermediate', 'advanced'].map(level => (
-                <button key={level}
-                  onClick={() => set('fitnessLevel', level)}
-                  className={`flex-1 py-2.5 rounded-btn text-xs border capitalize
-                             transition-all
-                             ${form.fitnessLevel === level
-                               ? 'bg-brand-teal text-black border-brand-teal'
-                               : 'bg-dark-700 text-dark-300 border-dark-600'}`}>
-                  {level}
-                </button>
-              ))}
-            </div>
+            <label className="text-dark-300 text-xs mb-1.5 block">Sex</label>
+            <ChipRow options={SEX_OPTIONS as any} value={sex as any}
+                     onChange={setSex} layout="grid2" />
           </div>
 
-          {/* Goal */}
+          <div>
+            <label className="text-dark-300 text-xs mb-1.5 block">Fitness level</label>
+            <ChipRow options={LEVEL_OPTIONS as any} value={level as any} onChange={setLevel} />
+          </div>
+
           <div>
             <label className="text-dark-300 text-xs mb-1.5 block">Goal</label>
-            <div className="grid grid-cols-2 gap-2">
-              {['hypertrophy', 'strength', 'endurance', 'weight_loss'].map(goal => (
-                <button key={goal}
-                  onClick={() => set('goal', goal)}
-                  className={`py-2.5 rounded-btn text-xs border capitalize
-                             transition-all
-                             ${form.goal === goal
-                               ? 'bg-brand-teal text-black border-brand-teal'
-                               : 'bg-dark-700 text-dark-300 border-dark-600'}`}>
-                  {goal.replace('_', ' ')}
+            <ChipRow options={GOAL_OPTIONS as any} value={goal as any}
+                     onChange={setGoal} layout="grid2" />
+          </div>
+
+          <div>
+            <label className="text-dark-300 text-xs mb-1.5 block">
+              Days per week you train <span className="text-dark-400">(optional)</span>
+            </label>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                <button key={d} onClick={() => setDays(days === d ? null : d)}
+                  className={`flex-1 py-2.5 rounded-btn text-sm font-semibold border transition-colors
+                              ${days === d
+                                ? 'bg-brand-teal text-black border-brand-teal'
+                                : 'bg-dark-700 text-dark-300 border-dark-600'}`}>
+                  {d}
                 </button>
               ))}
             </div>
           </div>
 
-          <button
-            onClick={() => onSave(form)}
-            className="w-full bg-brand-teal text-black font-bold py-4
-                       rounded-btn active:scale-95 transition-transform mt-2">
+          <NumberField label="Years training (optional)" value={years} onChange={setYears}
+                       unit="yrs" placeholder="2.5" limits={LIMITS.years} decimal />
+        </div>
+
+        {/* Outside the scroll area so Save is always reachable. */}
+        <div className="px-5 pt-3 pb-[calc(1.25rem+var(--safe-bottom))]
+                        border-t border-dark-700 flex-shrink-0">
+          <button onClick={save} disabled={!valid}
+            className="w-full bg-brand-teal text-black font-bold py-3.5
+                       rounded-btn active:scale-95 transition-transform
+                       disabled:opacity-40">
             Save Changes
           </button>
         </div>
@@ -380,11 +469,12 @@ function LogNutritionModal({ onSave, onClose }: {
 //   Main Profile Page 
 export default function Profile() {
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
+  const { user, logout, fetchMe } = useAuthStore()
   const { readinessScore, systemicFatigue, trainingLoad, fetchTrainingLoad } = useFatigueStore()
   // Only needs to READ the state here — enabling, testing and per-type choices
   // all live on the Notifications screen now.
   const { isPushSubscribed } = useNotifications()
+  const { equipmentIds, injuries, resetHints } = useOnboardingStore()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -423,17 +513,16 @@ export default function Profile() {
     fetchTrainingLoad()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The modal already validated and converted to metric, so this forwards its
+  // payload as-is rather than re-parsing it. Re-deriving numbers here is how
+  // the old `age` field ended up silently disagreeing with `birthDate`.
   const handleSaveProfile = async (form: any) => {
-    const saved = await profileService.updateProfile({
-      name:         form.name,
-      age:          form.age    ? Number(form.age)    : undefined,
-      weight:       form.weight ? Number(form.weight) : undefined,
-      height:       form.height ? Number(form.height) : undefined,
-      gender:       form.gender,
-      fitnessLevel: form.fitnessLevel,
-      goal:         form.goal,
-    })
+    const saved = await profileService.updateProfile(form)
     setProfileData((prev: any) => ({ ...prev, profile: saved }))
+    // Keeps the cached auth user in step — Home reads the name from there, so
+    // renaming yourself otherwise left the old name on the greeting until the
+    // next launch.
+    await fetchMe()
     setShowEditModal(false)
   }
 
@@ -644,6 +733,29 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
+            icon="🏋️"
+            label="Training Setup"
+            sublabel={equipmentIds.length > 0 || injuries.length > 0
+              ? `${equipmentIds.length} equipment · ${injuries.length} injur${injuries.length === 1 ? 'y' : 'ies'}`
+              : 'Equipment and injuries — not set'}
+            onClick={() => navigate('/training-setup')}
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
+            icon="💡"
+            label="Show Tips Again"
+            sublabel="Replay the in-app hints"
+            // Navigate only once the reset has landed, or Home renders before
+            // the store clears and the tips do not reappear. The catch keeps a
+            // failed reset from surfacing as an unhandled rejection.
+            onClick={() => { resetHints().then(() => navigate('/')).catch(() => {}) }}
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
             icon="😴"
             label="Log Sleep"
             sublabel={profileData?.today?.sleepDuration
@@ -756,6 +868,7 @@ export default function Profile() {
       {showEditModal && (
         <EditProfileModal
           profile={profileData?.profile}
+          imperial={profileData?.settings?.preferredUnit === 'imperial'}
           onSave={handleSaveProfile}
           onClose={() => setShowEditModal(false)}
         />

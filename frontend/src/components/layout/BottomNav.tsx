@@ -90,8 +90,8 @@ export default function BottomNav() {
 
   return (
     <nav ref={navRef} className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px]
-                    bg-dark-800 border-t border-dark-600 px-4 pt-3
-                    pb-[calc(0.5rem+var(--safe-bottom))]
+                    bg-dark-800 border-t border-dark-600 px-4 pt-2.5
+                    pb-[calc(0.25rem+var(--nav-bottom))]
                     flex items-center justify-around z-50">
 
       {/* Home */}
