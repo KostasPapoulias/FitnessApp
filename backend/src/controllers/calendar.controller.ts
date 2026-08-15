@@ -173,7 +173,19 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
               }
             },
             sets: {
-              include: { strength: true, cardio: true, calisthenics: true },
+              include: {
+                strength: true, cardio: true, calisthenics: true,
+                // Everything about the run EXCEPT the route and the splits.
+                // The day view shows pace and elevation on the row; the route
+                // is tens of kilobytes and is fetched only if the run is
+                // opened — see GET /api/workout/sets/:setId/run.
+                runTrack: {
+                  select: {
+                    distanceM: true, durationSec: true, avgPaceSec: true,
+                    elevationGainM: true, source: true, startedAt: true
+                  }
+                }
+              },
               orderBy: { setNumber: 'asc' }
             }
           },
@@ -248,11 +260,14 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
             categories: we.exercise.categoryLinks.map(cl => cl.category.name),
             muscles:    we.exercise.muscleLinks.map(ml => ml.muscle.name),
             sets:       we.sets.map(s => ({
+              // The id travels so a run row can ask for its own route.
+              id:        s.id,
               setNumber: s.setNumber,
               rpe:       s.rpe,
               strength:  s.strength,
               cardio:    s.cardio,
               calisthenics: s.calisthenics,
+              run:       s.runTrack,
               // wod:       s.wod,
               // mobility:  s.mobility
             }))

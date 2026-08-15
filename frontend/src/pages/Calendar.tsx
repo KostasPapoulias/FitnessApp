@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
+import { fmtTime } from './Workout/helpers'
+
+// Pulls MapLibre in with it, so it is loaded only when a route is opened —
+// the calendar itself must not cost a map.
+const RunDetail = lazy(() => import('../components/RunDetail'))
 //import { useFatigueStore } from '../store/useFatigueStore'
 
 const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -111,6 +116,8 @@ export default function Calendar() {
   const [isLoadingMonth, setIsLoadingMonth] = useState(true)
   const [isLoadingDay,   setIsLoadingDay]   = useState(false)
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null)
+  /** The run whose route is open over the calendar, if any. */
+  const [openRun, setOpenRun] = useState<{ setId: string; title: string } | null>(null)
 
   const [activity, setActivity] = useState<ActivityData | null>(null)
   const [isLoadingActivity, setIsLoadingActivity] = useState(true)
@@ -487,6 +494,17 @@ export default function Calendar() {
                           const totalVol   = ex.sets.reduce((sum: number, s: any) =>
                             sum + (s.strength ? s.strength.reps * s.strength.weight : 0), 0)
 
+                          // A cardio entry is a run, not a set table: reps and
+                          // weight columns are empty for every row of it, and
+                          // the distance, the pace and the route are the whole
+                          // record of what happened.
+                          const cardioSets = ex.sets.filter((s: any) => s.cardio)
+                          const isCardio   = cardioSets.length > 0
+                          const cardioKm   = cardioSets.reduce(
+                            (sum: number, s: any) => sum + (s.cardio?.distance ?? 0), 0)
+                          const cardioSec  = cardioSets.reduce(
+                            (sum: number, s: any) => sum + (s.cardio?.time ?? 0), 0)
+
                           return (
                             <div key={key}
                               className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden">
@@ -498,13 +516,24 @@ export default function Calendar() {
                               >
                                 <div className="w-10 h-10 bg-dark-700 rounded-xl
                                                 flex items-center justify-center text-lg flex-shrink-0">
-                                  💪
+                                  {isCardio ? '🏃' : '💪'}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-semibold text-sm">{ex.name}</p>
                                   <p className="text-dark-400 text-xs mt-0.5">
-                                    {totalSets} sets
-                                    {totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString()} kg` : ''}
+                                    {isCardio ? (
+                                      <>
+                                        {cardioKm.toFixed(2)} km · {fmtTime(cardioSec)}
+                                        {cardioKm > 0 && cardioSec > 0
+                                          ? ` · ${fmtTime(cardioSec / cardioKm)} /km`
+                                          : ''}
+                                      </>
+                                    ) : (
+                                      <>
+                                        {totalSets} sets
+                                        {totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString()} kg` : ''}
+                                      </>
+                                    )}
                                   </p>
                                 </div>
                                 <span className={`text-dark-400 text-sm transition-transform
@@ -513,8 +542,67 @@ export default function Calendar() {
                                 </span>
                               </button>
 
+                              {/* Expanded — a run, or a set table */}
+                              {isExpanded && isCardio && (
+                                <div className="border-t border-dark-700 px-4 py-3 flex flex-col gap-2">
+                                  {cardioSets.map((s: any) => {
+                                    // Average pace comes from the stored run when there is
+                                    // one — it was computed from unrounded metres. Falling
+                                    // back to the rounded display distance costs a second
+                                    // or two on a short run, which is better than nothing.
+                                    const paceSec = s.run?.avgPaceSec
+                                      ?? (s.cardio?.distance > 0 && s.cardio?.time > 0
+                                          ? s.cardio.time / s.cardio.distance
+                                          : 0)
+
+                                    return (
+                                      <div key={s.id}
+                                        className="bg-dark-700/60 border border-dark-600 rounded-btn px-3.5 py-3">
+                                        <div className="flex items-center gap-3">
+                                          {[
+                                            { v: `${(s.cardio?.distance ?? 0).toFixed(2)}`, u: 'km' },
+                                            { v: fmtTime(s.cardio?.time ?? 0), u: 'time' },
+                                            { v: fmtTime(paceSec), u: 'avg / km' },
+                                            ...(s.run?.elevationGainM
+                                              ? [{ v: `${s.run.elevationGainM}`, u: 'm climb' }]
+                                              : []),
+                                          ].map(stat => (
+                                            <div key={stat.u} className="flex-1 min-w-0 text-center">
+                                              <p className="text-white text-[15px] font-extrabold tabular-nums">
+                                                {stat.v}
+                                              </p>
+                                              <p className="text-dark-400 text-[9.5px] mt-0.5">{stat.u}</p>
+                                            </div>
+                                          ))}
+                                        </div>
+
+                                        {/* Only offer the route when one was recorded.
+                                            A button that opens an empty map is worse
+                                            than no button. */}
+                                        {s.run ? (
+                                          <button
+                                            onClick={() => setOpenRun({ setId: s.id, title: ex.name })}
+                                            className="w-full mt-2.5 py-2.5 rounded-btn border border-brand-teal/40
+                                                       bg-[#0d2218] text-brand-teal text-xs font-bold
+                                                       active:scale-[0.99] transition-transform"
+                                          >
+                                            {s.run.source === 'manual'
+                                              ? 'Splits →'
+                                              : 'Route & splits →'}
+                                          </button>
+                                        ) : (
+                                          <p className="text-dark-500 text-[11px] text-center mt-2">
+                                            No route recorded for this one
+                                          </p>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+
                               {/* Expanded set table */}
-                              {isExpanded && (
+                              {isExpanded && !isCardio && (
                                 <div className="border-t border-dark-700 px-4 pb-1">
 
                                   {/* Table header */}
@@ -762,6 +850,19 @@ export default function Calendar() {
             </>
           )}
         </div>
+      )}
+
+      {/* The route, over everything. Its own layer rather than a route change:
+          closing it must put the athlete back on the same day, scrolled to the
+          same place, with the same exercise still expanded. */}
+      {openRun && (
+        <Suspense fallback={null}>
+          <RunDetail
+            setId={openRun.setId}
+            title={openRun.title}
+            onClose={() => setOpenRun(null)}
+          />
+        </Suspense>
       )}
     </div>
   )

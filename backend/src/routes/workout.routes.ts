@@ -7,7 +7,8 @@ import {
   finishSession,
   getSessions,
   getSessionById,
-  getPlanSuggestions
+  getPlanSuggestions,
+  getRunTrack
 } from '../controllers/workout.controller'
 
 const router = Router()
@@ -54,5 +55,12 @@ router.post('/sessions/:id/sets', logSet)
  * @returns finished session with fatigue updates
  */
 router.post('/sessions/:id/finish', finishSession)
+/**
+ * @route GET /api/workout/sets/:setId/run
+ * @protected
+ * @returns the recorded route, splits and average pace for a cardio set,
+ *          or null for one logged without a track
+ */
+router.get('/sets/:setId/run', getRunTrack)
 
 export default router

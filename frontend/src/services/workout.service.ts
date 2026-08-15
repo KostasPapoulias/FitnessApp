@@ -1,4 +1,5 @@
 import api from './api'
+import { RunPayload } from '../lib/runPayload'
 
 export interface PlanSuggestion {
   exerciseId: string
@@ -46,9 +47,21 @@ export const workoutService = {
     time?: number          // CARDIO / WOD
     rounds?: number        // WOD
     duration?: number      // MOBILITY
+    run?: RunPayload       // CARDIO — route, splits and pace for the history
   }) => {
     const res = await api.post(`/workout/sessions/${sessionId}/sets`, data)
     return res.data.data
+  },
+
+  /**
+   * The full recorded run behind a cardio set — route included.
+   *
+   * Its own request because the route is by far the largest thing a session
+   * owns, and the calendar lists dozens of sets it would never draw.
+   */
+  getRunTrack: async (setId: string) => {
+    const res = await api.get(`/workout/sets/${setId}/run`)
+    return res.data.data as RunPayload | null
   },
 
   finishSession: async (sessionId: string, duration: number) => {

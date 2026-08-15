@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  GAP_MS, MAX_ACCURACY_M, TrackPoint,
-  elevationGain, ema, evaluateFix, isGap, simplify, smoothPosition,
+  GAP_MS, MAX_ACCURACY_M, RouteSegment, Split, SplitState, TrackPoint,
+  advanceSplits, averagePace, elevationGain, ema, emptySplitState, encodeRoute,
+  evaluateFix, finalSplit, isGap, routeBounds, simplify, smoothPosition,
 } from '../lib/geo'
 import { SavedRun, TrackGap, clearRun, loadRun, saveRun } from '../lib/runStorage'
 
@@ -43,8 +44,22 @@ export interface RunSummary {
   elapsedSec: number
   /** Simplified for storage and drawing — the full track never leaves memory. */
   track: TrackPoint[]
+  /** The same track, gap-segmented and rounded, ready to persist and redraw. */
+  route: RouteSegment[]
+  bounds: [[number, number], [number, number]] | null
   gaps: TrackGap[]
+  /**
+   * Seconds per kilometre over the whole run.
+   *
+   * Carried explicitly rather than left to be recomputed downstream: distance
+   * is rounded to two decimals before it is stored, and dividing the rounded
+   * number moves the pace of a short run by a second or two.
+   */
+  avgPaceSec: number
+  splits: Split[]
+  laps: Split[]
   elevationGainM: number
+  startedAt: number
   source: RunSource
 }
 
@@ -64,6 +79,8 @@ export const useRunTracker = (activityKey: string) => {
   const [accuracy, setAccuracy] = useState<number | null>(null)
   const [pointCount, setPointCount] = useState(0)
   const [gapCount, setGapCount] = useState(0)
+  const [splits, setSplits] = useState<Split[]>([])
+  const [laps, setLaps] = useState<Split[]>([])
 
   // Everything the interval and the geolocation callback touch lives in refs.
   // Both fire outside React's render cycle, and routing them through state
@@ -75,6 +92,11 @@ export const useRunTracker = (activityKey: string) => {
   /** Running low-pass of position — see smoothPosition. */
   const smoothed = useRef<TrackPoint | null>(null)
   const distance = useRef(0)
+  /** Kilometre splits, folded forward one sample at a time — see advanceSplits. */
+  const splitState = useRef<SplitState>(emptySplitState())
+  const lapState = useRef<Split[]>([])
+  /** Where the last hand-marked lap ended; laps are measured from each other. */
+  const lastLap = useRef({ meters: 0, seconds: 0 })
   const smoothedSpeed = useRef<number | null>(null)
   const manualSpeed = useRef(2.85)
   const watchId = useRef<number | null>(null)
@@ -94,6 +116,8 @@ export const useRunTracker = (activityKey: string) => {
       meters: distance.current,
       points: points.current,
       gaps: gaps.current,
+      splitState: splitState.current,
+      laps: lapState.current,
       savedAt: Date.now(),
     }
     void saveRun(run)
@@ -237,6 +261,29 @@ export const useRunTracker = (activityKey: string) => {
 
       clock.current = { startedAt: saved.startedAt, pausedAt: 0, pausedMs }
 
+      // Splits cannot be rebuilt from a recovered track — it is simplified and
+      // carries no cumulative distance — so a record written before splits were
+      // persisted resumes counting from where it is now, rather than claiming
+      // times for kilometres nobody measured. Anchoring the resumed boundary at
+      // the CURRENT elapsed matters as much as anchoring it at the current
+      // distance: left at zero, the next kilometre would be timed from the
+      // start of the run and report the whole session as one split.
+      const resumedAtSec = Math.max(0, (Date.now() - saved.startedAt - pausedMs) / 1000)
+      splitState.current = saved.splitState ?? {
+        splits: [],
+        previous: { meters: saved.meters, seconds: resumedAtSec },
+        boundary: { meters: saved.meters, seconds: resumedAtSec },
+      }
+      lapState.current = saved.laps ?? []
+      // Laps run back to back from the start, so where the last one ended is
+      // just the sum of them — no extra field to persist and keep in step.
+      lastLap.current = lapState.current.reduce(
+        (end, lap) => ({ meters: lap.endMeters, seconds: end.seconds + lap.seconds }),
+        { meters: 0, seconds: 0 }
+      )
+      setSplits(splitState.current.splits)
+      setLaps(lapState.current)
+
       setMeters(saved.meters)
       setPointCount(saved.points.length)
       setGapCount(gaps.current.length)
@@ -263,9 +310,11 @@ export const useRunTracker = (activityKey: string) => {
       if (!startedRef.current) return
 
       const reference = runningRef.current ? now : (clock.current.pausedAt || now)
-      setElapsedSec(
-        Math.max(0, Math.floor((reference - clock.current.startedAt - clock.current.pausedMs) / 1000))
+      const elapsed = Math.max(
+        0,
+        (reference - clock.current.startedAt - clock.current.pausedMs) / 1000
       )
+      setElapsedSec(Math.floor(elapsed))
 
       if (runningRef.current) {
         // Manual mode has no fixes to fold in, so distance comes from the
@@ -276,6 +325,23 @@ export const useRunTracker = (activityKey: string) => {
         }
         setMeters(distance.current)
         setSpeedMps(smoothedSpeed.current ?? 0)
+
+        // Splits are folded here, where distance and elapsed are read from the
+        // same instant. Sampling them from separate effects is what let a
+        // kilometre be timed against an elapsed value from a different tick.
+        // Unrounded elapsed, so a split is not quantised to whole seconds twice.
+        const before = splitState.current.splits.length
+        splitState.current = advanceSplits(splitState.current, {
+          meters: distance.current,
+          seconds: elapsed,
+        })
+        if (splitState.current.splits.length !== before) {
+          setSplits(splitState.current.splits)
+          // A kilometre is worth writing down immediately rather than waiting
+          // for the next flush — it is the one moment the user might look away
+          // and the phone might die.
+          flush()
+        }
       }
 
       if (now - lastFlush.current > FLUSH_MS) flush()
@@ -288,6 +354,14 @@ export const useRunTracker = (activityKey: string) => {
   const start = useCallback(() => {
     if (startedRef.current) return
     clock.current = { startedAt: Date.now(), pausedAt: 0, pausedMs: 0 }
+    // A second run in the same mounted screen must not inherit the first one's
+    // kilometres — stop() leaves them in place so the caller can still read the
+    // summary it was handed.
+    splitState.current = emptySplitState()
+    lapState.current = []
+    lastLap.current = { meters: 0, seconds: 0 }
+    setSplits([])
+    setLaps([])
     setStarted(true)
     startedRef.current = true
     setRunning(true)
@@ -325,6 +399,34 @@ export const useRunTracker = (activityKey: string) => {
     startWatch()
   }, [startWatch])
 
+  /**
+   * Mark a lap by hand.
+   *
+   * Measured against the previous lap only. Kilometre splits keep their own
+   * origin, so pressing Lap mid-kilometre no longer re-times the kilometre.
+   */
+  const lap = useCallback(() => {
+    if (!startedRef.current) return
+
+    const reference = runningRef.current ? Date.now() : (clock.current.pausedAt || Date.now())
+    const seconds = Math.max(
+      0,
+      (reference - clock.current.startedAt - clock.current.pausedMs) / 1000
+    )
+    const meters = distance.current
+
+    lapState.current = [...lapState.current, {
+      index: lapState.current.length + 1,
+      meters: meters - lastLap.current.meters,
+      seconds: seconds - lastLap.current.seconds,
+      endMeters: meters,
+      auto: false,
+    }]
+    lastLap.current = { meters, seconds }
+    setLaps(lapState.current)
+    flush()
+  }, [flush])
+
   const stop = useCallback((): RunSummary => {
     if (watchId.current !== null) {
       navigator.geolocation.clearWatch(watchId.current)
@@ -335,15 +437,36 @@ export const useRunTracker = (activityKey: string) => {
     setRunning(false)
 
     const reference = clock.current.pausedAt || Date.now()
+    const elapsed = Math.max(
+      0,
+      Math.floor((reference - clock.current.startedAt - clock.current.pausedMs) / 1000)
+    )
+    const track = simplify(points.current, 5)
+    const route = encodeRoute(track)
+
+    // The stretch since the last whole kilometre, which no boundary will ever
+    // close now that the run is over.
+    const tail = finalSplit(splitState.current, {
+      meters: distance.current,
+      seconds: elapsed,
+    })
+    const splits = tail
+      ? [...splitState.current.splits, tail]
+      : splitState.current.splits
+
     const summary: RunSummary = {
       meters: distance.current,
-      elapsedSec: Math.max(
-        0,
-        Math.floor((reference - clock.current.startedAt - clock.current.pausedMs) / 1000)
-      ),
-      track: simplify(points.current, 5),
+      elapsedSec: elapsed,
+      track,
+      route,
+      bounds: routeBounds(route),
       gaps: gaps.current,
+      // From the unrounded distance, before the caller rounds it for storage
+      avgPaceSec: Math.round(averagePace(distance.current, elapsed)),
+      splits,
+      laps: lapState.current,
       elevationGainM: elevationGain(points.current),
+      startedAt: clock.current.startedAt,
       source: sourceRef.current,
     }
 
@@ -374,7 +497,10 @@ export const useRunTracker = (activityKey: string) => {
   return {
     status, source, started, running, recovered,
     elapsedSec, meters, speedMps, accuracy, pointCount, gapCount,
-    start, pause, resume, stop, setManualSpeed, useManual,
+    splits, laps,
+    /** Distance over time — the number a run is judged by. Zero until moving. */
+    avgPaceSec: averagePace(meters, elapsedSec),
+    start, pause, resume, lap, stop, setManualSpeed, useManual,
     getPoints: () => points.current,
   }
 }

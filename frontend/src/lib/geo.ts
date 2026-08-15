@@ -69,6 +69,153 @@ export const paceFromSpeed = (metersPerSecond: number): number =>
   metersPerSecond > 0.1 ? 1000 / metersPerSecond : 0
 
 /**
+ * Seconds per kilometre over a whole stretch.
+ *
+ * This is the number a run is actually judged by, and it is NOT the same thing
+ * as paceFromSpeed: that one reads the current smoothed speed, so it collapses
+ * to zero the moment someone stops — which is exactly when a finished run gets
+ * summarised. Average pace is distance over time and cannot do that.
+ */
+export const averagePace = (meters: number, seconds: number): number =>
+  meters > 0 && seconds > 0 ? seconds / (meters / 1000) : 0
+
+// ── splits ────────────────────────────────────────────────────────────────
+
+/**
+ * One completed stretch of a run.
+ *
+ * `meters` and `seconds` are always deltas — what THIS split cost — because a
+ * split whose distance is cumulative cannot be turned into a pace. `endMeters`
+ * carries the cumulative position separately for anyone who needs to place the
+ * split along the run.
+ */
+export interface Split {
+  /** 1-based. For auto splits this is also the kilometre number. */
+  index: number
+  meters: number
+  seconds: number
+  endMeters: number
+  /** Marked by the kilometre counter rather than by the athlete. */
+  auto: boolean
+  /**
+   * The stretch after the last full kilometre, closed out when the run ended.
+   *
+   * Shown apart from the others because its pace is measured over a shorter
+   * distance and is correspondingly noisier — a 120m tail at 4:40 is not
+   * evidence of a fast finish.
+   */
+  partial?: boolean
+}
+
+/** Distance below which a trailing stretch is not worth a row of its own. */
+const MIN_PARTIAL_SPLIT_M = 50
+
+/**
+ * Close out the stretch after the last full kilometre.
+ *
+ * Called once, when the run ends. Without it a 900m run reports no splits at
+ * all — which reads exactly like the bug where every split showed zero.
+ */
+export const finalSplit = (state: SplitState, final: RunSample): Split | null => {
+  const meters = final.meters - state.boundary.meters
+  const seconds = final.seconds - state.boundary.seconds
+  if (meters < MIN_PARTIAL_SPLIT_M || seconds <= 0) return null
+
+  return {
+    index: Math.floor(state.boundary.meters / 1000) + 1,
+    meters,
+    seconds,
+    endMeters: final.meters,
+    auto: true,
+    partial: true,
+  }
+}
+
+/** Seconds per kilometre for one split. */
+export const splitPace = (split: Split): number =>
+  averagePace(split.meters, split.seconds)
+
+/** A sample of the run's two running totals, taken together. */
+export interface RunSample {
+  meters: number
+  seconds: number
+}
+
+export interface SplitState {
+  splits: Split[]
+  /** The previous sample, so the leg that crosses a boundary can be measured. */
+  previous: RunSample
+  /** Where the last boundary fell — the origin the next split is timed from. */
+  boundary: RunSample
+}
+
+export const emptySplitState = (): SplitState => ({
+  splits: [],
+  previous: { meters: 0, seconds: 0 },
+  boundary: { meters: 0, seconds: 0 },
+})
+
+/**
+ * Fold one sample into the kilometre splits.
+ *
+ * Pure and O(1) per call, so the live screen can hand it every tick without
+ * keeping a sample history. Two things it fixes over counting kilometres by
+ * hand:
+ *
+ * MULTIPLE BOUNDARIES. The `while` matters. After a stall — a locked phone, a
+ * throttled tab — distance and elapsed both jump, and a single sample can cross
+ * two or three kilometres at once. An `if` silently drops all but one.
+ *
+ * INTERPOLATION. Fixes land about a second apart and a runner covers three to
+ * five metres in that time, so the sample that first reads past 1000m is
+ * already several metres beyond it. Charging that overshoot to the split is
+ * what makes an even pace produce splits that alternate fast and slow. Assuming
+ * constant speed across the crossing leg puts the boundary where it belongs.
+ *
+ * Manual laps deliberately do not live here. They shared a counter with the
+ * kilometre splits before, which left every automatic split after a lap timed
+ * from the lap rather than from the previous kilometre.
+ */
+export const advanceSplits = (state: SplitState, sample: RunSample): SplitState => {
+  // Elapsed only ever moves forward; distance can be re-read flat. Neither may
+  // go backwards, and a backwards sample would produce a negative split.
+  if (sample.meters < state.previous.meters || sample.seconds < state.previous.seconds) {
+    return { ...state, previous: sample }
+  }
+
+  let { splits, boundary } = state
+  let previous = state.previous
+
+  // The next mark is derived from where the last boundary fell, not from how
+  // many splits have been recorded. They are the same thing on a run tracked
+  // start to finish, and they are not the same thing on one recovered from a
+  // crash — a resumed run that had already covered 3.2km must post its next
+  // split at 4km, rather than replay kilometres one to three with no times.
+  while (sample.meters >= Math.floor(boundary.meters / 1000) * 1000 + 1000) {
+    const mark = Math.floor(boundary.meters / 1000) * 1000 + 1000
+    const legMeters = sample.meters - previous.meters
+    const legSeconds = sample.seconds - previous.seconds
+    const crossedAt =
+      legMeters > 0
+        ? previous.seconds + legSeconds * ((mark - previous.meters) / legMeters)
+        : sample.seconds
+
+    splits = [...splits, {
+      index: mark / 1000,
+      meters: mark - boundary.meters,
+      seconds: crossedAt - boundary.seconds,
+      endMeters: mark,
+      auto: true,
+    }]
+    boundary = { meters: mark, seconds: crossedAt }
+    // The rest of this leg belongs to the next split
+    previous = { meters: mark, seconds: crossedAt }
+  }
+
+  return { splits, previous: sample, boundary }
+}
+
+/**
  * Total climb in metres, ignoring descent.
  *
  * Barometric altitude is noisy — several metres of drift while stationary — so
@@ -339,4 +486,49 @@ export const simplify = (points: TrackPoint[], toleranceM = 5): TrackPoint[] => 
   }
 
   return points.filter((_, index) => keep[index])
+}
+
+// ── storing a finished route ──────────────────────────────────────────────
+
+/** A run of consecutive positions, as [lng, lat] — GeoJSON's order, not ours. */
+export type RouteSegment = Array<[number, number]>
+
+/**
+ * Five decimal places: about 1.1m at these latitudes.
+ *
+ * Finer than the GPS itself and far finer than the 5m simplification the track
+ * has already been through, so nothing visible is lost — and it roughly halves
+ * the stored size against the seventeen digits a raw double serialises to.
+ */
+const round5 = (n: number) => Math.round(n * 1e5) / 1e5
+
+/**
+ * A track, ready to store and to draw.
+ *
+ * Segmented on gaps at encode time rather than at render time so the stored
+ * shape already carries the one thing a bare list of coordinates cannot: that
+ * the app was not recording between two of them. Nothing downstream can then
+ * accidentally join a straight line across four minutes of locked phone.
+ */
+export const encodeRoute = (points: TrackPoint[]): RouteSegment[] =>
+  splitOnGaps(points).map(segment =>
+    segment.map(p => [round5(p.lng), round5(p.lat)] as [number, number])
+  )
+
+/** [[west, south], [east, north]], or null for a route with nothing in it. */
+export const routeBounds = (
+  segments: RouteSegment[]
+): [[number, number], [number, number]] | null => {
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity
+
+  for (const segment of segments) {
+    for (const [lng, lat] of segment) {
+      if (lng < west) west = lng
+      if (lng > east) east = lng
+      if (lat < south) south = lat
+      if (lat > north) north = lat
+    }
+  }
+
+  return Number.isFinite(west) ? [[west, south], [east, north]] : null
 }

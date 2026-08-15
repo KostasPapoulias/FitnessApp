@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { Exercise, WorkoutSession, WorkoutTemplate } from '../types'
 import { PlanSuggestion, workoutService } from '../services/workout.service'
 import { TemplateInput, templateService } from '../services/template.service'
+import { RunSummary } from '../hooks/useRunTracker'
+import { toRunPayload } from '../lib/runPayload'
 
 interface PlannedSet {
   reps: number
@@ -124,6 +126,8 @@ interface WorkoutStore {
       distance?: number   // cardio / wod
       time?: number       // cardio / wod
       rounds?: number     // wod rounds completed
+      /** The recorded run behind a cardio set — route, splits, average pace. */
+      run?: RunSummary
     },
     // A metcon is one effort logged against every movement in it, so it needs
     // to write sets for exercises other than the "current" one.
@@ -568,6 +572,9 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       case 'CARDIO':
         payload.distance = data.distance
         payload.time = data.time
+        // Only GPS sessions have a route, but a treadmill run still has splits
+        // and an average pace worth keeping, so the payload goes either way.
+        if (data.run) payload.run = toRunPayload(data.run)
         break
       case 'WOD':
         payload.distance = data.distance

@@ -24,7 +24,10 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 interface Props {
   elapsed: string
   distanceKm: string
+  /** Current pace — what the legs are doing this minute. */
   pace: string
+  /** Distance over time. The one that survives a red light. */
+  avgPace: string
   running: boolean
   /** Shown small, so a lost signal is visible without unlocking. */
   statusLabel: string
@@ -33,7 +36,7 @@ interface Props {
 }
 
 export default function RunLock({
-  elapsed, distanceKm, pace, running, statusLabel, statusOk, onUnlock,
+  elapsed, distanceKm, pace, avgPace, running, statusLabel, statusOk, onUnlock,
 }: Props) {
   const [holding, setHolding] = useState(false)
   const timer = useRef<number | null>(null)
@@ -100,13 +103,20 @@ export default function RunLock({
         <div className="flex items-end gap-10 mt-14">
           {[
             { value: distanceKm, unit: 'KM' },
-            { value: pace, unit: 'MIN / KM' },
+            { value: avgPace, unit: 'AVG / KM' },
           ].map(stat => (
             <div key={stat.unit} className="text-center">
               <div className="text-[9vw] leading-none font-extrabold tabular-nums">{stat.value}</div>
               <div className="text-[9.5px] tracking-[0.2em] text-dark-500 mt-2.5">{stat.unit}</div>
             </div>
           ))}
+        </div>
+
+        {/* Current pace, deliberately small: on a locked screen the average is
+            what you steer by, and the live number moves too much to read at a
+            glance while running. */}
+        <div className="mt-7 text-[11px] tracking-[0.18em] text-dark-500 tabular-nums">
+          NOW {pace} / KM
         </div>
       </div>
 

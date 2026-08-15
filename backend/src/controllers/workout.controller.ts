@@ -79,7 +79,80 @@ export const addExercise = async (req: AuthRequest, res: Response) => {
   }
 }
 
-//    LOG A SET 
+/**
+ * Ceilings for a posted run.
+ *
+ * The route lands in a JSONB column straight from a client, so it needs a size
+ * the database is willing to be handed. A 45-minute run simplified at 5m is a
+ * couple of hundred points; ten thousand is far past any real session and still
+ * small enough to store and draw. Over the cap the run is refused rather than
+ * silently truncated — half a route drawn as if it were the whole one is worse
+ * than no route at all.
+ */
+const MAX_ROUTE_POINTS = 10_000
+const MAX_SPLITS = 500
+
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v)
+
+const isCoordinate = (v: unknown): v is [number, number] =>
+  Array.isArray(v) && v.length === 2 &&
+  isFiniteNumber(v[0]) && v[0] >= -180 && v[0] <= 180 &&
+  isFiniteNumber(v[1]) && v[1] >= -90 && v[1] <= 90
+
+const isSplit = (v: any): boolean =>
+  v && isFiniteNumber(v.index) && isFiniteNumber(v.meters) &&
+  isFiniteNumber(v.seconds) && isFiniteNumber(v.endMeters)
+
+/**
+ * Validate a posted run, or explain why it is not one.
+ *
+ * Returns the row to write, or an error string. A run that fails this does NOT
+ * fail the set: the distance and the time are the training log and must be
+ * saved regardless — losing an hour of work because a route was malformed is
+ * the wrong trade every time. The caller drops the track and keeps the set.
+ */
+const validateRun = (run: any): { row: any } | { error: string } => {
+  if (!run || typeof run !== 'object') return { error: 'not an object' }
+  if (!isFiniteNumber(run.distanceM) || run.distanceM < 0) return { error: 'distanceM' }
+  if (!isFiniteNumber(run.durationSec) || run.durationSec < 0) return { error: 'durationSec' }
+  if (!isFiniteNumber(run.startedAt)) return { error: 'startedAt' }
+
+  const route = Array.isArray(run.route) ? run.route : []
+  let points = 0
+  for (const segment of route) {
+    if (!Array.isArray(segment)) return { error: 'route segment' }
+    points += segment.length
+    if (points > MAX_ROUTE_POINTS) return { error: 'route too large' }
+    if (!segment.every(isCoordinate)) return { error: 'route coordinate' }
+  }
+
+  const splits = Array.isArray(run.splits) ? run.splits : []
+  const laps = Array.isArray(run.laps) ? run.laps : []
+  if (splits.length + laps.length > MAX_SPLITS) return { error: 'too many splits' }
+  if (!splits.every(isSplit) || !laps.every(isSplit)) return { error: 'split shape' }
+
+  return {
+    row: {
+      startedAt: new Date(run.startedAt),
+      distanceM: run.distanceM,
+      durationSec: Math.round(run.durationSec),
+      // Recomputed rather than trusted: it is the one number history shows that
+      // the athlete cannot check against anything else on the screen.
+      avgPaceSec: run.distanceM > 0
+        ? Math.round(run.durationSec / (run.distanceM / 1000))
+        : 0,
+      elevationGainM: isFiniteNumber(run.elevationGainM) ? Math.round(run.elevationGainM) : 0,
+      source: run.source === 'manual' ? 'manual' : 'gps',
+      route,
+      bounds: run.bounds ?? null,
+      splits,
+      laps
+    }
+  }
+}
+
+//    LOG A SET
 // POST /api/workout/sessions/:id/sets
 // Called when user taps "Set Done" during active workout
 export const logSet = async (req: AuthRequest, res: Response) => {
@@ -96,7 +169,8 @@ export const logSet = async (req: AuthRequest, res: Response) => {
       addedWeight,           // CALISTHENICS
       distance, time,        // CARDIO / WOD
       rounds,                // WOD (reps carries reps-per-round)
-      duration               // MOBILITY
+      duration,              // MOBILITY
+      run                    // CARDIO — recorded route, splits, average pace
     } = req.body
 
     if (!SET_TYPES.includes(setType)) {
@@ -189,6 +263,29 @@ export const logSet = async (req: AuthRequest, res: Response) => {
 
       return { set, replaced: existing != null }
     })
+
+    // The recorded route and splits, written AFTER the set is committed and
+    // deliberately outside its transaction.
+    //
+    // The set is the training log — distance, time, RPE — and the thing fatigue
+    // and history are built from. The track is a picture of how it went. If
+    // writing the picture fails for any reason at all (a malformed payload, a
+    // migration that has not reached this environment yet, a full disk), the
+    // athlete must still keep the hour they just ran. Inside the transaction
+    // any of those would have rolled the whole set back.
+    if (setType === 'CARDIO' && run) {
+      const checked = validateRun(run)
+      if ('error' in checked) {
+        console.warn(`logSet: discarding run track (${checked.error})`)
+      } else {
+        try {
+          await prisma.runTrack.deleteMany({ where: { setId: workoutSet.id } })
+          await prisma.runTrack.create({ data: { setId: workoutSet.id, ...checked.row } })
+        } catch (error) {
+          console.error('logSet: run track not saved:', error)
+        }
+      }
+    }
 
     // 200 when an existing set was corrected, 201 when a new one was recorded
     res.status(replaced ? 200 : 201).json({ success: true, data: workoutSet, replaced })
@@ -740,6 +837,36 @@ export const getSessionById = async (req: AuthRequest, res: Response) => {
 
   } catch (error) {
     console.error('getSessionById error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+//   THE RECORDED RUN BEHIND A CARDIO SET
+// GET /api/workout/sets/:setId/run
+//
+// Its own endpoint because the route is the largest thing a session owns and
+// almost nothing wants it: the calendar lists dozens of sets and draws a map
+// for at most one of them, when the athlete opens it.
+export const getRunTrack = async (req: AuthRequest, res: Response) => {
+  try {
+    const { setId } = req.params
+
+    // Ownership is checked through the set's session, not on RunTrack itself —
+    // the track has no userId of its own, and trusting the id in the URL would
+    // hand anyone the exact route of anyone else's runs.
+    const track = await prisma.runTrack.findFirst({
+      where: {
+        setId,
+        set: { workoutExercise: { session: { userId: req.userId! } } }
+      }
+    })
+
+    // 200 with null, not 404: a cardio set logged before routes were recorded
+    // is a perfectly valid set that simply has no track, and the screen shows
+    // its numbers either way.
+    res.json({ success: true, data: track })
+
+  } catch (error) {
+    console.error('getRunTrack error:', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

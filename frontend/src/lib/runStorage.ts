@@ -12,7 +12,7 @@
  * that on the main thread every few seconds would show up as jank in the timer.
  */
 
-import { TrackPoint } from './geo'
+import { Split, SplitState, TrackPoint } from './geo'
 
 const DB_NAME = 'somatrack_run'
 const DB_VERSION = 1
@@ -38,6 +38,17 @@ export interface SavedRun {
   meters: number
   points: TrackPoint[]
   gaps: TrackGap[]
+  /**
+   * Kilometre splits and the running state behind them.
+   *
+   * Mirrored rather than recomputed on recovery: the track is simplified and
+   * carries no cumulative distance, so the splits cannot be rebuilt from it
+   * afterwards. Optional because records written before splits were persisted
+   * are still perfectly resumable without them.
+   */
+  splitState?: SplitState
+  /** Laps the athlete marked by hand. */
+  laps?: Split[]
   /** Last time this record was written — the basis for detecting dead time. */
   savedAt: number
 }

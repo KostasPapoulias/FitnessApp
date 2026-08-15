@@ -342,6 +342,7 @@ model WorkoutSet {
   cardio             SetCardio?
   wod                SetWOD?
   mobility           SetMobility?
+  runTrack           RunTrack?
 
   @@index([workoutExerciseId])
   // One row per set of an exercise — re-logging corrects the set in place
@@ -379,6 +380,42 @@ model SetCardio {
   set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   distance Float?
   time     Int?
+}
+
+/// Everything a GPS session recorded beyond its distance and its clock.
+///
+/// Split out from SetCardio rather than added to it because of `route`, which
+/// is a few tens of kilobytes for a long run. The calendar lists every set of
+/// every session, and SetCardio is loaded with all of them — dragging a route
+/// along for each would make the month view pay for maps it never draws. One
+/// row per cardio set, fetched only when a run is actually opened.
+model RunTrack {
+  setId          String     @id
+  set            WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  /// When the clock was started, which is not when the set was written — an
+  /// effort rating can sit on screen for minutes after a run ends.
+  startedAt      DateTime
+  /// Metres, unrounded. SetCardio.distance is kilometres rounded to two
+  /// decimals for display; pace derived from that is off by seconds.
+  distanceM      Float
+  durationSec    Int
+  /// Seconds per kilometre. Stored rather than derived so the number in history
+  /// is the one the athlete saw when they finished.
+  avgPaceSec     Int
+  elevationGainM Int        @default(0)
+  /// 'gps' | 'manual' — a manual session has splits but no route.
+  source         String     @default("gps")
+  /// [[[lng, lat], …], …] — one array per stretch of continuous recording.
+  /// Segmented at write time so nothing downstream can draw a straight line
+  /// across a gap the app was not running for.
+  route          Json?
+  /// [[west, south], [east, north]], for framing the map without parsing route.
+  bounds         Json?
+  /// Kilometre splits: [{ index, meters, seconds, endMeters, auto }]
+  splits         Json?
+  /// Laps the athlete marked by hand, same shape.
+  laps           Json?
+  createdAt      DateTime   @default(now())
 }
 
 model SetWOD {
