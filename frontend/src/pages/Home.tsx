@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
+import { useOnboardingStore } from '../store/useOnboardingStore'
 import MuscleMap from '../components/muscle/MuscleMap'
 import { useDeviceTilt } from '../hooks/useDeviceTilt'
 import MuscleFatiguePopup from '../components/muscle/MuscleFatiguePopup'
+import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 
 export default function Home() {
   const { user } = useAuthStore()
   const { fetchFatigue, readinessScore, isLoading, selectedMuscle } = useFatigueStore()
+  // AppLayout does the fetching; Home only reads the result.
+  const { loaded, optionalStageDoneAt } = useOnboardingStore()
   const [side, setSide] = useState<'front' | 'back'>('front')
   const [aiVisible, setAiVisible] = useState(true)
   // Degrees of counter-rotation from the phone's tilt. Always 0 on desktop,
@@ -17,6 +22,10 @@ export default function Home() {
   useEffect(() => {
     fetchFatigue()
   }, [])
+
+  // The optional stage has never been answered. Not an error state — the app
+  // works without it — so this is a card to act on, not a warning.
+  const showSetupPrompt = loaded && !optionalStageDoneAt
 
   // Readiness score color
   const readinessColor =
@@ -50,16 +59,30 @@ export default function Home() {
         </div>
 
         {/* Readiness badge */}
-        <div className={`border rounded-2xl px-3 py-2 text-center ${readinessBg}`}>
-          <p className="text-dark-300 text-[10px] uppercase tracking-wide">
-            Readiness
-          </p>
-          {isLoading
-            ? <div className="w-8 h-5 bg-dark-600 rounded animate-pulse mx-auto mt-0.5" />
-            : <p className={`text-lg font-bold ${readinessColor}`}>
-                {readinessScore}%
-              </p>
-          }
+        <div className="relative">
+          <div className={`border rounded-2xl px-3 py-2 text-center ${readinessBg}`}>
+            <p className="text-dark-300 text-[10px] uppercase tracking-wide">
+              Readiness
+            </p>
+            {isLoading
+              ? <div className="w-8 h-5 bg-dark-600 rounded animate-pulse mx-auto mt-0.5" />
+              : <p className={`text-lg font-bold ${readinessColor}`}>
+                  {readinessScore}%
+                </p>
+            }
+          </div>
+
+          {/* Explained first, against the user's own number — it is the one
+              figure the rest of the app is built around. */}
+          <CoachMark
+            hintKey={HINTS.readiness}
+            priority={0}
+            enabled={!isLoading}
+            placement="bottom"
+            className="right-0"
+            title="Your readiness"
+            body="How recovered you are right now, from muscle fatigue and whole-body load. It climbs back on its own as you rest."
+          />
         </div>
       </div>
 
@@ -116,6 +139,20 @@ export default function Home() {
           }
         </div>
 
+        {/* Anchored to the map's own container so it sits under the body
+            rather than floating over the middle of the screen. */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2">
+          <CoachMark
+            hintKey={HINTS.bodyMap}
+            priority={1}
+            enabled={!isLoading}
+            placement="bottom"
+            className="-left-24"
+            title="Your body map"
+            body="Each muscle is coloured by how much load it's still carrying. Tap one to see what hit it and when it'll be recovered."
+          />
+        </div>
+
         {/* Muscle popup */}
         {selectedMuscle && <MuscleFatiguePopup />}
 
@@ -136,10 +173,32 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Finish-your-setup prompt. Sits above the AI strip because it is the
+          one thing on this screen that still needs the user to do something. */}
+      {showSetupPrompt && (
+        <Link
+          to="/training-setup"
+          className="mx-1 mt-auto mb-1 bg-dark-800 border border-brand-yellow/30
+                     rounded-card px-3 py-3 flex items-center gap-3 active:scale-[0.99]
+                     transition-transform"
+        >
+          <span className="text-lg">🏋️</span>
+          <div className="flex-1">
+            <p className="text-white text-sm font-semibold">Finish your setup</p>
+            <p className="text-dark-300 text-xs mt-0.5 leading-relaxed">
+              Tell us your equipment and any injuries so we only suggest sessions
+              you can actually do.
+            </p>
+          </div>
+          <span className="text-dark-400 text-lg leading-none">›</span>
+        </Link>
+      )}
+
       {/* AI suggestion strip */}
       {aiVisible && (
-        <div className="mx-1 mt-auto mb-1 bg-dark-800 border border-brand-teal/30
-                        rounded-card px-2 py-3 flex items-start gap-3">
+        <div className={`relative mx-1 mb-1 bg-dark-800 border border-brand-teal/30
+                        rounded-card px-2 py-3 flex items-start gap-3
+                        ${showSetupPrompt ? '' : 'mt-auto'}`}>
           <span className="text-lg mt-0.5">🤖</span>
           <p className="text-dark-200 text-sm flex-1 leading-relaxed">
             {aiSuggestion}
@@ -150,6 +209,16 @@ export default function Home() {
           >
             ×
           </button>
+
+          <CoachMark
+            hintKey={HINTS.aiStrip}
+            priority={2}
+            enabled={!isLoading}
+            placement="top"
+            className="left-0"
+            title="Today's call"
+            body="A read on what your body can take today. Tap the AI tab for a full session built around it."
+          />
         </div>
       )}
     </div>

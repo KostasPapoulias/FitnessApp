@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
+import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 import { fmtTime } from './Workout/helpers'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
@@ -232,12 +233,20 @@ export default function Calendar() {
     <div className="min-h-853 bg-dark-900 flex flex-col">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-2">
+      <div className="relative flex items-center justify-between px-5 pt-4 pb-2">
         <h1 className="text-white text-2xl font-bold">Calendar</h1>
         <div className="flex items-center gap-2 text-brand-teal text-xs font-bold">
           <span className="w-2 h-2 rounded-full bg-brand-teal shadow-[0_0_8px_#00D4AA]" />
           {isLoadingActivity ? '…' : `${activity?.streak.current ?? 0} day streak`}
         </div>
+
+        <CoachMark
+          hintKey={HINTS.calendar}
+          placement="bottom"
+          className="left-5"
+          title="Your history"
+          body="Every session lands here. Switch to Muscles to see which areas you've been hitting — and which you've been avoiding."
+        />
       </div>
 
       {/* Tabs */}

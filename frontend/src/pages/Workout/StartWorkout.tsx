@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useFatigueStore } from '../../store/useFatigueStore'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { templateService } from '../../services/template.service'
+import CoachMark, { HINTS } from '../../components/onboarding/CoachMark'
 import { ScheduledWorkout } from '../../types'
 
 // ── modality catalogue (id → label/desc/CTA), matching the prototype ──
@@ -127,8 +128,18 @@ export default function StartWorkout() {
     <div className="min-h-dvh bg-dark-900 text-white px-5 pt-6 pb-28 overflow-y-auto">
 
       {/* Title */}
-      <h1 className="text-[27px] font-extrabold tracking-tight">Start Workout</h1>
-      <p className="text-dark-300 text-[13px] mt-1 mb-5">{todayLabel}</p>
+      <div className="relative">
+        <h1 className="text-[27px] font-extrabold tracking-tight">Start Workout</h1>
+        <p className="text-dark-300 text-[13px] mt-1 mb-5">{todayLabel}</p>
+
+        <CoachMark
+          hintKey={HINTS.workout}
+          placement="bottom"
+          className="left-0"
+          title="Pick a modality"
+          body="Choose how you're training, plan the sets, then start. Everything you log feeds back into your readiness."
+        />
+      </div>
 
       {/* Standby first. Someone who planned a session already decided what to
           do — making them rebuild it from the modality grid is the app
