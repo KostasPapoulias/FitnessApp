@@ -19,6 +19,13 @@ const stepBtn =
 /** kcal per metre, matching the estimate this screen has always used. */
 const KCAL_PER_METRE = 0.058
 
+/**
+ * The map's own box, shared by the map and by both of its placeholders so they
+ * cannot disagree about how tall the slot is. An explicit height rather than
+ * h-full on purpose — see the wrapper below.
+ */
+const MAP_BOX = 'w-full h-[190px]'
+
 export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, cardioTarget, completeSet } = useWorkoutStore()
   const activity = selectedExercises[currentExerciseIndex]?.exercise.name ?? 'Outdoor Run'
@@ -254,13 +261,19 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
         ))}
       </div>
 
-      {/* route map */}
-      <div className="relative w-full h-[190px] mt-3.5">
+      {/* route map
+          The height lives on the map itself, not on this wrapper. A map sized
+          with h-full depends on every ancestor resolving a definite height, and
+          when one of them does not the percentage collapses to zero — MapLibre
+          then silently substitutes its own 300px default, renders a full canvas
+          into a 2px-tall clipped box, and reports no error at all. An explicit
+          height cannot fail that way. */}
+      <div className="relative w-full mt-3.5">
         {source === 'gps' ? (
           <Suspense fallback={
-            <div className="w-full h-full rounded-card border border-dark-600
+            <div className={`${MAP_BOX} rounded-card border border-dark-600
                             bg-gradient-to-br from-dark-800 to-dark-700
-                            flex items-center justify-center text-dark-500 text-sm">
+                            flex items-center justify-center text-dark-500 text-sm`}>
               Loading map…
             </div>
           }>
@@ -268,13 +281,13 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
               getPoints={run.getPoints}
               pointCount={run.pointCount}
               follow={running}
-              className="w-full h-full"
+              className={MAP_BOX}
             />
           </Suspense>
         ) : (
-          <div className="w-full h-full rounded-card border border-dark-600
+          <div className={`${MAP_BOX} rounded-card border border-dark-600
                           bg-gradient-to-br from-dark-800 to-dark-700
-                          flex items-center justify-center text-dark-500 text-sm">
+                          flex items-center justify-center text-dark-500 text-sm`}>
             No route — pace is being entered by hand
           </div>
         )}

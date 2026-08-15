@@ -22,10 +22,20 @@ interface Props {
   onClose: () => void
 }
 
+/**
+ * The map's box, given an explicit height rather than h-full.
+ *
+ * A percentage height only resolves if every ancestor up the chain has a
+ * definite one, and when it collapses MapLibre substitutes its own 300px
+ * default and renders a full canvas into a clipped strip — with no error to
+ * say so. Sized here, that cannot happen.
+ */
+const MAP_BOX = 'w-full h-[46vh] min-h-[240px] max-h-[420px]'
+
 const MapPlaceholder = ({ label }: { label: string }) => (
-  <div className="w-full h-full flex items-center justify-center
-                  bg-gradient-to-br from-dark-800 to-dark-700
-                  text-dark-500 text-sm">
+  <div className={`${MAP_BOX} flex items-center justify-center rounded-card
+                   border border-dark-600 bg-gradient-to-br from-dark-800 to-dark-700
+                   text-dark-500 text-sm`}>
     {label}
   </div>
 )
@@ -111,10 +121,10 @@ export default function RunDetail({ setId, title, onClose }: Props) {
 
         {run && (
           <>
-            <div className="w-full h-[46vh] min-h-[240px] mt-4">
+            <div className="w-full mt-4">
               {run.route && run.route.length > 0 ? (
                 <Suspense fallback={<MapPlaceholder label="Loading map…" />}>
-                  <RouteMap route={run.route} interactive className="w-full h-full" />
+                  <RouteMap route={run.route} interactive className={MAP_BOX} />
                 </Suspense>
               ) : (
                 <MapPlaceholder

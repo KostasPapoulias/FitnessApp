@@ -206,11 +206,24 @@ export default function RouteMap({
             const width = Math.round(box?.width ?? 0)
             const height = Math.round(box?.height ?? 0)
 
-            if (width < 2 || height < 2) {
+            // Not `< 2`: a collapsed box still measures the 2px of its own
+            // borders, which is exactly what this missed the first time. A map
+            // thinner than a finger is a map nobody can see.
+            if (width < 24 || height < 24) {
               setDiagnostic(`Map has no room to draw — container is ${width}×${height}px`)
+              // The height came from somewhere up the tree, so name the chain
+              // rather than leave the next person bisecting Tailwind classes.
+              const chain: string[] = []
+              let node: HTMLElement | null = container.current
+              while (node && chain.length < 6) {
+                const rect = node.getBoundingClientRect()
+                chain.push(`${node.className.split(/\s+/)[0] || node.tagName}:${Math.round(rect.height)}px`)
+                node = node.parentElement
+              }
+              console.warn('[RouteMap] height chain:', chain.join(' ← '))
               return
             }
-            if (canvas.width < 2 || canvas.height < 2) {
+            if (canvas.width < 24 || canvas.height < 24) {
               setDiagnostic(`Map canvas is ${canvas.width}×${canvas.height} inside ${width}×${height}px`)
               return
             }
@@ -335,9 +348,26 @@ export default function RouteMap({
 
   return (
     <div className={`relative ${className ?? ''}`}>
+      {/*
+        Sized in normal flow — NOT `absolute inset-0`, which is what kept this
+        map two pixels tall.
+
+        MapLibre puts its own `maplibregl-map` class on this very div, and that
+        rule declares `position: relative`. It has the same specificity as
+        Tailwind's `.absolute`, and it arrives in this component's lazily-loaded
+        CSS chunk — after the main stylesheet — so it wins. The div stopped being
+        positioned, `inset-0` no longer sized it, its height fell back to `auto`,
+        and its only child is MapLibre's own absolutely-positioned canvas
+        container, which contributes no height at all. The result was a 0px box
+        wearing 2px of border, with a correctly rendered 388×300 canvas clipped
+        inside it and not one error anywhere to say so.
+
+        `w-full h-full` cannot lose that argument: `.maplibregl-map` sets no
+        width or height, so there is nothing to override it.
+      */}
       <div
         ref={container}
-        className="absolute inset-0 rounded-card overflow-hidden border border-dark-600 bg-dark-800"
+        className="w-full h-full rounded-card overflow-hidden border border-dark-600 bg-dark-800"
       />
       {diagnostic && (
         // Top-left: the accuracy readout owns the right, the GPS pill the
