@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import front5 from '../../assets/front5.svg?raw'
-import back5 from '../../assets/back5.svg?raw'
+import { bodySvg, bodyOffsetY, useBodyGender } from './bodyAssets'
 
 const MUSCLE_NAME_TO_GROUP: Record<string, string[]> = {
   'Quadriceps': ['Quads'],
@@ -46,6 +45,10 @@ const decorateSvg = (svg: string, css: string) => {
 }
 
 export default function MiniMuscleMap({ fatigueSnapshot }: MiniMuscleMapProps) {
+  // Historical sessions all belong to the signed-in athlete, so the body drawn
+  // against an old snapshot is the same one Home draws today.
+  const gender = useBodyGender()
+
   const svgCss = useMemo(() => {
     const colorMap = new Map<string, string>()
 
@@ -63,13 +66,17 @@ export default function MiniMuscleMap({ fatigueSnapshot }: MiniMuscleMapProps) {
     return rules.join('\n')
   }, [fatigueSnapshot])
 
-  const frontSvg = useMemo(() => decorateSvg(front5, svgCss), [svgCss])
-  const backSvg = useMemo(() => decorateSvg(back5, svgCss), [svgCss])
+  const frontSvg = useMemo(() => decorateSvg(bodySvg('front', gender), svgCss), [svgCss, gender])
+  const backSvg = useMemo(() => decorateSvg(bodySvg('back', gender), svgCss), [svgCss, gender])
 
   return (
     <div className="flex gap-0.5 max-w-full overflow-hidden">
-      <div className="w-24 h-32" aria-label="Front muscle map" dangerouslySetInnerHTML={{ __html: frontSvg }} />
-      <div className="w-24 h-32" aria-label="Back muscle map" dangerouslySetInnerHTML={{ __html: backSvg }} />
+      <div className="w-24 h-32" aria-label="Front muscle map"
+           style={{ transform: `translateY(${bodyOffsetY(gender)})` }}
+           dangerouslySetInnerHTML={{ __html: frontSvg }} />
+      <div className="w-24 h-32" aria-label="Back muscle map"
+           style={{ transform: `translateY(${bodyOffsetY(gender)})` }}
+           dangerouslySetInnerHTML={{ __html: backSvg }} />
     </div>
   )
 }

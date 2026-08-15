@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFatigueStore } from '../../store/useFatigueStore'
-import frontSvg from '../../assets/front5.svg?raw'
-import backSvg from '../../assets/back5.svg?raw'
+import { bodySvg, bodyOffsetY, useBodyGender } from './bodyAssets'
 
 // Map SVG group IDs to database muscle names
 const MUSCLE_ID_MAP: Record<string, string> = {
@@ -26,10 +25,9 @@ interface MuscleMapProps {
 export default function MuscleMap({ side }: MuscleMapProps) {
   const { muscles, selectMuscle } = useFatigueStore()
   const containerRef = useRef<HTMLDivElement>(null)
+  const gender = useBodyGender()
 
-  const svgMarkup = useMemo(() => {
-    return side === 'front' ? frontSvg : backSvg
-  }, [side])
+  const svgMarkup = useMemo(() => bodySvg(side, gender), [side, gender])
 
   const colorMap = useMemo(() => {
     return new Map(muscles.map(m => [m.muscleName, m.color]))
@@ -80,6 +78,9 @@ export default function MuscleMap({ side }: MuscleMapProps) {
     <div
       ref={containerRef}
       className="w-full h-full"
+      // Per-body vertical alignment. A transform, so the box the SVG is fitted
+      // into does not change and nothing below it moves.
+      style={{ transform: `translateY(${bodyOffsetY(gender)})` }}
       dangerouslySetInnerHTML={{ __html: svgMarkup }}
     />
   )
