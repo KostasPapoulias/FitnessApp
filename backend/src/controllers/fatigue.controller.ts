@@ -1,9 +1,9 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
-import { getUserReadiness, normalizeFitnessLevel } from '../services/readiness.service'
+import { getUserReadiness } from '../services/readiness.service'
 import { recoveryTargetFor } from '../services/fatigue.service'
 import { getTrainingLoad } from '../services/training-load.service'
-import { RECOVERY_RATE_BY_LEVEL } from '../services/fatigue-model.service'
+import { recoveryRateFor, resolveAge } from '../services/fatigue-model.service'
 import { AuthRequest } from '../server'
 
 // GET /api/fatigue/current
@@ -76,8 +76,10 @@ export const overrideFatigue = async (req: AuthRequest, res: Response) => {
     const profile = await prisma.userProfile.findUnique({
       where: { userId: req.userId! }
     })
-    const recoveryRate =
-      RECOVERY_RATE_BY_LEVEL[normalizeFitnessLevel(profile?.fitnessLevel)] ?? 1
+    const recoveryRate = recoveryRateFor(
+      profile?.fitnessLevel,
+      resolveAge(profile?.birthDate, profile?.age)
+    )
 
     const recoveryTargetAt = recoveryTargetFor(
       fatigueLevel, muscle.recoveryHalfLifeHours * recoveryRate

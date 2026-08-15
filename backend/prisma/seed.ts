@@ -5,6 +5,7 @@ import {
   MUSCLE_HALF_LIVES,
   damageFor,
   referenceSpeedFor,
+  loadFactorFor,
 } from './fatigue-tuning';
 
 const prisma = new PrismaClient();
@@ -170,6 +171,7 @@ async function main() {
     // without another migration.
     const damageFactor = damageFor(ex.name, ex.modality);
     const referenceSpeedKmh = referenceSpeedFor(ex.name);
+    const loadFactor = loadFactorFor(ex.name);
 
     const existing = await prisma.exercise.findFirst({ where: { name: ex.name } });
     const exercise = existing
@@ -180,6 +182,7 @@ async function main() {
             description: ex.description ?? null,
             damageFactor,
             referenceSpeedKmh,
+            loadFactor,
           },
         })
       : await prisma.exercise.create({
@@ -189,6 +192,7 @@ async function main() {
             description: ex.description ?? null,
             damageFactor,
             referenceSpeedKmh,
+            loadFactor,
           },
         });
 

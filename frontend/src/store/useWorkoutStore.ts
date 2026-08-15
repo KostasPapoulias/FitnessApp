@@ -36,7 +36,15 @@ export type CardioTarget = { type: 'distance' | 'time'; value: number }
 export type WodFormat = 'amrap' | 'fortime' | 'emom' | 'rounds'
 export type WodConfig = { format: WodFormat; capSec: number; targetRounds: number }
 
-// Sensible default planned sets per modality (used when an exercise is added)
+// Placeholder planned sets per modality, shown for the instant before the
+// server's suggestion arrives.
+//
+// Strength deliberately opens at 0 kg rather than a guess. It used to seed
+// 60/70/80 kg for EVERY strength movement, which offered a 60 kg lateral raise
+// — and because those numbers looked deliberate, they were easy to accept
+// without reading. A zero reads as "not filled in yet", which is the truth: the
+// real figure comes from /workout/plan/suggestions, computed from the exercise
+// and the athlete's own bodyweight, sex, age, level and experience.
 function defaultSetsFor(modality: string): PlannedSet[] {
   switch (modality) {
     case 'Calisthenics':
@@ -56,9 +64,9 @@ function defaultSetsFor(modality: string): PlannedSet[] {
     case 'Strength':
     default:
       return [
-        { reps: 10, weight: 60, rpe: 7, restSeconds: 90 },
-        { reps: 8,  weight: 70, rpe: 8, restSeconds: 90 },
-        { reps: 6,  weight: 80, rpe: 9, restSeconds: 90 },
+        { reps: 12, weight: 0, rpe: 7, restSeconds: 90 },
+        { reps: 10, weight: 0, rpe: 8, restSeconds: 90 },
+        { reps: 8,  weight: 0, rpe: 9, restSeconds: 90 },
       ]
   }
 }

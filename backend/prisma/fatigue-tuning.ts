@@ -102,8 +102,73 @@ export const REFERENCE_SPEED_KMH: Record<string, number> = {
   Swimming: 3,
 }
 
+// Working load for a set of ~10 reps, as a FRACTION OF BODYWEIGHT, for a
+// trained adult male reference athlete (the "intermediate" tier).
+//
+// This is the table that stops a lateral raise opening at 60 kg. It has to be
+// per-movement rather than per-muscle: a leg press and a leg extension train
+// the same muscle and differ by roughly a factor of eight. Figures are working
+// weights, NOT one-rep maxes — a 1.2× bodyweight squat for 10 is an ordinary
+// intermediate set, while a 1.2× max would be a beginner's.
+//
+// Per-side movements (dumbbell work) are quoted as the weight of ONE dumbbell,
+// which is what the athlete actually selects off the rack.
+export const LOAD_FACTORS: Record<string, number> = {
+  // Chest
+  'Bench Press': 0.90,
+  'Incline Bench Press': 0.75,
+  'Dumbbell Bench Press': 0.32,   // per hand
+  'Dumbbell Flyes': 0.16,         // per hand
+  'Cable Crossover': 0.22,        // per side
+  'Machine Chest Press': 0.80,
+
+  // Back
+  'Deadlifts': 1.30,
+  'Barbell Row': 0.70,
+  'Bent-Over Dumbbell Row': 0.35, // per hand
+  'Lat Pulldown': 0.75,
+  'Seated Cable Row': 0.75,
+  'T-Bar Row': 0.65,
+
+  // Legs
+  'Squats': 1.05,
+  'Leg Press': 2.00,              // the whole sled, and it is not a squat
+  'Romanian Deadlift': 0.85,
+  'Leg Extension': 0.55,
+  'Leg Curl': 0.45,
+  'Bulgarian Split Squat': 0.25,  // per hand, one leg at a time
+  'Standing Calf Raise': 0.90,
+
+  // Shoulders — where the old flat default was most absurd
+  'Shoulder Press': 0.50,
+  'Lateral Raises': 0.10,         // ~8 kg for an 80 kg athlete, not 60
+  'Arnold Press': 0.22,           // per hand
+  'Front Raise': 0.11,            // per hand
+  'Rear Delt Fly': 0.09,          // per hand
+  'Upright Row': 0.40,
+
+  // Arms
+  'Barbell Curls': 0.38,
+  'Hammer Curls': 0.18,           // per hand
+  'Preacher Curl': 0.28,
+  'Tricep Pushdown': 0.40,
+  'Skull Crushers': 0.30,
+  'Cable Curl': 0.35,
+
+  // Core
+  'Cable Crunch': 0.45,
+  'Weighted Decline Sit-up': 0.12,
+  'Ab Wheel Rollout': 0,          // bodyweight; no external load to suggest
+}
+
 export const damageFor = (exerciseName: string, modalityName: string): number =>
   DAMAGE_OVERRIDES[exerciseName] ?? MODALITY_DAMAGE[modalityName] ?? 1.0
 
 export const referenceSpeedFor = (exerciseName: string): number | null =>
   REFERENCE_SPEED_KMH[exerciseName] ?? null
+
+// Null rather than 0 for anything unlisted: 0 would read as "this movement is
+// unloaded", which is a claim, whereas null is the absence of one and lets the
+// caller fall back instead of suggesting an empty bar.
+export const loadFactorFor = (exerciseName: string): number | null =>
+  LOAD_FACTORS[exerciseName] ?? null

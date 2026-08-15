@@ -62,6 +62,63 @@ export const RECOVERY_RATE_BY_LEVEL: Record<string, number> = {
   advanced: 0.85,
 }
 
+// Chronological age at which the age multiplier is exactly 1.0. Recovery
+// capacity is roughly flat through the twenties and declines gradually after.
+const RECOVERY_REFERENCE_AGE = 30
+// Added to the half-life multiplier per year past the reference age. Small on
+// purpose — training age (the level multiplier above) explains far more of the
+// variance than birth year does, and this must not overwhelm it.
+const RECOVERY_AGE_SLOPE = 0.006
+
+/**
+ * How much slower (or faster) this athlete clears fatigue, from age alone.
+ *
+ * Clamped hard at both ends. The linear term is a reasonable approximation
+ * across a normal training population and nonsense outside it — extrapolated
+ * freely it would claim a 75-year-old recovers three times slower than a
+ * 30-year-old, which is not what the literature supports.
+ */
+export const ageRecoveryFactor = (age: number | null | undefined): number => {
+  if (age == null || !Number.isFinite(age) || age <= 0) return 1
+  return clamp(1 + (age - RECOVERY_REFERENCE_AGE) * RECOVERY_AGE_SLOPE, 0.92, 1.25)
+}
+
+/**
+ * The single recovery multiplier to apply to a muscle's half-life.
+ *
+ * Combines self-reported training level with age. Every caller should use this
+ * rather than reaching for RECOVERY_RATE_BY_LEVEL directly, so the two inputs
+ * cannot drift apart between the fatigue controller and the workout finish
+ * path — which is exactly what happened when level was the only term.
+ */
+export const recoveryRateFor = (
+  fitnessLevel: string | null | undefined,
+  age: number | null | undefined
+): number => {
+  const level = fitnessLevel?.toLowerCase().trim() ?? ''
+  const base = RECOVERY_RATE_BY_LEVEL[level] ?? RECOVERY_RATE_BY_LEVEL.intermediate
+  return base * ageRecoveryFactor(age)
+}
+
+/**
+ * Age in whole years from a birth date, preferring it over a stored `age`.
+ *
+ * A profile written before birthDate existed only has the integer, and it has
+ * been going stale ever since — so the stored value is the fallback, never the
+ * first choice.
+ */
+export const resolveAge = (
+  birthDate: Date | null | undefined,
+  storedAge: number | null | undefined,
+  now: Date = new Date()
+): number | null => {
+  if (birthDate) {
+    const years = (now.getTime() - birthDate.getTime()) / (365.2425 * 24 * 60 * 60 * 1000)
+    if (years > 0 && years < 120) return Math.floor(years)
+  }
+  return storedAge ?? null
+}
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 // ── effort ─────────────────────────────────────────────────────────────────

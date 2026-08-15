@@ -2,6 +2,7 @@ import { Content, GoogleGenerativeAI, Part } from '@google/generative-ai'
 import prisma from '../lib/prisma'
 import { getUserReadiness } from './readiness.service'
 import { getTrainingLoad } from './training-load.service'
+import { resolveAge } from './fatigue-model.service'
 import { assertWithinBudget, recordUsage } from './ai-budget.service'
 import {
   MAX_TOOL_CALLS_PER_MESSAGE, ProposalSummary, TOOL_DECLARATIONS,
@@ -36,6 +37,21 @@ export const buildUserContext = async (userId: string): Promise<string> => {
     where: { userId }
   })
 
+  // What they can train with, and what they are training around. Without this
+  // the coach happily prescribed barbell work to someone training at home.
+  const [equipment, injuries] = await Promise.all([
+    prisma.userEquipment.findMany({
+      where: { userId },
+      include: { equipment: { select: { name: true } } },
+    }),
+    prisma.userInjury.findMany({
+      where: { userId, resolvedAt: null },
+      include: { muscle: { select: { name: true } } },
+    }),
+  ])
+
+  const age = resolveAge(profile?.birthDate, profile?.age)
+
   // Get recent sessions (last 3)
   const recentSessions = await prisma.workoutSession.findMany({
     where: { userId },
@@ -64,6 +80,29 @@ quote only the value below.
 Name: ${profile?.name ?? 'Athlete'}
 Fitness level: ${fitnessLevel}
 Goal: ${profile?.goal ?? 'general fitness'}
+${age != null ? `Age: ${age}` : ''}
+${profile?.weight != null ? `Bodyweight: ${profile.weight} kg` : ''}
+${profile?.trainingDaysPerWeek != null ? `Trains ${profile.trainingDaysPerWeek} days per week` : ''}
+${profile?.experienceYears != null ? `Training experience: ${profile.experienceYears} years` : ''}
+
+## Available Equipment
+${equipment.length > 0
+  ? `They usually have: ${equipment.map(e => e.equipment.name).join(', ')}.
+Build the session from this list by default. You may still suggest something
+outside it when it is clearly the right movement — but say so explicitly and
+offer a substitute from the list, so they can choose rather than be stuck.`
+  : 'Not specified — assume a normally equipped gym, but ask before building a full plan around specialist kit.'}
+
+## Injuries and limitations
+${injuries.length > 0
+  ? injuries.map(i =>
+      `  - ${i.label}${i.muscle ? ` (${i.muscle.name})` : ''}: ${
+        i.severity === 'avoid'
+          ? 'AVOID ENTIRELY — never prescribe anything loading this'
+          : 'work around it — light or modified only, and say why'
+      }`
+    ).join('\n')
+  : '  None reported'}
 
 ## Current Body State
 Overall readiness score: ${readiness}%

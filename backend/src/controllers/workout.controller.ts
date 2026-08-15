@@ -5,19 +5,20 @@ import { getEffectiveFatigueLevel, recoveryTargetFor } from '../services/fatigue
 import {
   FATIGUE_PER_HSE,
   HOLD_SECONDS_PER_REP,
-  RECOVERY_RATE_BY_LEVEL,
   SYSTEMIC_HALF_LIFE_HOURS,
   accumulate,
   cardioHse,
   estimateE1rm,
   mobilityHse,
+  recoveryRateFor,
   resistanceHse,
+  resolveAge,
   systemicFatigueDelta,
   systemicLoad,
   wodHse,
 } from '../services/fatigue-model.service'
-import { normalizeFitnessLevel } from '../services/readiness.service'
 import { SuggestedSet, suggestForExercise } from '../services/workout-progression.service'
+import { startingSets, startingWorkingLoad } from '../services/starting-load.service'
 
 const SET_TYPES = ['STRENGTH', 'CALISTHENICS', 'CARDIO', 'WOD', 'MOBILITY'] as const
 
@@ -377,13 +378,25 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Bodyweight drives calisthenics load, fitness level drives recovery speed
+    // Bodyweight drives calisthenics load; level and age drive recovery speed
     const profile = await prisma.userProfile.findUnique({
       where: { userId: req.userId! }
     })
+    // Onboarding makes bodyweight mandatory, so this fallback should now be
+    // unreachable for anyone who has passed the gate. It stays as a floor
+    // rather than a throw: a session the athlete already finished must still
+    // save, even if their profile is somehow incomplete.
     const bodyWeight = profile?.weight ?? DEFAULT_BODY_WEIGHT
-    const recoveryRate =
-      RECOVERY_RATE_BY_LEVEL[normalizeFitnessLevel(profile?.fitnessLevel)] ?? 1
+    if (profile?.weight == null) {
+      console.warn(
+        `[fatigue] userId=${req.userId} finished a session with no profile weight; ` +
+        `calisthenics load fell back to ${DEFAULT_BODY_WEIGHT} kg`
+      )
+    }
+    const recoveryRate = recoveryRateFor(
+      profile?.fitnessLevel,
+      resolveAge(profile?.birthDate, profile?.age)
+    )
 
     // Load relative to the athlete's own strength is what makes a set costly,
     // so pull their best known 1RM for everything in this session up front.
@@ -714,25 +727,51 @@ export const getPlanSuggestions = async (req: AuthRequest, res: Response) => {
     // Bounded so a malformed client cannot ask for a thousand lookups
     const requested = exercises.slice(0, 30)
 
-    const known = await prisma.exercise.findMany({
-      where: { id: { in: requested.map(e => e.exerciseId) } },
-      select: { id: true, modality: { select: { name: true } } },
-    })
-    const modalityById = new Map(known.map(e => [e.id, e.modality.name]))
+    // Both in one trip — the exercise rows and the profile the load model
+    // needs are independent, and this endpoint is on the critical path of
+    // opening the plan screen.
+    const [known, profile] = await Promise.all([
+      prisma.exercise.findMany({
+        where: { id: { in: requested.map(e => e.exerciseId) } },
+        select: { id: true, loadFactor: true, modality: { select: { name: true } } },
+      }),
+      prisma.userProfile.findUnique({ where: { userId: req.userId! } }),
+    ])
+    const exerciseById = new Map(known.map(e => [e.id, e]))
+
+    const loadProfile = {
+      weight: profile?.weight,
+      gender: profile?.gender,
+      fitnessLevel: profile?.fitnessLevel,
+      experienceYears: profile?.experienceYears,
+      age: resolveAge(profile?.birthDate, profile?.age),
+    }
 
     const suggestions = await Promise.all(
       requested
-        .filter(item => modalityById.has(item.exerciseId))
-        .map(item => suggestForExercise(
-          req.userId!,
-          item.exerciseId,
-          modalityById.get(item.exerciseId)!,
-          // The client's own defaults are the floor: the server should not
-          // duplicate the per-modality table that already lives in the store.
-          Array.isArray(item.fallback) && item.fallback.length > 0
-            ? item.fallback
-            : [{ reps: 10, weight: 20, rpe: 7, restSeconds: 90 }]
-        ))
+        .filter(item => exerciseById.has(item.exerciseId))
+        .map(item => {
+          const exercise = exerciseById.get(item.exerciseId)!
+
+          // A load derived from this exercise and this athlete beats anything
+          // the client can offer — its table is per-modality, so it cannot
+          // tell a lateral raise from a squat. The client's fallback is used
+          // only where we have no figure for the movement at all.
+          const working = startingWorkingLoad(exercise.loadFactor, loadProfile)
+          const fallback =
+            working != null
+              ? startingSets(working)
+              : Array.isArray(item.fallback) && item.fallback.length > 0
+                ? item.fallback
+                : [{ reps: 10, weight: 20, rpe: 7, restSeconds: 90 }]
+
+          return suggestForExercise(
+            req.userId!,
+            item.exerciseId,
+            exercise.modality.name,
+            fallback
+          )
+        })
     )
 
     res.json({ success: true, data: suggestions })
