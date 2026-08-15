@@ -37,6 +37,8 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
   const [ending, setEnding] = useState(false)
   const endingRef = useRef(false)
   const [locked, setLocked] = useState(false)
+  /** Set once the athlete has answered the recovered-run prompt. */
+  const [keptRecovered, setKeptRecovered] = useState(false)
   const [manualPace, setManualPace] = useState(2.85) // m/s, the effort dial
   const [summary, setSummary] = useState<RunSummary | null>(null)
 
@@ -208,18 +210,40 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
         <div className="text-[13px] text-dark-300 font-semibold">🏃 {activity}</div>
       </div>
 
-      {/* recovered after a reload or an OS kill mid-run */}
-      {run.recovered && !wakeLock.held && (
-        <button
-          onClick={() => wakeLock.request()}
-          className="w-full mt-3 rounded-btn border border-brand-teal/40 bg-[#0a2a22]
-                     px-3.5 py-2.5 text-left active:scale-[0.99] transition-transform"
-        >
+      {/* Recovered after a reload or an OS kill mid-run.
+          Shown until it is answered, not only when the wake lock is missing: a
+          resumed session arrives carrying a distance, a clock and a track from
+          before, and silently adopting all three is how a stale run from an hour
+          ago turns up looking like a short route nobody just ran. */}
+      {run.recovered && !keptRecovered && (
+        <div className="w-full mt-3 rounded-btn border border-brand-teal/40 bg-[#0a2a22] px-3.5 py-2.5">
           <p className="text-[12px] font-bold text-brand-teal">Run recovered</p>
           <p className="text-[11.5px] text-dark-200 mt-0.5 leading-snug">
-            Tap to keep the screen awake again — the browser only allows it from a tap.
+            {km.toFixed(2)} km and {fmtTime(elapsedSec)} carried over from a session that
+            was interrupted.
+            {!wakeLock.held && ' Keeping it also puts the screen lock back on.'}
           </p>
-        </button>
+          <div className="flex gap-2 mt-2.5">
+            <button
+              onClick={() => {
+                // Inside the tap: iOS grants a wake lock only from a gesture.
+                wakeLock.request()
+                setKeptRecovered(true)
+              }}
+              className="flex-1 py-2 rounded-btn bg-brand-teal text-black text-[12px] font-extrabold
+                         active:scale-95 transition-transform"
+            >
+              Keep it
+            </button>
+            <button
+              onClick={run.discard}
+              className="flex-1 py-2 rounded-btn border border-dark-600 bg-dark-800 text-dark-200
+                         text-[12px] font-bold active:scale-95 transition-transform"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
       )}
 
       {/* big elapsed */}
@@ -281,6 +305,9 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
               getPoints={run.getPoints}
               pointCount={run.pointCount}
               follow={running}
+              // Where the phone says it is, which is the only thing the map has
+              // to go on until a fix clears the accuracy filter.
+              center={run.position ? [run.position.lng, run.position.lat] : null}
               className={MAP_BOX}
             />
           </Suspense>

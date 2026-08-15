@@ -56,6 +56,15 @@ interface Props {
   pointCount?: number
   /** Live: keep the camera on the athlete. */
   follow?: boolean
+  /**
+   * Live: where the device says it is, as [lng, lat].
+   *
+   * The camera and the position dot use this until the track has a point of its
+   * own. Without it a run that has not yet produced an acceptable fix — a cold
+   * GPS, a stairwell, the first thirty seconds of any session — shows a map of
+   * somewhere the athlete has never been.
+   */
+  center?: [number, number] | null
   /** Finished: a stored route, already segmented on gaps. */
   route?: RouteSegment[]
   /** Finished: allow the athlete to look around their own run. */
@@ -100,8 +109,17 @@ const dot = (color: string, size: number) => {
   return element
 }
 
+/**
+ * Where the camera sits until anything better is known.
+ *
+ * Only ever visible for the moment between the map painting and the first
+ * position arriving — and if it is on screen for longer than that, the device
+ * is not reporting a position at all, which the GPS pill says out loud.
+ */
+const FALLBACK_CENTER: [number, number] = [23.7275, 37.9838]
+
 export default function RouteMap({
-  getPoints, pointCount = 0, follow = true, route, interactive, className,
+  getPoints, pointCount = 0, follow = true, center, route, interactive, className,
 }: Props) {
   const container = useRef<HTMLDivElement | null>(null)
   const map = useRef<MapLibreMap | null>(null)
@@ -122,6 +140,11 @@ export default function RouteMap({
   const isLive = typeof getPoints === 'function'
   const currentSegments = (): RouteSegment[] =>
     isLive ? fromPoints(getPoints!()) : (route ?? [])
+
+  // The map is built once, inside an async effect that cannot see later props.
+  // A ref keeps the constructor and the redraw reading the same live value.
+  const centerRef = useRef<[number, number] | null>(center ?? null)
+  centerRef.current = center ?? centerRef.current
 
   // ── build the map once ──
   useEffect(() => {
@@ -147,8 +170,8 @@ export default function RouteMap({
         const instance = new MapLibreMap({
           container: container.current,
           style: styleUrl,
-          center: [23.7275, 37.9838],
-          zoom: 15,
+          center: centerRef.current ?? FALLBACK_CENTER,
+          zoom: centerRef.current ? 16 : 15,
           interactive: interactive ?? false,
           // MapTiler's terms require attribution; it comes from the style, and
           // compacting it keeps it legible on a small map.
@@ -299,6 +322,25 @@ export default function RouteMap({
     const source = instance.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined
     source?.setData(toFeature(segments))
 
+    // A live map with no track yet still has somewhere to be: on the athlete.
+    // This is the case that used to fall through and leave the camera parked on
+    // a hardcoded city centre for the whole warm-up.
+    if (isLive && segments.length === 0) {
+      const here = centerRef.current
+      if (!here) return
+
+      if (!marker.current) {
+        marker.current = new Marker({ element: dot(BRAND_TEAL, 14) })
+          .setLngLat(here)
+          .addTo(instance)
+        instance.jumpTo({ center: here, zoom: 16 })
+        return
+      }
+      marker.current.setLngLat(here)
+      if (follow) instance.easeTo({ center: here, duration: 800 })
+      return
+    }
+
     if (segments.length === 0) return
 
     // A finished run is framed once, whole. Fitting it on every redraw would
@@ -335,7 +377,9 @@ export default function RouteMap({
     if (follow) instance.easeTo({ center: position, duration: 800 })
   }
 
-  useEffect(draw, [pointCount, follow, route])
+  // `center` is in the deps so the camera tracks the device between accepted
+  // fixes, not only when the track gains a point.
+  useEffect(draw, [pointCount, follow, route, center])
 
   if (failed) {
     return (

@@ -77,6 +77,16 @@ export const useRunTracker = (activityKey: string) => {
   const [meters, setMeters] = useState(0)
   const [speedMps, setSpeedMps] = useState(0)
   const [accuracy, setAccuracy] = useState<number | null>(null)
+  /**
+   * The last position the device reported, believed or not.
+   *
+   * Deliberately separate from the track. The track only accepts fixes good
+   * enough to measure distance with, and a fix too vague to measure with is
+   * still far better than a hardcoded city centre to point a camera at. This is
+   * what the map follows before the first real fix lands — and, indoors, it may
+   * be the only thing it ever gets.
+   */
+  const [position, setPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null)
   const [pointCount, setPointCount] = useState(0)
   const [gapCount, setGapCount] = useState(0)
   const [splits, setSplits] = useState<Split[]>([])
@@ -143,6 +153,9 @@ export const useRunTracker = (activityKey: string) => {
 
     setAccuracy(raw.accuracy)
     setStatus(raw.accuracy > MAX_ACCURACY_M ? 'weak' : 'tracking')
+    // Before the running check: where the phone is does not depend on whether
+    // the clock has been started, and the map needs it either way.
+    setPosition({ lat: raw.lat, lng: raw.lng, accuracy: raw.accuracy })
 
     if (!runningRef.current) return
 
@@ -232,6 +245,26 @@ export const useRunTracker = (activityKey: string) => {
       timeout: 30_000,
     })
   }, [commitFix, onGeolocationError])
+
+  // ── acquire the signal as soon as the screen opens ──
+  //
+  // Not when Start is pressed. Two reasons, and the second is the important one.
+  //
+  // The map has nowhere to point until something reports a position, and until
+  // this ran only on Start there was nothing to report — so the camera sat on a
+  // hardcoded city centre while the athlete stood somewhere else entirely.
+  //
+  // And a cold GPS takes tens of seconds to go from a first coarse fix to one
+  // accurate enough to measure with. Starting that clock when the athlete opens
+  // the screen rather than when they start running means the early, useless
+  // fixes are spent standing still, instead of eating the first minutes of the
+  // run — which is exactly when a rejected fix costs real distance.
+  useEffect(() => {
+    if (sourceRef.current === 'manual') return
+    startWatch()
+    // startWatch is a no-op if a watch is already up, so this composes with
+    // both recovery and start without racing either.
+  }, [startWatch])
 
   // ── recovery ──
   // A run found on launch is resumed rather than offered, because the only
@@ -476,6 +509,47 @@ export const useRunTracker = (activityKey: string) => {
     return summary
   }, [])
 
+  /**
+   * Throw away a recovered run and start clean.
+   *
+   * A run is resumed rather than offered, because the usual reason one exists is
+   * that the page died mid-session and the athlete is standing in the street
+   * waiting. But the same rule catches a session that was abandoned an hour ago
+   * and never ended — and that one arrives carrying somebody's old track, an old
+   * distance and an old clock, with no way to say no to it.
+   *
+   * The watch is deliberately left running afterwards: the athlete is still
+   * standing there, still about to run, and still wants a GPS lock.
+   */
+  const discard = useCallback(() => {
+    points.current = []
+    gaps.current = []
+    anchor.current = null
+    lastFix.current = null
+    smoothed.current = null
+    distance.current = 0
+    smoothedSpeed.current = null
+    splitState.current = emptySplitState()
+    lapState.current = []
+    lastLap.current = { meters: 0, seconds: 0 }
+    clock.current = { startedAt: 0, pausedAt: 0, pausedMs: 0 }
+    runningRef.current = false
+    startedRef.current = false
+
+    setStarted(false)
+    setRunning(false)
+    setRecovered(false)
+    setElapsedSec(0)
+    setMeters(0)
+    setSpeedMps(0)
+    setPointCount(0)
+    setGapCount(0)
+    setSplits([])
+    setLaps([])
+
+    void clearRun()
+  }, [])
+
   const setManualSpeed = useCallback((mps: number) => {
     manualSpeed.current = mps
   }, [])
@@ -497,10 +571,10 @@ export const useRunTracker = (activityKey: string) => {
   return {
     status, source, started, running, recovered,
     elapsedSec, meters, speedMps, accuracy, pointCount, gapCount,
-    splits, laps,
+    splits, laps, position,
     /** Distance over time — the number a run is judged by. Zero until moving. */
     avgPaceSec: averagePace(meters, elapsedSec),
-    start, pause, resume, lap, stop, setManualSpeed, useManual,
+    start, pause, resume, lap, stop, discard, setManualSpeed, useManual,
     getPoints: () => points.current,
   }
 }
