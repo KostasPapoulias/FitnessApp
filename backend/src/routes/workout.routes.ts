@@ -7,6 +7,10 @@ import {
   finishSession,
   getSessions,
   getSessionById,
+  getActiveSession,
+  deleteSession,
+  updateSet,
+  deleteSet,
   getPlanSuggestions,
   getRunTrack
 } from '../controllers/workout.controller'
@@ -32,11 +36,26 @@ router.post('/sessions', startSession)
  */
 router.get('/sessions', getSessions)
 /**
+ * @route GET /api/workout/sessions/active
+ * @protected
+ * @returns the session still open, or null
+ *
+ * MUST stay above `/sessions/:id` — Express matches in order, and registered
+ * after it "active" is swallowed as an id and answers 404.
+ */
+router.get('/sessions/active', getActiveSession)
+/**
  * @route GET /api/workout/sessions/:id
  * @protected
  * @returns single workout session
  */
 router.get('/sessions/:id', getSessionById)
+/**
+ * @route DELETE /api/workout/sessions/:id
+ * @protected
+ * @returns the deleted id, and whether fatigue had to be reversed
+ */
+router.delete('/sessions/:id', deleteSession)
 /**
  * @route POST /api/workout/sessions/:id/exercises
  * @protected
@@ -62,5 +81,17 @@ router.post('/sessions/:id/finish', finishSession)
  *          or null for one logged without a track
  */
 router.get('/sets/:setId/run', getRunTrack)
+/**
+ * @route PATCH /api/workout/sets/:setId
+ * @protected
+ * @returns the edited set id — the session is re-scored and fatigue rebuilt
+ */
+router.patch('/sets/:setId', updateSet)
+/**
+ * @route DELETE /api/workout/sets/:setId
+ * @protected
+ * @returns the removed set id — the session is re-scored and fatigue rebuilt
+ */
+router.delete('/sets/:setId', deleteSet)
 
 export default router

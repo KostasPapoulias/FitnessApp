@@ -73,4 +73,55 @@ export const workoutService = {
     const res = await api.get('/workout/sessions', { params: { limit } })
     return res.data.data as any[]
   },
+
+  /**
+   * The workout that was started and never finished, if there is one.
+   *
+   * Powers the resume-or-discard prompt. `setCount` is what makes the prompt
+   * honest — discarding an empty session and discarding six logged sets are
+   * not the same decision.
+   */
+  getActiveSession: async (): Promise<ActiveSession | null> => {
+    const res = await api.get('/workout/sessions/active')
+    return res.data.data
+  },
+
+  /**
+   * Remove a session and everything derived from it.
+   *
+   * For a finished session the server reverses the fatigue it caused, rebuilds
+   * readiness and re-derives the strength estimates — so this is never just a
+   * row disappearing from a list.
+   */
+  deleteSession: async (sessionId: string) => {
+    const res = await api.delete(`/workout/sessions/${sessionId}`)
+    return res.data.data as { id: string; reversed: boolean }
+  },
+
+  /** Correct a logged set. The session is re-scored and fatigue rebuilt. */
+  updateSet: async (setId: string, patch: {
+    reps?: number
+    weight?: number
+    addedWeight?: number
+    distance?: number
+    time?: number
+    rounds?: number
+    rpe?: number | null
+    restSeconds?: number | null
+  }) => {
+    const res = await api.patch(`/workout/sets/${setId}`, patch)
+    return res.data.data
+  },
+
+  deleteSet: async (setId: string) => {
+    const res = await api.delete(`/workout/sets/${setId}`)
+    return res.data.data
+  },
+}
+
+export interface ActiveSession {
+  id: string
+  dateTime: string
+  setCount: number
+  exerciseNames: string[]
 }

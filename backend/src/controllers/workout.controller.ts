@@ -3,22 +3,18 @@ import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { getEffectiveFatigueLevel, recoveryTargetFor } from '../services/fatigue.service'
 import {
-  FATIGUE_PER_HSE,
-  HOLD_SECONDS_PER_REP,
   SYSTEMIC_HALF_LIFE_HOURS,
   accumulate,
-  cardioHse,
-  estimateE1rm,
-  mobilityHse,
   recoveryRateFor,
-  resistanceHse,
   resolveAge,
   systemicFatigueDelta,
-  systemicLoad,
-  wodHse,
 } from '../services/fatigue-model.service'
+import { scoreSession } from '../services/session-scoring.service'
 import { SuggestedSet, suggestForExercise } from '../services/workout-progression.service'
 import { startingSets, startingWorkingLoad } from '../services/starting-load.service'
+import {
+  recomputeStrengthEstimates, recomputeUserFatigue, rescoreSession,
+} from '../services/fatigue-recompute.service'
 
 const SET_TYPES = ['STRENGTH', 'CALISTHENICS', 'CARDIO', 'WOD', 'MOBILITY'] as const
 
@@ -406,156 +402,11 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
     })
     const e1rmByExercise = new Map(estimates.map(e => [e.exerciseId, e.e1rm]))
 
-    // Calculate session totals
-    // totalVolume is mechanical load in KG (strength + calisthenics only).
-    // Cardio distance and mobility seconds are different units and are
-    // deliberately excluded — whole-body cost is carried by systemicLoad.
-    let totalVolume = 0
-    let totalRpe = 0
-    let rpeCount = 0
+    // Scoring lives in session-scoring.service so that finishing a session and
+    // re-scoring an edited one cannot drift apart.
+    const { totalVolume, avgRpe, sessionLoad, muscleDeltas, newE1rm } =
+      scoreSession(session, { bodyWeight, e1rmByExercise, duration })
 
-    // muscleDeltas accumulates fatigue per muscle across ALL exercises
-    // Map: muscleId -> { delta, muscle }
-    const muscleDeltas = new Map<string, {
-      delta: number
-      muscleName: string
-      halfLifeHours: number
-    }>()
-
-    // How many sets of each modality — weights the session's systemic load
-    const setTypeCounts = new Map<string, number>()
-    // Best e1RM seen this session, to fold back into the estimate afterwards
-    const newE1rm = new Map<string, number>()
-
-    type MuscleLink = (typeof session.workoutExercises)[number]['exercise']['muscleLinks']
-    // A metcon is one effort spread over several movements, so it cannot be
-    // scored set by set — collected here and split after the main loop.
-    const wodEntries: {
-      links: MuscleLink
-      damage: number
-      repsPerRound: number
-      seconds: number
-      rounds: number
-      rpe: number | null
-    }[] = []
-
-    // `damageFactor` is the movement's mechanical cost per unit of work, kept
-    // separate from impactFactor (which only says which muscles are recruited).
-    // Without it, cycling scored higher on quads than running of the same
-    // length, because cycling happens to carry a higher impactFactor.
-    const addMuscleDelta = (links: MuscleLink, hse: number, damageFactor: number) => {
-      if (hse <= 0 || damageFactor <= 0) return
-      for (const muscleLink of links) {
-        const fatigueDelta = hse * muscleLink.impactFactor * damageFactor * FATIGUE_PER_HSE
-        const existing = muscleDeltas.get(muscleLink.muscleId)
-        if (existing) {
-          existing.delta += fatigueDelta
-        } else {
-          muscleDeltas.set(muscleLink.muscleId, {
-            delta: fatigueDelta,
-            muscleName: muscleLink.muscle.name,
-            halfLifeHours: muscleLink.muscle.recoveryHalfLifeHours
-          })
-        }
-      }
-    }
-
-    for (const workoutExercise of session.workoutExercises) {
-      const exercise = workoutExercise.exercise
-      const muscleLinks = exercise.muscleLinks
-      const knownE1rm = e1rmByExercise.get(exercise.id) ?? 0
-      const damage = exercise.damageFactor
-
-      for (const set of workoutExercise.sets) {
-        setTypeCounts.set(set.setType, (setTypeCounts.get(set.setType) ?? 0) + 1)
-
-        if (set.rpe) {
-          totalRpe += set.rpe
-          rpeCount++
-        }
-
-        if (set.strength) {
-          const { reps, weight } = set.strength
-          totalVolume += reps * weight
-          addMuscleDelta(muscleLinks, resistanceHse({
-            reps, weight, rpe: set.rpe, e1rm: knownE1rm
-          }), damage)
-          const estimate = estimateE1rm(weight, reps, set.rpe)
-          newE1rm.set(exercise.id, Math.max(newE1rm.get(exercise.id) ?? 0, estimate))
-
-        } else if (set.calisthenics) {
-          // Load is the user's own bodyweight plus any added/assisted weight.
-          // Feeding it through the same curve as barbell work is what finally
-          // makes a hard set of push-ups cost the same as a hard bench set.
-          const load = bodyWeight + set.calisthenics.addedWeight
-          const holdSeconds = set.calisthenics.time
-          const repEquivalent = set.calisthenics.reps > 0
-            ? set.calisthenics.reps
-            : (holdSeconds ?? 0) / HOLD_SECONDS_PER_REP
-          totalVolume += repEquivalent * load
-          addMuscleDelta(muscleLinks, resistanceHse({
-            reps: set.calisthenics.reps, weight: load, rpe: set.rpe,
-            holdSeconds, e1rm: knownE1rm
-          }), damage)
-          const estimate = estimateE1rm(load, repEquivalent, set.rpe)
-          newE1rm.set(exercise.id, Math.max(newE1rm.get(exercise.id) ?? 0, estimate))
-
-        } else if (set.cardio) {
-          // distance/time are not kilograms — no volume, but a real load.
-          // Distance drives the local cost where the activity has a reference
-          // speed, so ground actually covered counts rather than time on foot.
-          addMuscleDelta(muscleLinks, cardioHse(
-            set.cardio.time ?? 0,
-            set.rpe,
-            set.cardio.distance,
-            exercise.referenceSpeedKmh
-          ), damage)
-
-        } else if (set.wod) {
-          wodEntries.push({
-            links: muscleLinks,
-            damage,
-            repsPerRound: set.wod.reps ?? 0,
-            seconds: set.wod.time ?? 0,
-            rounds: set.wod.rounds ?? 0,
-            rpe: set.rpe,
-          })
-
-        } else if (set.mobility) {
-          addMuscleDelta(muscleLinks, mobilityHse(), damage)
-        }
-      }
-    }
-
-    //  Score the metcon as a whole, then split it across its movements
-    // Every movement's set carries the same elapsed clock, so scoring them
-    // individually would multiply the workout by the number of movements.
-    if (wodEntries.length > 0) {
-      const seconds = Math.max(...wodEntries.map(w => w.seconds))
-      const rounds = Math.max(...wodEntries.map(w => w.rounds))
-      const rated = wodEntries.filter(w => w.rpe != null)
-      const rpe = rated.length > 0
-        ? rated.reduce((sum, w) => sum + (w.rpe ?? 0), 0) / rated.length
-        : null
-      const totalReps = wodEntries.reduce((sum, w) => sum + w.repsPerRound * rounds, 0)
-      const totalHse = wodHse(seconds, rpe, totalReps)
-
-      // Share out by rep contribution; fall back to an even split when the
-      // movements were logged without rep counts.
-      const repShareBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound, 0)
-      for (const entry of wodEntries) {
-        const share = repShareBase > 0
-          ? entry.repsPerRound / repShareBase
-          : 1 / wodEntries.length
-        addMuscleDelta(entry.links, totalHse * share, entry.damage)
-      }
-    }
-
-    const avgRpe = rpeCount > 0 ? totalRpe / rpeCount : 0
-
-    // Whole-body cost of the session. A long run leaves every individual muscle
-    // reading fine, which is exactly why readiness never used to move for it.
-    const sessionLoad = systemicLoad(duration ?? 0, avgRpe, setTypeCounts)
 
     // Read current fatigue for every affected muscle up front, in ONE query.
     // Doing these reads inside the transaction cost 3 sequential round-trips
@@ -788,7 +639,11 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
   try {
     const { month, year, limit } = req.query
 
-    const where: any = { userId: req.userId! }
+    // Completed sessions only. `duration` is written by the finish claim and
+    // nothing else, so `duration: null` is an abandoned session — it carries no
+    // volume, no RPE and no fatigue, and returning it padded history with
+    // entries that render as blank rows. The open session has its own endpoint.
+    const where: any = { userId: req.userId!, duration: { not: null } }
 
     // Filter by month/year for calendar view
     if (month && year) {
@@ -879,6 +734,296 @@ export const getSessionById = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
+//   DELETE A SESSION
+// DELETE /api/workout/sessions/:id
+//
+// Sessions used to be permanent. Log 100 kg instead of 10 and it was training
+// history for good — and worse, it had already been folded into
+// MuscleFatigueCurrent, SystemicFatigue and ExerciseStrengthEstimate, so one
+// typo went on steering readiness and every future suggestion.
+//
+// Removing the row is the easy half. The fatigue it caused has to go with it,
+// which is what fatigue-recompute.service exists for.
+export const deleteSession = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: sessionId } = req.params
+
+    const session = await prisma.workoutSession.findFirst({
+      where: { id: sessionId, userId: req.userId! },
+      select: {
+        id: true,
+        duration: true,
+        workoutExercises: { select: { exerciseId: true } },
+      },
+    })
+
+    if (!session) {
+      res.status(404).json({ success: false, error: 'Session not found' })
+      return
+    }
+
+    const wasFinished = session.duration != null
+    const exerciseIds = [...new Set(session.workoutExercises.map(we => we.exerciseId))]
+
+    await prisma.$transaction(async tx => {
+      // MuscleFatigueLog holds workoutSessionId as an OPTIONAL relation, so
+      // Prisma's default on delete is SetNull, not cascade. Left alone, the
+      // session's deltas would survive it as ownerless rows — and the replay
+      // reads every log for the user, so the deleted session would go on
+      // fatiguing them forever with nothing left to explain why.
+      await tx.muscleFatigueLog.deleteMany({ where: { workoutSessionId: sessionId } })
+
+      // A plan that produced this session goes back on standby rather than
+      // staying marked as done — the workout it recorded no longer exists.
+      await tx.scheduledWorkout.updateMany({
+        where: { sessionId, userId: req.userId! },
+        data: { status: 'standby', sessionId: null, completedAt: null },
+      })
+
+      // Exercises, sets and every modality detail row cascade from here.
+      await tx.workoutSession.delete({ where: { id: sessionId } })
+    })
+
+    // Only a finished session ever moved these. An abandoned one never reached
+    // the scoring path, so there is nothing to rebuild and no reason to pay
+    // for a replay. Both run after the transaction: they open their own, and
+    // nesting interactive transactions against a remote database is what blew
+    // the 5s timeout on finish.
+    if (wasFinished) {
+      await recomputeUserFatigue(req.userId!)
+      await recomputeStrengthEstimates(req.userId!, exerciseIds)
+    }
+
+    res.json({ success: true, data: { id: sessionId, reversed: wasFinished } })
+
+  } catch (error) {
+    console.error('deleteSession error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+//   EDIT A SET IN A RECORDED SESSION
+// PATCH /api/workout/sets/:setId
+//
+// The narrow fix for the thing that actually happens: a weight typed with an
+// extra zero, or reps counted wrong. Deleting the whole session to correct one
+// number throws away everything else that was right about it.
+//
+// Only the modality fields the set already has are writable — a STRENGTH set
+// cannot be turned into a CARDIO one. Changing a set's type would change what
+// it means, and every downstream number was derived from that meaning.
+const SET_FIELD_LIMITS = {
+  reps:        { min: 0, max: 1000 },
+  weight:      { min: 0, max: 1000 },
+  addedWeight: { min: -500, max: 500 },
+  distance:    { min: 0, max: 500_000 },
+  time:        { min: 0, max: 86_400 },
+  rounds:      { min: 0, max: 1000 },
+  rpe:         { min: 1, max: 10 },
+  restSeconds: { min: 0, max: 3600 },
+}
+
+const clampField = (
+  name: keyof typeof SET_FIELD_LIMITS,
+  raw: unknown
+): number | null | undefined => {
+  if (raw === undefined) return undefined
+  if (raw === null) return null
+  const value = Number(raw)
+  if (!Number.isFinite(value)) return undefined
+  const { min, max } = SET_FIELD_LIMITS[name]
+  return Math.min(max, Math.max(min, value))
+}
+
+export const updateSet = async (req: AuthRequest, res: Response) => {
+  try {
+    const { setId } = req.params
+
+    const set = await prisma.workoutSet.findFirst({
+      // Ownership runs through the set's session — a WorkoutSet has no userId
+      // of its own, and trusting the id in the URL would let anyone edit
+      // anyone's training history.
+      where: { id: setId, workoutExercise: { session: { userId: req.userId! } } },
+      include: {
+        strength: true, calisthenics: true, cardio: true, wod: true, mobility: true,
+        workoutExercise: { select: { sessionId: true } },
+      },
+    })
+
+    if (!set) {
+      res.status(404).json({ success: false, error: 'Set not found' })
+      return
+    }
+
+    const body = req.body as Record<string, unknown>
+    const rpe = clampField('rpe', body.rpe)
+    const restSeconds = clampField('restSeconds', body.restSeconds)
+
+    await prisma.$transaction(async tx => {
+      await tx.workoutSet.update({
+        where: { id: setId },
+        data: {
+          ...(rpe !== undefined ? { rpe } : {}),
+          ...(restSeconds !== undefined ? { restSeconds } : {}),
+        },
+      })
+
+      if (set.strength) {
+        const reps = clampField('reps', body.reps)
+        const weight = clampField('weight', body.weight)
+        await tx.setStrength.update({
+          where: { setId },
+          data: {
+            ...(reps != null ? { reps: Math.round(reps) } : {}),
+            ...(weight != null ? { weight } : {}),
+          },
+        })
+      } else if (set.calisthenics) {
+        const reps = clampField('reps', body.reps)
+        const addedWeight = clampField('addedWeight', body.addedWeight)
+        const time = clampField('time', body.time)
+        await tx.setCalisthenics.update({
+          where: { setId },
+          data: {
+            ...(reps != null ? { reps: Math.round(reps) } : {}),
+            ...(addedWeight != null ? { addedWeight } : {}),
+            ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+          },
+        })
+      } else if (set.cardio) {
+        const distance = clampField('distance', body.distance)
+        const time = clampField('time', body.time)
+        await tx.setCardio.update({
+          where: { setId },
+          data: {
+            ...(distance !== undefined ? { distance } : {}),
+            ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+          },
+        })
+      } else if (set.wod) {
+        const reps = clampField('reps', body.reps)
+        const rounds = clampField('rounds', body.rounds)
+        const time = clampField('time', body.time)
+        const distance = clampField('distance', body.distance)
+        await tx.setWOD.update({
+          where: { setId },
+          data: {
+            ...(reps !== undefined ? { reps: reps == null ? null : Math.round(reps) } : {}),
+            ...(rounds !== undefined ? { rounds } : {}),
+            ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+            ...(distance !== undefined ? { distance } : {}),
+          },
+        })
+      } else if (set.mobility) {
+        const time = clampField('time', body.time)
+        await tx.setMobility.update({
+          where: { setId },
+          data: { ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}) },
+        })
+      }
+    })
+
+    await applySessionEdit(req.userId!, set.workoutExercise.sessionId)
+
+    res.json({ success: true, data: { id: setId } })
+
+  } catch (error) {
+    console.error('updateSet error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+//   REMOVE A SET FROM A RECORDED SESSION
+// DELETE /api/workout/sets/:setId
+export const deleteSet = async (req: AuthRequest, res: Response) => {
+  try {
+    const { setId } = req.params
+
+    const set = await prisma.workoutSet.findFirst({
+      where: { id: setId, workoutExercise: { session: { userId: req.userId! } } },
+      select: { id: true, workoutExercise: { select: { sessionId: true } } },
+    })
+
+    if (!set) {
+      res.status(404).json({ success: false, error: 'Set not found' })
+      return
+    }
+
+    // Modality detail rows cascade from the set.
+    await prisma.workoutSet.delete({ where: { id: setId } })
+
+    await applySessionEdit(req.userId!, set.workoutExercise.sessionId)
+
+    res.json({ success: true, data: { id: setId } })
+
+  } catch (error) {
+    console.error('deleteSet error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+/**
+ * The three steps every edit to a recorded session needs, in order.
+ *
+ * Re-score the session from its sets, rebuild the athlete's fatigue from the
+ * rewritten logs, then re-derive the strength estimates the session could have
+ * set. Order matters: the replay reads the logs the rescore just wrote, and the
+ * estimates read the sets the edit just changed.
+ */
+const applySessionEdit = async (userId: string, sessionId: string) => {
+  const exerciseIds = await rescoreSession(userId, sessionId)
+  await recomputeUserFatigue(userId)
+  await recomputeStrengthEstimates(userId, exerciseIds)
+}
+
+//   THE SESSION STILL OPEN, IF THERE IS ONE
+// GET /api/workout/sessions/active
+//
+// `duration: null` is what "not finished" means — there is no status column,
+// because duration is written by the finish claim and nothing else.
+//
+// Powers the resume-or-discard prompt. Returning the set count matters: the
+// difference between an empty session opened by a stray tap and one with six
+// sets in it is the difference between discarding without asking and never
+// discarding without asking.
+export const getActiveSession = async (req: AuthRequest, res: Response) => {
+  try {
+    const session = await prisma.workoutSession.findFirst({
+      where: { userId: req.userId!, duration: null },
+      orderBy: { dateTime: 'desc' },
+      select: {
+        id: true,
+        dateTime: true,
+        workoutExercises: {
+          select: {
+            exercise: { select: { name: true } },
+            _count: { select: { sets: true } },
+          },
+        },
+      },
+    })
+
+    if (!session) {
+      res.json({ success: true, data: null })
+      return
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: session.id,
+        dateTime: session.dateTime,
+        setCount: session.workoutExercises.reduce((sum, we) => sum + we._count.sets, 0),
+        exerciseNames: session.workoutExercises.map(we => we.exercise.name),
+      },
+    })
+
+  } catch (error) {
+    console.error('getActiveSession error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
 //   THE RECORDED RUN BEHIND A CARDIO SET
 // GET /api/workout/sets/:setId/run
 //

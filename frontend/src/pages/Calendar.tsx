@@ -3,6 +3,9 @@ import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
 import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 import { fmtTime } from './Workout/helpers'
+import SwipeActions from '../components/SwipeActions'
+import SetEditSheet from '../components/workout/SetEditSheet'
+import { workoutService } from '../services/workout.service'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
 // the calendar itself must not cost a map.
@@ -119,6 +122,14 @@ export default function Calendar() {
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null)
   /** The run whose route is open over the calendar, if any. */
   const [openRun, setOpenRun] = useState<{ setId: string; title: string } | null>(null)
+  // Which session's sets are currently correctable. Off by default: history is
+  // read almost always and edited almost never, and a set table that is always
+  // tappable invites changes nobody meant to make.
+  const [editingSession, setEditingSession] = useState<string | null>(null)
+  const [editingSet, setEditingSet] = useState<{ set: any; exerciseName: string } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null)
+  const [mutating, setMutating] = useState(false)
+  const [mutateError, setMutateError] = useState<string | null>(null)
 
   const [activity, setActivity] = useState<ActivityData | null>(null)
   const [isLoadingActivity, setIsLoadingActivity] = useState(true)
@@ -143,6 +154,38 @@ export default function Calendar() {
       .then(setDayDetail)
       .finally(() => setIsLoadingDay(false))
   }, [selectedDate])
+
+  /**
+   * Re-read the day and the month after an edit.
+   *
+   * Both, not just the day: deleting a session changes the month grid's dot and
+   * its volume total as well, and leaving the grid stale showed a day still
+   * marked as trained after its only workout had been removed.
+   */
+  const reloadAfterMutation = async () => {
+    const [day, monthData] = await Promise.all([
+      selectedDate ? calendarService.getDay(selectedDate) : Promise.resolve(null),
+      calendarService.getMonth(month, year),
+    ])
+    setDayDetail(day)
+    setDays(monthData.days ?? {})
+  }
+
+  const handleDeleteSession = async () => {
+    if (!confirmDelete) return
+    setMutating(true)
+    setMutateError(null)
+    try {
+      await workoutService.deleteSession(confirmDelete.id)
+      setConfirmDelete(null)
+      setEditingSession(null)
+      await reloadAfterMutation()
+    } catch (err: any) {
+      setMutateError(err?.response?.data?.error ?? 'Could not delete that workout.')
+    } finally {
+      setMutating(false)
+    }
+  }
 
   // Load activity/streak data once — needed for the header streak label too
   useEffect(() => {
@@ -478,17 +521,38 @@ export default function Calendar() {
                   <div className="flex flex-col gap-4">
                     {effectiveSessions.map((session, sIdx) => (
                       <div key={session.id} className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between px-1">
-                          <p className="text-dark-400 text-xs uppercase tracking-wider">
-                            Session {sIdx + 1} · {new Date(session.dateTime)
-                              .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        {/* Swipe left for the bin, right to correct sets.
+                            SwipeActions stops the gesture propagating, so this
+                            never also slides Calendar to another tab. */}
+                        <SwipeActions
+                          onDelete={() => setConfirmDelete({
+                            id: session.id,
+                            label: `Session ${sIdx + 1}`,
+                          })}
+                          onEdit={() => setEditingSession(
+                            editingSession === session.id ? null : session.id
+                          )}
+                          editLabel={editingSession === session.id ? 'Done' : 'Edit'}
+                        >
+                          <div className="flex items-center justify-between px-3 py-2.5">
+                            <p className="text-dark-400 text-xs uppercase tracking-wider">
+                              Session {sIdx + 1} · {new Date(session.dateTime)
+                                .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            <span className="text-dark-500 text-xs">
+                              {session.totalVolume
+                                ? `${Math.round(session.totalVolume).toLocaleString()} kg`
+                                : '—'}
+                            </span>
+                          </div>
+                        </SwipeActions>
+
+                        {editingSession === session.id && (
+                          <p className="text-brand-teal text-[11px] px-1 -mt-1">
+                            Tap a set to correct or remove it. Fatigue and readiness
+                            are rebuilt from what you change.
                           </p>
-                          <span className="text-dark-500 text-xs">
-                            {session.totalVolume
-                              ? `${Math.round(session.totalVolume).toLocaleString()} kg`
-                              : '—'}
-                          </span>
-                        </div>
+                        )}
 
                         {session.exercises.length === 0 && (
                           <div className="bg-dark-800 border border-dark-600 rounded-card p-4">
@@ -628,7 +692,16 @@ export default function Calendar() {
                                   {/* Set rows */}
                                   {ex.sets.map((s: any, si: number) => (
                                     <div key={si}
-                                      className="grid grid-cols-4 gap-1 mb-0.5">
+                                      onClick={() => {
+                                        if (editingSession === session.id) {
+                                          setEditingSet({ set: s, exerciseName: ex.name })
+                                        }
+                                      }}
+                                      className={`grid grid-cols-4 gap-1 mb-0.5 ${
+                                        editingSession === session.id
+                                          ? 'cursor-pointer ring-1 ring-brand-teal/30 rounded-lg'
+                                          : ''
+                                      }`}>
                                       <div className="bg-dark-700 rounded-lg py-2 text-center">
                                         <span className="text-dark-300 text-xs font-semibold">
                                           {s.setNumber}
@@ -872,6 +945,57 @@ export default function Calendar() {
             onClose={() => setOpenRun(null)}
           />
         </Suspense>
+      )}
+
+      {editingSet && (
+        <SetEditSheet
+          set={editingSet.set}
+          exerciseName={editingSet.exerciseName}
+          onSaved={async () => {
+            setEditingSet(null)
+            await reloadAfterMutation()
+          }}
+          onClose={() => setEditingSet(null)}
+        />
+      )}
+
+      {/* z-60: BottomNav is fixed at z-50 and renders after <main>, so at equal
+          z-index it paints over the dialog and eats the confirm button. */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmDelete(null)} />
+          <div className="relative w-full max-w-[340px] bg-dark-800 border border-dark-600
+                          rounded-card p-5">
+            <p className="text-white text-base font-bold">Delete {confirmDelete.label}?</p>
+            <p className="text-dark-400 text-xs mt-2 leading-relaxed">
+              Every set in it is removed, and the fatigue it caused is reversed —
+              your readiness and muscle map will change. This cannot be undone.
+            </p>
+
+            {mutateError && (
+              <p className="text-brand-red text-xs mt-3">{mutateError}</p>
+            )}
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => { setConfirmDelete(null); setMutateError(null) }}
+                disabled={mutating}
+                className="flex-1 py-3 rounded-btn bg-dark-700 border border-dark-600
+                           text-dark-200 text-sm font-bold disabled:opacity-40"
+              >
+                Keep it
+              </button>
+              <button
+                onClick={handleDeleteSession}
+                disabled={mutating}
+                className="flex-1 py-3 rounded-btn bg-brand-red text-white text-sm font-bold
+                           active:scale-95 transition-transform disabled:opacity-40"
+              >
+                {mutating ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

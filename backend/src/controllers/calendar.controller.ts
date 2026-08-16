@@ -53,7 +53,12 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
     const sessions = await prisma.workoutSession.findMany({
       where: {
         userId: req.userId!,
-        dateTime: {gte: start, lt: end}
+        dateTime: {gte: start, lt: end},
+      // Only completed sessions are history. `duration` is written by the
+      // finish claim and nothing else, so `duration: null` is an abandoned
+      // session — it carries no fatigue, no volume and no RPE, and listing it
+      // put empty phantom entries in the calendar.
+        duration: { not: null }
       },
       select: {
         id: true,
@@ -161,7 +166,9 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
     const sessions = await prisma.workoutSession.findMany({
       where: {
         userId: req.userId!,
-        dateTime: { gte: dayStart, lt: dayEnd }
+        dateTime: { gte: dayStart, lt: dayEnd },
+        // Completed sessions only — see getCalendarMonth.
+        duration: { not: null }
       },
       include: {
         workoutExercises: {
@@ -308,7 +315,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
     const queryEnd = endOfDay(gridEnd)
 
     const sessions = await prisma.workoutSession.findMany({
-      where: { userId, dateTime: { gte: start, lte: queryEnd } },
+      where: { userId, dateTime: { gte: start, lte: queryEnd }, duration: { not: null } },
       select: { dateTime: true, totalVolume: true }
     })
 
@@ -368,7 +375,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
     const yearSessions = await prisma.workoutSession.findMany({
       // endOfDay, not `today`: a midnight bound excluded everything logged
       // today, so the year total was always a day behind.
-      where: { userId, dateTime: { gte: yearStart, lte: endOfDay(today) } },
+      where: { userId, dateTime: { gte: yearStart, lte: endOfDay(today) }, duration: { not: null } },
       select: { dateTime: true }
     })
     const totalThisYear = new Set(yearSessions.map(s => dayKey(s.dateTime))).size
@@ -398,7 +405,9 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     rangeStart.setHours(0, 0, 0, 0)
 
     const workoutExercises = await prisma.workoutExercise.findMany({
-      where: { session: { userId, dateTime: { gte: rangeStart, lte: today } } },
+      where: {
+        session: { userId, dateTime: { gte: rangeStart, lte: today }, duration: { not: null } },
+      },
       include: {
         session: { select: { dateTime: true } },
         exercise: { include: { muscleLinks: { include: { muscle: true } } } },

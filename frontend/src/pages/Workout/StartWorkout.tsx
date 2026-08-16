@@ -5,6 +5,7 @@ import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { templateService } from '../../services/template.service'
 import CoachMark, { HINTS } from '../../components/onboarding/CoachMark'
 import { ScheduledWorkout } from '../../types'
+import { workoutService, ActiveSession } from '../../services/workout.service'
 
 // ── modality catalogue (id → label/desc/CTA), matching the prototype ──
 type ModId = 'strength' | 'calisthenics' | 'cardio' | 'mobility' | 'wod'
@@ -144,6 +145,10 @@ export default function StartWorkout() {
       {/* Standby first. Someone who planned a session already decided what to
           do — making them rebuild it from the modality grid is the app
           forgetting on their behalf. */}
+      {/* Above standby: an unfinished workout is a decision already in
+          progress, and it must be resolved before another one is started. */}
+      <UnfinishedStrip />
+
       <StandbyStrip />
 
 
@@ -251,6 +256,88 @@ export default function StartWorkout() {
  * plan — an empty prompt on a screen someone opened to start training is just
  * an obstacle between them and the barbell.
  */
+/**
+ * The workout that was started and never finished.
+ *
+ * `startSession` creates a row on the Start tap and only `finishSession` writes
+ * `duration`, so anything interrupted in between — a force quit, a dead
+ * battery, or just changing your mind — used to sit in the database forever and
+ * show up in the calendar as a blank entry.
+ *
+ * The prompt is the honest half of the fix: an interrupted session usually has
+ * real sets in it, and silently binning them because the app never asked is a
+ * worse bug than the clutter. Anything still open after a threshold is swept
+ * server-side, so ignoring this costs nothing.
+ */
+function UnfinishedStrip() {
+  const navigate = useNavigate()
+
+  const [active, setActive] = useState<ActiveSession | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    workoutService.getActiveSession()
+      .then(session => { if (!cancelled) setActive(session) })
+      // A failed lookup hides the strip. The sweep still clears it later, and
+      // an error banner on the Start screen helps nobody mid-gym.
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  if (!active) return null
+
+  const discard = async () => {
+    setBusy(true)
+    try {
+      await workoutService.deleteSession(active.id)
+      setActive(null)
+    } catch {
+      setBusy(false)
+    }
+  }
+
+  const started = new Date(active.dateTime)
+  const summary = active.exerciseNames.length > 0
+    ? active.exerciseNames.slice(0, 2).join(', ') +
+      (active.exerciseNames.length > 2 ? ` +${active.exerciseNames.length - 2}` : '')
+    : 'Nothing logged'
+
+  return (
+    <div className="mb-4 rounded-card border border-brand-yellow/40 bg-[#2a2410] px-4 py-3.5">
+      <p className="text-[10px] tracking-wider text-brand-yellow font-bold">
+        UNFINISHED WORKOUT
+      </p>
+      <p className="text-white text-sm font-bold mt-0.5">
+        Started {started.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+        {' · '}
+        {active.setCount} set{active.setCount === 1 ? '' : 's'}
+      </p>
+      <p className="text-dark-300 text-[12px] mt-0.5">{summary}</p>
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => navigate('/workout/active')}
+          disabled={busy}
+          className="flex-1 py-2.5 rounded-btn bg-brand-yellow text-black text-[13px]
+                     font-extrabold active:scale-95 transition-transform disabled:opacity-40"
+        >
+          Resume
+        </button>
+        <button
+          onClick={discard}
+          disabled={busy}
+          className="px-4 py-2.5 rounded-btn border border-dark-600 bg-dark-800
+                     text-dark-200 text-[13px] font-bold active:scale-95
+                     transition-transform disabled:opacity-40"
+        >
+          {busy ? '…' : 'Discard'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function StandbyStrip() {
   const navigate = useNavigate()
   const loadTemplate = useWorkoutStore(s => s.loadTemplate)

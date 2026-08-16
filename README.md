@@ -30,6 +30,14 @@ GEMINI_API_KEY=""
 VAPID_PUBLIC_KEY=""
 VAPID_PRIVATE_KEY=""
 VAPID_SUBJECT="mailto:you@example.com"
+
+# Optional — enables "forgot password".
+RESEND_API_KEY=""
+MAIL_FROM="SomaTrack <onboarding@resend.dev>"
+
+APP_BASE_URL="http://localhost:5173"
+
+ABANDONED_SESSION_HOURS=12
 ```
 
 Create `frontend/.env` (only needed if the backend isn't on `http://localhost:3001`):

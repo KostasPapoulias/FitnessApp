@@ -19,6 +19,7 @@ import configRoutes from './routes/config.routes';
 import templateRoutes from './routes/template.routes';
 import settingsRoutes from './routes/settings.routes';
 import { startNotificationScheduler } from './lib/notificationScheduler';
+import { startSessionSweeper } from './lib/sessionSweeper';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 
 // Types
@@ -107,6 +108,7 @@ app.listen(port, () => {
   console.log(`✅ SomaTrack API listening on http://localhost:${port}`);
   console.log(`   Health check: http://localhost:${port}/health`);
   startNotificationScheduler();
+  startSessionSweeper();
 });
 
 export default app;
