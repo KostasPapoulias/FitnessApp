@@ -12,7 +12,10 @@ import {
   num, resolveBirthDate, toDateParts, within,
 } from '../components/forms/Fields'
 import { useNotifications } from '../hooks/useNotifcations'
-import { FormState, LoadTrend, TrainingLoad } from '../types'
+import { settingsService, SettingsPatch } from '../services/settings.service'
+import { BiometricPoint } from '../services/profile.service'
+import BodyweightCard from '../components/profile/BodyweightCard'
+import { FormState, LoadTrend, Settings, TrainingLoad } from '../types'
 import {
   NotificationPreferences,
   notificationService,
@@ -140,18 +143,77 @@ function SettingsRow({ icon, label, sublabel, color = 'text-white', right, onCli
 }
 
 //   Toggle component 
+// A span rather than a button: it lives inside SettingsRow, which is itself a
+// button, and a button nested in a button is invalid HTML — the click landed on
+// whichever one the browser felt like. Harmless while the toggle did nothing
+// locally; not harmless now that it writes to the server.
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      onClick={() => onChange(!value)}
-      className={`w-10 h-6 rounded-full flex items-center px-0.5
+    <span
+      role="switch"
+      aria-checked={value}
+      tabIndex={0}
+      onClick={e => { e.stopPropagation(); onChange(!value) }}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          onChange(!value)
+        }
+      }}
+      className={`w-10 h-6 rounded-full flex items-center px-0.5 shrink-0
                  transition-all duration-200
                  ${value ? 'bg-brand-teal justify-end' : 'bg-dark-600 justify-start'}`}
     >
-      <div className="w-5 h-5 bg-white rounded-full shadow" />
-    </button>
+      <span className="w-5 h-5 bg-white rounded-full shadow" />
+    </span>
   )
 }
+
+/**
+ * Two-way segmented control, for settings where both options deserve to be
+ * visible. A toggle would work for units, but "on/off" says nothing about which
+ * state is which — the labels are the whole point here.
+ *
+ * Rendered as spans inside the parent SettingsRow button rather than nested
+ * buttons, which is invalid HTML and swallows the outer row's own clicks.
+ */
+function SegmentedControl<T extends string>({ value, options, onChange }: {
+  value: T
+  options: readonly { value: T; label: string }[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <span className="flex bg-dark-700 rounded-btn p-0.5 gap-0.5">
+      {options.map(option => (
+        <span
+          key={option.value}
+          role="button"
+          tabIndex={0}
+          onClick={e => { e.stopPropagation(); onChange(option.value) }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              e.stopPropagation()
+              onChange(option.value)
+            }
+          }}
+          className={`px-2.5 py-1 rounded-btn text-xs font-medium transition-colors
+                     ${value === option.value
+                       ? 'bg-brand-teal text-white'
+                       : 'text-dark-300'}`}
+        >
+          {option.label}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+const UNIT_OPTIONS = [
+  { value: 'metric',   label: 'kg/cm' },
+  { value: 'imperial', label: 'lb/ft' },
+] as const
 
 //   Edit Profile Modal
 //
@@ -486,7 +548,9 @@ export default function Profile() {
   const [showEditModal, setShowEditModal]   = useState(false)
   const [showSleepModal, setShowSleepModal] = useState(false)
   const [showNutritionModal, setShowNutritionModal] = useState(false)
-  const [aiConsent, setAiConsent]           = useState(true)
+  const [settings, setSettings]             = useState<Settings | null>(null)
+  const [settingsError, setSettingsError]   = useState<string | null>(null)
+  const [weightSeries, setWeightSeries]     = useState<BiometricPoint[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [pushEnabled, setPushEnabled]       = useState(false)
   const [prefs, setPrefs]                   = useState<NotificationPreferences | null>(null)
@@ -495,9 +559,19 @@ export default function Profile() {
     profileService.getProfile()
       .then(data => {
         setProfileData(data)
-        setAiConsent(data.settings?.aiConsentEnabled ?? true)
+        setSettings(data.settings ?? null)
       })
       .finally(() => setIsLoading(false))
+  }, [])
+
+  // Its own request rather than folded into getProfile: the series is the only
+  // unbounded thing on this screen, and every other card should render without
+  // waiting on a year of measurements. A failure leaves the card in its empty
+  // state instead of taking the profile down with it.
+  useEffect(() => {
+    profileService.getBiometrics('WEIGHT')
+      .then(series => setWeightSeries(series.points))
+      .catch(() => setWeightSeries([]))
   }, [])
 
   // On requires BOTH: this device holds a subscription, and the server has the
@@ -528,6 +602,13 @@ export default function Profile() {
     // renaming yourself otherwise left the old name on the greeting until the
     // next launch.
     await fetchMe()
+    // A saved weight change writes a new Biometric row, so the chart is stale
+    // the moment the modal closes. Refetched rather than appended locally:
+    // updateProfile only records a point when the value actually moved, and
+    // guessing that rule here would drift from it.
+    profileService.getBiometrics('WEIGHT')
+      .then(series => setWeightSeries(series.points))
+      .catch(() => {})
     setShowEditModal(false)
   }
 
@@ -539,6 +620,34 @@ export default function Profile() {
   const handleSaveNutrition = async (data: any) => {
     await profileService.logNutrition(data)
     setShowNutritionModal(false)
+  }
+
+  /**
+   * Optimistic, then reverted on failure.
+   *
+   * These controls used to be `onChange={setAiConsent}` and nothing else — the
+   * switch moved, the server never heard about it, and the old value came back
+   * on the next launch. Showing the new state immediately is right for a
+   * toggle; showing it when the save failed is how that bug looked from the
+   * outside, so the revert and the message are the part that matters.
+   */
+  const saveSettings = async (patch: SettingsPatch) => {
+    if (!settings) return
+    const previous = settings
+
+    setSettings({ ...settings, ...patch })
+    setSettingsError(null)
+
+    try {
+      const saved = await settingsService.updateSettings(patch)
+      setSettings(saved)
+      // profileData carries its own copy, and EditProfileModal reads the unit
+      // from it — left stale, changing units would not reach the form.
+      setProfileData((prev: any) => (prev ? { ...prev, settings: saved } : prev))
+    } catch {
+      setSettings(previous)
+      setSettingsError('Could not save that. Check your connection and try again.')
+    }
   }
 
   const handleDeleteAccount = async () => {
@@ -660,6 +769,15 @@ export default function Profile() {
 
         {/* Training load — the weeks-long trend, not today's soreness */}
         <TrainingLoadCard load={trainingLoad} systemicFatigue={systemicFatigue} />
+
+        {/* Bodyweight trend + BMI. Sits above Body Stats because it answers the
+            same question with history behind it — the static row below is the
+            editable record, this is what it has been doing. */}
+        <BodyweightCard
+          points={weightSeries}
+          heightCm={profileData?.profile?.height ?? null}
+          imperial={settings?.preferredUnit === 'imperial'}
+        />
 
         {/* Body stats */}
         <div className="bg-dark-800 rounded-card border border-dark-600 p-2">
@@ -783,13 +901,42 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="🤖"
-            label="AI Data Consent"
-            sublabel="Allow AI to use your fitness data"
+            icon="📏"
+            label="Units"
+            sublabel={settings?.preferredUnit === 'imperial'
+              ? 'Pounds and feet'
+              : 'Kilograms and centimetres'}
             right={
-              <Toggle value={aiConsent} onChange={setAiConsent} />
+              <SegmentedControl
+                value={settings?.preferredUnit === 'imperial' ? 'imperial' : 'metric'}
+                options={UNIT_OPTIONS}
+                onChange={preferredUnit => saveSettings({ preferredUnit })}
+              />
             }
           />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
+            icon="🤖"
+            label="AI Data Consent"
+            sublabel={settings?.aiConsentEnabled === false
+              // Says what actually changes. "Allow AI to use your fitness data"
+              // gives no hint that the chat survives and the coach nudges do
+              // not, and the difference is the whole reason to leave it on.
+              ? 'Off — the coach cannot see your training, and sends no nudges'
+              : 'The coach can read your readiness, history and injuries'}
+            right={
+              <Toggle
+                value={settings?.aiConsentEnabled ?? true}
+                onChange={aiConsentEnabled => saveSettings({ aiConsentEnabled })}
+              />
+            }
+          />
+
+          {settingsError && (
+            <p className="text-brand-red text-xs px-4 pb-2">{settingsError}</p>
+          )}
 
           <div className="h-px bg-dark-700 mx-4" />
 
@@ -873,7 +1020,7 @@ export default function Profile() {
       {showEditModal && (
         <EditProfileModal
           profile={profileData?.profile}
-          imperial={profileData?.settings?.preferredUnit === 'imperial'}
+          imperial={settings?.preferredUnit === 'imperial'}
           onSave={handleSaveProfile}
           onClose={() => setShowEditModal(false)}
         />

@@ -27,7 +27,13 @@ export interface UserProfile {
 export interface Settings {
   preferredUnit: string
   notificationEnabled: boolean
+  inactivityDaysThreshold: number
   theme: string
+  /**
+   * Off degrades the AI coach rather than removing it: the chat still answers,
+   * but with no body data and no tools, and coach notifications stop. Enforced
+   * server-side in ai.service.ts — never treat this as a client-side hint.
+   */
   aiConsentEnabled: boolean
 }
 
@@ -214,7 +220,7 @@ export interface ScheduledWorkout {
 // exists in the app's own tables until one of these is tapped.
 export interface AiProposal {
   id: string
-  kind: 'create_template' | 'schedule_workout'
+  kind: 'create_template' | 'schedule_workout' | 'create_exercise'
   title: string
   lines: string[]
   scheduledFor: string | null
