@@ -177,14 +177,59 @@ did or lifted, look it up first. Never state a weight, date or count you have
 not read from a tool or from the live data block.
 
 ## Drafting
-propose_workout and propose_schedule do NOT save anything. They show the
-athlete a card which they must tap to accept. So:
+propose_workout, propose_schedule and propose_exercise do NOT save anything.
+They show the athlete a card which they must tap to accept. So:
   - always call search_exercises first and build plans only from ids it returned
   - never invent an exercise id
   - after drafting, say it is ready for them to review and tap
   - NEVER say you have saved, added, scheduled or created anything
+
+## Movements the catalogue does not have
+If search_exercises cannot find something they want to train, you may draft it
+with propose_exercise. Before you do:
+  - search properly first, including obvious alternative names. A duplicate
+    under a second name splits their history across two exercises.
+  - be sure which muscles it works and which are primary. If you are not, ask
+    them rather than guessing — those weightings drive their fatigue model, and
+    a wrong one quietly skews recovery advice from then on.
+  - write a real description: setup and the cues that matter, in a sentence or
+    two. It is what they will see on the exercise screen later.
+A drafted exercise does not exist until they accept it, so you cannot put it in
+a workout in the same breath — offer to build one once they have tapped it.
 You cannot delete anything, change a workout they have already completed, or
 alter their security settings. If asked, say so plainly and offer what you can.
+`.trim()
+
+/**
+ * The persona used when the athlete has turned "AI Data Consent" off.
+ *
+ * Consent-off degrades the coach rather than removing it: the chat still
+ * answers, but with no body data block and no tools at all, so there is
+ * physically nothing for it to read or draft. This prompt exists so it says so
+ * up front instead of confabulating numbers to fill the silence — a coach that
+ * invents a readiness score is worse than one that admits it is blindfolded.
+ */
+export const AI_PERSONA_NO_DATA = `
+You are SomaTrack AI — a fitness and recovery coach assistant.
+
+This athlete has turned OFF "AI Data Consent" in Settings, so you have NO access
+to their body data, training history, profile, equipment, injuries or saved
+plans, and no tools to look anything up. You genuinely cannot see any of it.
+
+Therefore:
+  - NEVER state or estimate their readiness, fatigue, weights, PRs, volume,
+    recent sessions or schedule. You do not have them. Do not guess, and do not
+    reason from anything quoted earlier in this conversation — those numbers are
+    from when consent was on and are now both stale and off-limits.
+  - Answer general training and recovery questions properly. Sound programming
+    advice does not require their data, and refusing to help at all would be
+    unhelpful rather than private.
+  - When a question genuinely needs their data, say once and briefly that you
+    cannot see it with consent off, and that they can turn it back on in
+    Settings → AI Data Consent. Do not repeat this in every reply.
+  - You cannot save, schedule, draft or create anything. Say so plainly if asked.
+
+Be encouraging and honest. Keep responses concise — this is a mobile app.
 `.trim()
 
 /**
@@ -222,16 +267,32 @@ export const sendMessage = async ({
   const geminiApiKey = process.env.GEMINI_API_KEY
   if (!geminiApiKey) throw new Error('Gemini is not configured. Set GEMINI_API_KEY.')
 
-  // Build the full context
-  const systemContext = await buildUserContext(userId)
+  // The consent gate. Absent row reads as consent given, matching the column
+  // default — the switch is opt-OUT, and an account whose settings row went
+  // missing must not silently lose its coach.
+  const settings = await prisma.settings.findUnique({
+    where: { userId },
+    select: { aiConsentEnabled: true },
+  })
+  const personalised = settings?.aiConsentEnabled ?? true
+
+  // Consent off means the body data block is never built. Skipping it is the
+  // point: none of those queries run, so nothing personal is read, let alone
+  // sent to Google.
+  const systemContext = personalised ? await buildUserContext(userId) : null
 
   const genAI = new GoogleGenerativeAI(geminiApiKey)
   const rawModelName = (process.env.GEMINI_MODEL ?? 'models/gemini-2.5-flash').trim()
   const modelName = rawModelName.startsWith('models/')
     ? rawModelName
     : `models/${rawModelName}`
+  // Withheld rather than declared-and-refused. A model that cannot see a tool
+  // cannot call it, so consent-off needs no per-call enforcement further down
+  // and there is no path by which a read tool runs against this user's rows.
   const model = genAI.getGenerativeModel(
-    { model: modelName, tools: [{ functionDeclarations: TOOL_DECLARATIONS }] },
+    personalised
+      ? { model: modelName, tools: [{ functionDeclarations: TOOL_DECLARATIONS }] }
+      : { model: modelName },
     { apiVersion: 'v1' }
   )
 
@@ -239,13 +300,26 @@ export const sendMessage = async ({
   // numbers ("your readiness is 58%"), and a context block pinned at the
   // top of the thread loses to them on recency — the model kept quoting
   // stale scores. Freshest data closest to the question wins.
+  // Consent-off replays no transcript either, which costs real continuity — a
+  // follow-up like "what about for beginners?" loses what it refers to.
+  //
+  // It is the only version where the privacy claim is true rather than merely
+  // instructed. Assistant turns written while consent was ON quote concrete
+  // readiness scores and lifted weights, so replaying them would feed exactly
+  // the data the switch was flipped to withhold, and the prompt telling the
+  // model to ignore them is a request, not a guarantee.
+  const replayHistory = personalised ? history : []
+
   const contents: Content[] = [
-    { role: 'user', parts: [{ text: AI_PERSONA }] },
-    ...history.map(item => ({
+    { role: 'user', parts: [{ text: personalised ? AI_PERSONA : AI_PERSONA_NO_DATA }] },
+    ...replayHistory.map(item => ({
       role: item.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: item.content }]
     })),
-    { role: 'user', parts: [{ text: `${systemContext}\n\n---\n\n${message}` }] }
+    {
+      role: 'user',
+      parts: [{ text: systemContext ? `${systemContext}\n\n---\n\n${message}` : message }],
+    }
   ]
 
   const proposals: ProposalSummary[] = []
@@ -259,7 +333,7 @@ export const sendMessage = async ({
     // to answer. Without this a stuck model returns nothing but calls and the
     // athlete sees an empty bubble.
     const isLastRound = round === MAX_TOOL_ROUNDS - 1
-    const result = isLastRound
+    const result = isLastRound || !personalised
       ? await model.generateContent({ contents, tools: [] })
       : await model.generateContent({ contents })
 

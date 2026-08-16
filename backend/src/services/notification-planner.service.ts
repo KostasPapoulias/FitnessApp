@@ -119,8 +119,25 @@ const localTimeToDate = (hour: number, minute: number, timezone: string): Date =
  */
 export const planCoachNotifications = async (userId: string): Promise<number> => {
   try {
-    const pref = await prisma.notificationPreference.findUnique({ where: { userId } })
+    // Consent and push preference are independent switches, and both have to
+    // be on. The coach tier is the one notification type whose wording is
+    // written by a model from the athlete's body data, so "don't use my data"
+    // has to silence it — leaving it running would mean the most personal
+    // thing the app sends is the one thing the privacy switch missed.
+    //
+    // Read together: two independent rows, and this runs on every scheduler
+    // tick for every user against a remote database.
+    const [pref, settings] = await Promise.all([
+      prisma.notificationPreference.findUnique({ where: { userId } }),
+      prisma.settings.findUnique({
+        where: { userId },
+        select: { aiConsentEnabled: true },
+      }),
+    ])
     if (!pref?.pushEnabled || !pref.coachEnabled || pref.coachSuspendedAt) return 0
+
+    // Absent row reads as consent given, matching the column default.
+    if (!(settings?.aiConsentEnabled ?? true)) return 0
 
     const timezone = pref.timezone
     const today = localDay(new Date(), timezone)

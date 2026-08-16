@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { aiService } from '../services/ai.service'
+import { settingsService } from '../services/settings.service'
 import { useFatigueStore } from '../store/useFatigueStore'
 import { NEW_THREAD } from '../constants/chat'
 
@@ -28,11 +29,23 @@ export default function AIChatHub() {
   const [threads,     setThreads]     = useState<Thread[]>([])
   const [isLoading,   setIsLoading]   = useState(true)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
+  // Undefined until the answer arrives. Defaulting to `true` would flash the
+  // "AI knows your current state" card at someone who turned that off, which is
+  // the one audience it must never be shown to.
+  const [aiConsent,   setAiConsent]   = useState<boolean | undefined>(undefined)
 
   useEffect(() => {
     aiService.getThreads()
       .then(setThreads)
       .finally(() => setIsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    settingsService.getSettings()
+      .then(s => setAiConsent(s.aiConsentEnabled))
+      // A failed read leaves the card hidden rather than guessing. The gate is
+      // enforced server-side either way; this only decides what to promise.
+      .catch(() => setAiConsent(undefined))
   }, [])
 
   // Open the compose screen without persisting anything. The thread is
@@ -75,49 +88,78 @@ export default function AIChatHub() {
       <div className="px-5 pt-4 pb-4">
         <h1 className="text-white text-2xl font-bold">AI Coach</h1>
         <p className="text-dark-400 text-sm mt-1">
-          Powered by Gemini · Your body data as context
+          {aiConsent === false
+            ? 'Powered by Gemini · General advice only'
+            : 'Powered by Gemini · Your body data as context'}
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 pb-8">
 
-        {/* Body state card */}
-        <div className="bg-[#0a2a22] border border-brand-teal/30
-                        rounded-card p-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🤖</span>
-              <span className="text-brand-teal text-sm font-semibold">
-                AI knows your current state
+        {/* Body state card.
+            Consent-off swaps it out entirely rather than dimming it: the card's
+            whole claim is "AI knows your current state", and with the data
+            withheld that is simply untrue. Showing the readiness number beside
+            a coach that cannot see it is the most misleading thing this screen
+            could do. */}
+        {aiConsent === false ? (
+          <div className="bg-dark-800 border border-dark-600 rounded-card p-4 mb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🙈</span>
+              <span className="text-dark-200 text-sm font-semibold">
+                The coach cannot see your data
               </span>
             </div>
-            <div className={`text-lg font-bold ${readinessColor}`}>
-              {readinessScore}% ready
-            </div>
+            <p className="text-dark-400 text-xs leading-relaxed mb-3">
+              AI Data Consent is off, so the coach has no access to your
+              readiness, fatigue, history or injuries, and sends no nudges. It
+              can still answer general training and recovery questions.
+            </p>
+            <button
+              onClick={() => navigate('/profile')}
+              className="text-brand-teal text-xs font-semibold active:opacity-70"
+            >
+              Turn it on in Profile ›
+            </button>
           </div>
-
-          {/* Fatigue context pills */}
-          {highFatigue.length > 0 ? (
-            <div>
-              <p className="text-dark-400 text-xs mb-2">
-                High fatigue detected:
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {highFatigue.map(m => (
-                  <span key={m.muscleId}
-                    className="bg-brand-red/20 border border-brand-red/40
-                               text-brand-red text-xs px-2 py-1 rounded-full">
-                    {m.muscleName} 🔴 {Math.round(m.fatigueLevel)}%
-                  </span>
-                ))}
+        ) : (
+          <div className="bg-[#0a2a22] border border-brand-teal/30
+                          rounded-card p-4 mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🤖</span>
+                <span className="text-brand-teal text-sm font-semibold">
+                  AI knows your current state
+                </span>
+              </div>
+              <div className={`text-lg font-bold ${readinessColor}`}>
+                {readinessScore}% ready
               </div>
             </div>
-          ) : (
-            <p className="text-dark-400 text-xs">
-              All muscles recovered — great day to train hard!
-            </p>
-          )}
-        </div>
+
+            {/* Fatigue context pills */}
+            {highFatigue.length > 0 ? (
+              <div>
+                <p className="text-dark-400 text-xs mb-2">
+                  High fatigue detected:
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  {highFatigue.map(m => (
+                    <span key={m.muscleId}
+                      className="bg-brand-red/20 border border-brand-red/40
+                                 text-brand-red text-xs px-2 py-1 rounded-full">
+                      {m.muscleName} 🔴 {Math.round(m.fatigueLevel)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-dark-400 text-xs">
+                All muscles recovered — great day to train hard!
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Suggested prompts */}
         <div className="mb-5">
