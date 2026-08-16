@@ -43,12 +43,41 @@ model User {
   scheduledWorkouts     ScheduledWorkout[]
   aiProposals           AiProposal[]
   seenHints             SeenHint[]
+  passwordResets        PasswordResetToken[]
 }
 
 // Notification opt-in. EVERY flag defaults false, and there is no backfill:
 // existing users — including anyone who already has a PushSubscription — get
 // nothing until they choose it. A subscription is permission to DELIVER, not
 // permission to send.
+/**
+ * A live "forgot password" link.
+ *
+ * Only the HASH of the token is stored, exactly like a password. The plaintext
+ * exists once, in the email — anyone with read access to this table would
+ * otherwise be able to take over every account with a pending reset, and a
+ * reset link is a bearer credential for the account.
+ *
+ * Rows are kept after use rather than deleted: `usedAt` is what makes a link
+ * single-use, and a deleted row is indistinguishable from one that never
+ * existed, which would let a spent link read as merely expired.
+ */
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /** SHA-256 of the token in the emailed link. Never the token itself. */
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  /** Requesting IP, so a burst of requests for one account is traceable. */
+  requestIp String?
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
 model NotificationPreference {
   userId           String    @id
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)

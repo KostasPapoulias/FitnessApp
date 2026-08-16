@@ -36,3 +36,18 @@ export const JWT_SECRET = requireEnv('JWT_SECRET', 32)
 
 /** How long an issued token stays valid. */
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'
+
+/**
+ * Where the app is served from, used to build links that arrive by email.
+ *
+ * Read from configuration rather than from the request's Host header. A
+ * password reset link built from an attacker-supplied Host is the classic host
+ * header injection: the mail goes to the real user, and the link points at the
+ * attacker's server, which then collects the token.
+ */
+export const APP_BASE_URL = (
+  process.env.APP_BASE_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://somatrack.netlify.app'
+    : 'http://localhost:5173')
+).replace(/\/+$/, '')

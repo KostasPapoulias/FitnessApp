@@ -18,6 +18,8 @@ import SecuritySettings from './pages/SecuritySettings'
 import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
 import CreateExercise from './pages/Workout/CreateExercise'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
 import PlanSets from './pages/Workout/PlanSets'
 import WorkoutQueue from './pages/Workout/WorkoutQueue'
@@ -114,6 +116,13 @@ export default function App() {
         <Route path="/register" element={
           isAuthenticated ? <Navigate to="/" replace /> : <Register />
         } />
+
+        {/* Password recovery. Reachable while signed in as well as signed out:
+            the link arrives by email and may well be opened on a device that
+            still has a live session, and bouncing that to Home leaves the
+            person holding a link they cannot use. */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Authenticated but pre-onboarding. Outside AppLayout on purpose —
             the bottom nav would offer escape routes past a gate whose whole

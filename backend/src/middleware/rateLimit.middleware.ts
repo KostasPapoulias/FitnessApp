@@ -66,6 +66,22 @@ export const pinLimiter = rateLimit({
 })
 
 /**
+ * Password reset requests.
+ *
+ * Counts every attempt, successful or not — unlike sign-in, a "successful"
+ * request here costs an email to somebody else's inbox, so success is exactly
+ * what needs bounding. Slow, because nobody legitimately asks for more than one
+ * or two, and each one is a message with the recipient's name on it.
+ */
+export const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: json('Too many reset requests. Try again later.'),
+})
+
+/**
  * Everything else authenticated.
  *
  * Generous — this is a backstop against a runaway client or a scraper, not a

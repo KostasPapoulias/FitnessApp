@@ -1,7 +1,10 @@
 import { Response } from 'express';
 import bcrypt from 'bcrypt';
-import { JWT_SECRET, JWT_EXPIRES_IN } from '../lib/env';
+import { JWT_SECRET, JWT_EXPIRES_IN, APP_BASE_URL } from '../lib/env';
 import { normalizeEmail, validatePassword } from '../services/credentials.service';
+import {
+  ResetError, completePasswordReset, isMailConfigured, requestPasswordReset,
+} from '../services/password-reset.service';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../server';
 import { AuthRequest } from '../server';
@@ -217,5 +220,96 @@ export const me = async (req: AuthRequest, res: Response): Promise<void> => {
       success: false,
       error: 'Failed to fetch user',
     });
+  }
+};
+
+/**
+ * POST /api/auth/forgot-password
+ *
+ * Always answers the same way, whether or not the address is registered.
+ * Anything else turns this into an account-existence oracle — and for a
+ * fitness app, "does this person have an account here" is personal.
+ */
+export const forgotPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  const accepted = {
+    success: true,
+    data: {
+      message: 'If that address has an account, a reset link is on its way.',
+    },
+  };
+
+  try {
+    if (!isMailConfigured) {
+      // Said out loud rather than silently accepted. A deployment with no mail
+      // key would otherwise tell every user their link was sent and leave them
+      // waiting for a message that was never going to arrive.
+      res.status(503).json({
+        success: false,
+        error: 'Password reset is unavailable right now. Contact support.',
+      });
+      return;
+    }
+
+    const email = normalizeEmail(req.body?.email);
+    if (!email) {
+      // A malformed address cannot belong to an account, so the honest answer
+      // and the safe answer are the same one.
+      res.json(accepted);
+      return;
+    }
+
+    await requestPasswordReset(email, {
+      baseUrl: APP_BASE_URL,
+      requestIp: req.ip,
+    });
+
+    res.json(accepted);
+  } catch (error) {
+    // Logged, but never surfaced: which addresses fail to send is itself a
+    // signal about which addresses exist.
+    console.error('forgotPassword error:', error);
+    res.json(accepted);
+  }
+};
+
+/**
+ * POST /api/auth/reset-password
+ *
+ * Consumes the token from the email and sets a new password. Every outstanding
+ * session and every other pending link for the account dies with it.
+ */
+export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { token, password } = req.body as { token?: string; password?: string };
+
+    if (typeof token !== 'string' || !token.trim()) {
+      res.status(400).json({ success: false, error: 'That reset link is invalid or has expired. Request a new one.' });
+      return;
+    }
+
+    // The same rules registration applies. A reset is not a back door around
+    // the password policy.
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.ok) {
+      res.status(400).json({ success: false, error: passwordCheck.error });
+      return;
+    }
+
+    await completePasswordReset(token.trim(), password as string);
+
+    // Deliberately no token in the response. Signing them in off the back of a
+    // link in an inbox skips the one thing that proves they know the new
+    // password — which is the whole point of having just set it.
+    res.json({
+      success: true,
+      data: { message: 'Password updated. Sign in with your new password.' },
+    });
+  } catch (error) {
+    if (error instanceof ResetError) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
+    console.error('resetPassword error:', error);
+    res.status(500).json({ success: false, error: 'Could not reset the password.' });
   }
 };

@@ -75,6 +75,15 @@ export default function Login() {
             />
           </div>
 
+          {/* Below the password field, where someone realises they have
+              forgotten it — not buried under the register link. */}
+          <Link
+            to="/forgot-password"
+            className="text-dark-300 text-xs self-end -mt-1 active:opacity-70"
+          >
+            Forgot your password?
+          </Link>
+
           {error && (
             <p className="text-brand-red text-sm">{error}</p>
           )}
