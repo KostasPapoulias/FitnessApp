@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { getProfile, updateProfile, logSleep, logNutrition, deleteAccount } from '../controllers/profile.controller';
+import {
+  getProfile, updateProfile, logSleep, logNutrition, getBiometrics, deleteAccount,
+} from '../controllers/profile.controller';
 import {
   getOnboardingOptions,
   getOnboardingState,
@@ -91,6 +93,13 @@ router.post('/sleep', logSleep);
  * @returns created nutrition log
  */
 router.post('/nutrition', logNutrition);
+
+/**
+ * @route GET /api/profile/biometrics
+ * @protected
+ * @returns a measurement series, oldest first. ?type= defaults to WEIGHT
+ */
+router.get('/biometrics', getBiometrics);
 
 /**
  * @route DELETE /api/profile/account

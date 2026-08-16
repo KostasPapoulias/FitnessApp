@@ -41,7 +41,33 @@ export const profileService = {
     return res.data.data
   },
 
+  /**
+   * A measurement series, oldest first.
+   *
+   * Only WEIGHT is ever written today — the other BiometricType values need a
+   * wrist device or a tape measure, and are not being estimated.
+   */
+  getBiometrics: async (
+    type: 'WEIGHT' | 'BODY_FAT' | 'LEAN_MASS' | 'HEART_RATE' | 'HRV' | 'SLEEP_SCORE' = 'WEIGHT',
+    days?: number
+  ): Promise<BiometricSeries> => {
+    const res = await api.get('/profile/biometrics', { params: { type, days } })
+    return res.data.data
+  },
+
   deleteAccount: async () => {
     await api.delete('/profile/account')
   }
+}
+
+export interface BiometricPoint {
+  measuredAt: string
+  value: number
+  source: string
+}
+
+export interface BiometricSeries {
+  type: string
+  days: number
+  points: BiometricPoint[]
 }

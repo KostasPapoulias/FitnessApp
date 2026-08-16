@@ -182,7 +182,66 @@ export const logNutrition = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// DELETE /api/profile/account 
+/**
+ * GET /api/profile/biometrics?type=WEIGHT&days=365
+ *
+ * The Biometric series was write-only. Onboarding wrote the first weight and
+ * `updateProfile` writes one on every change, with a comment promising the
+ * weight chart it would feed — and nothing could read them back, so the chart
+ * was never built and the rows just accumulated.
+ *
+ * Deliberately just a reader. The other BiometricType values (BODY_FAT, HRV,
+ * HEART_RATE, LEAN_MASS, SLEEP_SCORE) stay unwritten: they need either a wrist
+ * device or a tape measure, and inventing an estimate from a photo or a
+ * formula the athlete cannot check would put a made-up number in the same
+ * series as a measured one.
+ */
+const BIOMETRIC_TYPES = ['WEIGHT', 'BODY_FAT', 'LEAN_MASS', 'HEART_RATE', 'HRV', 'SLEEP_SCORE'] as const
+type BiometricTypeName = typeof BIOMETRIC_TYPES[number]
+
+/** A year of points is more than any chart at this size can resolve. */
+const MAX_HISTORY_DAYS = 365 * 5
+const DEFAULT_HISTORY_DAYS = 365
+
+export const getBiometrics = async (req: AuthRequest, res: Response) => {
+  try {
+    const rawType = String(req.query.type ?? 'WEIGHT').toUpperCase()
+    if (!BIOMETRIC_TYPES.includes(rawType as BiometricTypeName)) {
+      res.status(400).json({
+        success: false,
+        error: `type must be one of: ${BIOMETRIC_TYPES.join(', ')}`,
+      })
+      return
+    }
+
+    const requestedDays = Number(req.query.days)
+    const days = Number.isFinite(requestedDays) && requestedDays > 0
+      ? Math.min(Math.floor(requestedDays), MAX_HISTORY_DAYS)
+      : DEFAULT_HISTORY_DAYS
+
+    const since = new Date(Date.now() - days * 86_400_000)
+
+    const points = await prisma.biometric.findMany({
+      where: {
+        userId: req.userId!,
+        type: rawType as BiometricTypeName,
+        measuredAt: { gte: since },
+      },
+      select: { measuredAt: true, value: true, source: true },
+      // Ascending: this is a series to be drawn left to right, and the client
+      // reversing it is one more place the order can be got wrong.
+      orderBy: { measuredAt: 'asc' },
+    })
+
+    res.json({ success: true, data: { type: rawType, days, points } })
+
+  } catch (error) {
+    console.error('getBiometrics error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+// DELETE /api/profile/account
 export const deleteAccount = async (req: AuthRequest, res: Response) => {
   try {
     // Cascade deletes handle everything — one delete removes all user data
