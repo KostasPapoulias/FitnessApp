@@ -30,16 +30,25 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
   const navigate = useNavigate()
   const loadTemplate = useWorkoutStore(s => s.loadTemplate)
 
+  // A drafted exercise and a drafted plan are the same card with different
+  // nouns: what it is called, what accepting it means, and where "open" goes.
+  const isExercise = proposal.kind === 'create_exercise'
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [accepted, setAccepted] = useState<{ templateId: string } | null>(null)
+  const [accepted, setAccepted] = useState<{ id: string } | null>(null)
 
   const accept = async () => {
     setBusy(true)
     setError(null)
     try {
       const result = await aiService.acceptProposal(proposal.id)
-      setAccepted({ templateId: result.template.id })
+      // The two kinds return different objects — a template for a plan, an
+      // exercise for a movement. Reading `result.template.id` for both left the
+      // accepted state holding undefined, and "open" then went nowhere.
+      setAccepted({
+        id: result.kind === 'create_exercise' ? result.exercise.id : result.template.id,
+      })
     } catch (err: any) {
       // 409 means expired or already used — the server phrases those for a
       // human, so show its reason rather than a generic failure.
@@ -61,12 +70,18 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
     }
   }
 
-  const openInPlanner = async () => {
+  const openAccepted = async () => {
     if (!accepted) return
+
+    if (isExercise) {
+      navigate('/exercise-detail', { state: { exerciseId: accepted.id } })
+      return
+    }
+
     setBusy(true)
     try {
       const { templateService } = await import('../../services/template.service')
-      const template = await templateService.get(accepted.templateId)
+      const template = await templateService.get(accepted.id)
       loadTemplate(template)
       navigate('/workout/plan')
     } catch {
@@ -78,10 +93,12 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
   return (
     <div className="ml-11 mt-2 rounded-2xl border border-brand-teal/40 bg-[#0a2a22] overflow-hidden">
       <div className="px-4 pt-3 pb-2 flex items-start gap-2">
-        <span className="text-base leading-none mt-0.5">🏋️</span>
+        <span className="text-base leading-none mt-0.5">{isExercise ? '✏️' : '🏋️'}</span>
         <div className="min-w-0 flex-1">
           <p className="text-[10px] tracking-wider text-brand-teal font-bold">
-            {accepted ? 'ADDED TO YOUR PLANS' : 'SUGGESTED PLAN · NOT SAVED YET'}
+            {isExercise
+              ? (accepted ? 'ADDED TO YOUR EXERCISES' : 'NEW EXERCISE · NOT SAVED YET')
+              : (accepted ? 'ADDED TO YOUR PLANS' : 'SUGGESTED PLAN · NOT SAVED YET')}
           </p>
           <p className="text-white text-sm font-bold mt-0.5 truncate">{proposal.title}</p>
         </div>
@@ -110,12 +127,12 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
         {accepted ? (
           <>
             <button
-              onClick={openInPlanner}
+              onClick={openAccepted}
               disabled={busy}
               className="flex-1 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
                          active:scale-95 transition-transform disabled:opacity-40"
             >
-              Open in planner →
+              {isExercise ? 'View exercise →' : 'Open in planner →'}
             </button>
             <button
               onClick={() => onResolved(proposal.id)}
@@ -133,7 +150,10 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
               className="flex-1 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
                          active:scale-95 transition-transform disabled:opacity-40"
             >
-              {busy ? 'Adding…' : proposal.scheduledFor ? 'Add & schedule' : 'Add to my plans'}
+              {busy ? 'Adding…'
+                : isExercise ? 'Add exercise'
+                : proposal.scheduledFor ? 'Add & schedule'
+                : 'Add to my plans'}
             </button>
             <button
               onClick={dismiss}

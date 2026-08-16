@@ -18,11 +18,13 @@ export const aiService = {
    */
   acceptProposal: async (proposalId: string) => {
     const res = await api.post(`/ai/proposals/${proposalId}/accept`)
-    return res.data.data as {
-      kind: string
-      template: WorkoutTemplate
-      scheduled: ScheduledWorkout | null
-    }
+    // A discriminated union rather than one optional-everything shape: the
+    // three kinds return genuinely different objects, and the card has to know
+    // which one it is holding before it can open anything.
+    return res.data.data as
+      | { kind: 'create_template'; template: WorkoutTemplate; scheduled: ScheduledWorkout | null }
+      | { kind: 'schedule_workout'; template: WorkoutTemplate; scheduled: ScheduledWorkout }
+      | { kind: 'create_exercise'; exercise: { id: string; name: string } }
   },
 
   rejectProposal: async (proposalId: string) => {

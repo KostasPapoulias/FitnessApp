@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { getCategories, getModalities, getExerciseById, getExercises } from '../controllers/exercise.controller';
-import { optionalAuth } from '../middleware/auth.middleware';
+import {
+  createExercise, getCategories, getModalities, getExerciseById, getExercises,
+} from '../controllers/exercise.controller';
+import { optionalAuth, verifyToken } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -12,6 +14,17 @@ router.use(optionalAuth);
  * @returns list of all exercises
  */
 router.get('/', getExercises);
+
+/**
+ * @route POST /api/exercises
+ * @protected
+ * @returns the created custom exercise, shaped like a GET / row
+ *
+ * The only write in this router, so it carries `verifyToken` rather than the
+ * `optionalAuth` the reads share — a custom exercise has an owner by
+ * definition, and an anonymous caller has no `userId` to be one.
+ */
+router.post('/', verifyToken, createExercise);
 
 /**
  * @route GET /api/exercises/categories

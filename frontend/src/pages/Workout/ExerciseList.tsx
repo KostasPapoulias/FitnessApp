@@ -154,6 +154,27 @@ export default function ExerciseList() {
           <div className="flex flex-col gap-3">
             {[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-dark-800 rounded-card animate-pulse" />)}
           </div>
+        ) : filtered.length === 0 ? (
+          // The moment the feature exists for. Someone searched for a movement
+          // and it is not here; offering the search text as the name is the
+          // difference between a dead end and one tap.
+          <div className="bg-dark-800 border border-dark-600 rounded-card p-5 text-center">
+            <p className="text-white text-sm font-semibold">
+              {search ? `No match for "${search}"` : 'Nothing here yet'}
+            </p>
+            <p className="text-dark-400 text-xs mt-1 mb-4">
+              If you train it and the library doesn't have it, add it yourself.
+            </p>
+            <button
+              onClick={() => navigate('/workout/exercises/new', {
+                state: { name: search, modality },
+              })}
+              className="bg-brand-teal text-black text-sm font-bold px-4 py-2.5
+                         rounded-btn active:scale-95 transition-transform"
+            >
+              Create "{search || 'a new exercise'}"
+            </button>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filtered.map(exercise => {
@@ -204,6 +225,19 @@ export default function ExerciseList() {
                 </div>
               )
             })}
+
+            {/* Also offered below a list that DID return results — the search
+                matching something is not the same as it matching what they
+                came for, and that case has no empty state to fall into. */}
+            <button
+              onClick={() => navigate('/workout/exercises/new', {
+                state: { name: search, modality },
+              })}
+              className="rounded-card border border-dashed border-dark-600 bg-transparent
+                         py-3 text-dark-400 text-sm active:bg-dark-800 transition-colors"
+            >
+              + Create your own exercise
+            </button>
           </div>
         )}
       </div>

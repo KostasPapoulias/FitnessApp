@@ -17,6 +17,7 @@ import NotificationSettings from './pages/NotificationSettings'
 import SecuritySettings from './pages/SecuritySettings'
 import BrowseCategories from './pages/Workout/BrowseCategories'
 import ExerciseList from './pages/Workout/ExerciseList'
+import CreateExercise from './pages/Workout/CreateExercise'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
 import PlanSets from './pages/Workout/PlanSets'
 import WorkoutQueue from './pages/Workout/WorkoutQueue'
@@ -134,6 +135,7 @@ export default function App() {
           <Route path="workout/start" element={<StartWorkout />} />
           <Route path="workout/browse" element={<BrowseCategories />} />
           <Route path="workout/exercises" element={<ExerciseList />} />
+          <Route path="workout/exercises/new" element={<CreateExercise />} />
           <Route path="exercise-detail" element={<ExerciseDetail />} />
           <Route path="workout/active" element={<ActiveWorkout />} />
           <Route path="workout/queue" element={<WorkoutQueue />} />

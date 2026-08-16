@@ -2,6 +2,9 @@ import { Response } from 'express';
 import { prisma } from '../server';
 import { buildEffectiveFatigueMap } from '../services/fatigue.service';
 import { rankByConstraints, getTrainingConstraints } from '../services/training-constraints.service';
+import {
+  CustomExerciseError, createCustomExercise, prepareCustomExercise,
+} from '../services/custom-exercise.service';
 import { AuthRequest } from '../server';
 
 // Get all exercises
@@ -119,8 +122,16 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 
-    const exercise = await prisma.exercise.findUnique({
-      where: { id },
+    // Scoped the same way the list is. `findUnique` on the id alone handed any
+    // caller another athlete's custom exercise — including its name and
+    // description, which people write in their own words — to anyone who
+    // guessed a uuid. Harmless while nobody could create one; not harmless now
+    // that they can.
+    const exercise = await prisma.exercise.findFirst({
+      where: {
+        id,
+        OR: [{ createdByUserId: null }, { createdByUserId: req.userId! }],
+      },
       include: {
         modality: true,
         muscleLinks: {
@@ -191,6 +202,50 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
 
   } catch (error) {
     console.error('getExerciseById error:', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+//   Create a custom exercise
+// POST /api/exercises
+//
+// `Exercise.createdByUserId` existed, the list endpoint filtered on it, and
+// `getExercises` returned an `isCustom` flag — with no route that could ever
+// set it. This is the missing half.
+//
+// The athlete supplies what they can actually know about their own movement:
+// what it is called, which modality it belongs to, which muscles it works and
+// how hard, what kit it needs. Everything the fatigue model consumes is derived
+// from that in custom-exercise.service.ts and never typed directly.
+export const createExercise = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { name, modalityId, modality, description, muscles, categoryIds, equipmentIds } =
+      req.body as Record<string, unknown>
+
+    const prepared = await prepareCustomExercise(req.userId!, {
+      name,
+      // The form posts ids; the service resolves an id or a name either way.
+      modality: modalityId ?? modality,
+      description,
+      muscles: Array.isArray(muscles)
+        ? muscles.map((m: any) => ({ muscle: m?.muscleId ?? m?.muscle, role: m?.role }))
+        : muscles,
+      categories: categoryIds,
+      equipment: equipmentIds,
+    })
+
+    const created = await createCustomExercise(req.userId!, prepared)
+    res.status(201).json({ success: true, data: created })
+
+  } catch (error) {
+    if (error instanceof CustomExerciseError) {
+      // A clash or a full shelf is the athlete's own state, not a fault — 409
+      // so the client can say which, rather than showing a generic failure.
+      res.status(error.code === 'invalid' ? 400 : 409)
+        .json({ success: false, error: error.message })
+      return
+    }
+    console.error('createExercise error:', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

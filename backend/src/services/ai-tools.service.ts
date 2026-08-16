@@ -5,6 +5,9 @@ import {
   LIMITS, TemplateValidationError, createTemplate, listScheduled, listTemplates,
   scheduleTemplate, validateTemplateInput,
 } from './template.service'
+import {
+  CustomExerciseError, createCustomExercise, prepareCustomExercise,
+} from './custom-exercise.service'
 
 /**
  * What the coach is allowed to look up, and what it is allowed to draft.
@@ -45,7 +48,7 @@ const READ_TOOLS = [
   'list_scheduled',
 ] as const
 
-const WRITE_TOOLS = ['propose_workout', 'propose_schedule'] as const
+const WRITE_TOOLS = ['propose_workout', 'propose_schedule', 'propose_exercise'] as const
 
 export const isWriteTool = (name: string): boolean =>
   (WRITE_TOOLS as readonly string[]).includes(name)
@@ -185,6 +188,46 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
         reminderAt: { type: SchemaType.STRING, description: 'ISO 8601 datetime for the reminder.' },
       },
       required: ['templateId', 'scheduledFor'],
+    },
+  },
+  {
+    name: 'propose_exercise',
+    description:
+      'Draft a NEW custom exercise for the athlete to review, for a movement that search_exercises could not find. Does NOT save — they tap to accept. Always search first; if a close match already exists, use it instead of inventing a duplicate. Never guess on the athlete\'s behalf: if you do not know which muscles the movement works, ask them.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        name: { type: SchemaType.STRING, description: 'What the movement is called, e.g. "Bulgarian Split Squat".' },
+        modality: {
+          type: SchemaType.STRING,
+          description: 'One of: Strength, Calisthenics, Cardio, WOD, Mobility.',
+        },
+        description: {
+          type: SchemaType.STRING,
+          description: 'How to perform it — setup and the cues that matter. A couple of sentences.',
+        },
+        muscles: {
+          type: SchemaType.ARRAY,
+          description: 'The muscles worked. At least one must be primary.',
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              muscle: {
+                type: SchemaType.STRING,
+                description: 'Muscle name, e.g. "Quadriceps", "Lats", "Lower Back".',
+              },
+              role: {
+                type: SchemaType.STRING,
+                description: '"primary" if the movement is really for this muscle, "secondary" if it only assists.',
+              },
+            },
+            required: ['muscle', 'role'],
+          },
+        },
+        categories: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: 'Category names, e.g. "Legs".' },
+        equipment: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: 'Equipment names needed, e.g. "Dumbbell".' },
+      },
+      required: ['name', 'modality', 'muscles'],
     },
   },
 ]
@@ -601,14 +644,78 @@ export const createProposal = async (
       }
     }
 
+    if (name === 'propose_exercise') {
+      // Prepared, not created. Everything is resolved and checked now so the
+      // card shows the athlete exactly what would be saved — including which
+      // muscles the model's names actually matched, which is the part most
+      // worth them checking before they tap.
+      const prepared = await prepareCustomExercise(userId, {
+        name: args.name,
+        modality: args.modality,
+        description: args.description,
+        muscles: args.muscles,
+        categories: args.categories,
+        equipment: args.equipment,
+      })
+
+      const payload = {
+        name: prepared.name,
+        modality: prepared.modalityName,
+        description: prepared.description,
+        muscles: prepared.muscleLinks.map(link => ({ muscle: link.muscleName, role: link.role })),
+        categories: prepared.categoryIds,
+        equipment: prepared.equipmentIds,
+      }
+
+      const row = await prisma.aiProposal.create({
+        data: {
+          userId, threadId, kind: 'create_exercise',
+          payload: payload as unknown as Prisma.InputJsonObject, expiresAt,
+        },
+      })
+
+      const primary = prepared.muscleLinks.filter(l => l.role === 'primary').map(l => l.muscleName)
+      const secondary = prepared.muscleLinks.filter(l => l.role === 'secondary').map(l => l.muscleName)
+
+      const lines = [
+        `${prepared.modalityName} · ${prepared.name}`,
+        `Primary: ${primary.join(', ')}`,
+        ...(secondary.length ? [`Secondary: ${secondary.join(', ')}`] : []),
+        ...(prepared.description ? [prepared.description] : []),
+      ]
+
+      return {
+        toModel: {
+          status: 'drafted_not_saved',
+          message:
+            'A card has been shown to the athlete. The exercise does NOT exist until they tap it, so you cannot use it in a workout yet. Tell them it is ready to review — do NOT say it has been created or added.',
+          // Fed back so the model can correct itself out loud if a name it gave
+          // resolved to a muscle it did not mean.
+          resolvedMuscles: prepared.muscleLinks.map(l => `${l.muscleName} (${l.role})`),
+        },
+        proposal: {
+          id: row.id,
+          kind: 'create_exercise',
+          title: prepared.name,
+          lines,
+          scheduledFor: null,
+          reminderAt: null,
+          expiresAt: expiresAt.toISOString(),
+        },
+      }
+    }
+
     return { toModel: { error: `Unknown tool "${name}".` }, proposal: null }
   } catch (error) {
     // A rejected draft is information the model can act on — usually it means a
     // made-up exercise id, and telling it so gets a corrected second attempt
     // instead of a silent failure the athlete never sees explained.
-    const message = error instanceof TemplateValidationError
-      ? error.message
-      : 'That draft could not be prepared.'
+    const message =
+      error instanceof TemplateValidationError ? error.message :
+      // Carries the muscle and modality vocabulary back to the model, so a
+      // rejected draft becomes a corrected one rather than an apology.
+      error instanceof CustomExerciseError ? error.message :
+      'That draft could not be prepared.'
     return { toModel: { error: message }, proposal: null }
   }
 }
@@ -686,6 +793,30 @@ export const applyProposal = async (userId: string, proposalId: string) => {
       data: { status: 'applied', appliedAt: new Date() },
     })
     return { kind: row.kind, template: scheduled.template, scheduled }
+  }
+
+  if (row.kind === 'create_exercise') {
+    // Re-prepared from the payload rather than trusting what was checked at
+    // draft time. The card may have sat for half an hour, and the duplicate
+    // check in particular is a claim about the catalogue right now — the
+    // athlete could have created the same movement by hand in between.
+    let prepared
+    try {
+      prepared = await prepareCustomExercise(userId, payload)
+    } catch (error) {
+      if (error instanceof CustomExerciseError) {
+        throw new ProposalError(error.message, error.code === 'duplicate' ? 'spent' : 'invalid')
+      }
+      throw error
+    }
+
+    const exercise = await createCustomExercise(userId, prepared)
+
+    await prisma.aiProposal.update({
+      where: { id: row.id },
+      data: { status: 'applied', appliedAt: new Date() },
+    })
+    return { kind: row.kind, exercise }
   }
 
   throw new ProposalError('That suggestion is of an unknown kind.', 'invalid')
