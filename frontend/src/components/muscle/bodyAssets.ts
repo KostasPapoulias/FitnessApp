@@ -37,8 +37,8 @@ export type BodySide = 'front' | 'back'
  */
 export const bodySvg = (side: BodySide, gender?: string | null): string => {
   const base = `${side}5.svg`
-  if (gender?.toLowerCase().trim() !== 'female') return byName[base]
-  return byName[`${side}5-female.svg`] ?? byName[base]
+  const female = gender?.toLowerCase().trim() === 'female'
+  return (female ? byName[`${side}5-female.svg`] : undefined) ?? byName[base] ?? ''
 }
 
 /**
@@ -48,12 +48,6 @@ export const bodySvg = (side: BodySide, gender?: string | null): string => {
  * lower — she reads lower. Her trace gives the head about 19% of the figure's
  * height where the male's takes 8%, which pushes her whole torso down the
  * screen at the same scale.
- *
- * The number is measured, not eyeballed: her trap line sits at 0.201 of the
- * figure height against his 0.160, and chest at 0.266 against 0.227. Lifting by
- * 4% puts her shoulders where his are. The mismatch shrinks down the body and
- * is gone by the calves, so this trades a slightly high foot line for a torso
- * that lines up — the torso is what the eye reads.
  *
  * A lift and not a rescale: her viewBox is narrower (0.44 against 0.50), so she
  * already renders about 10% narrower in the same box, and refitting her to gain

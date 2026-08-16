@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { bodySvg, bodyOffsetY, useBodyGender } from './bodyAssets'
+import { bodySvg, useBodyGender } from './bodyAssets'
 
 const MUSCLE_NAME_TO_GROUP: Record<string, string[]> = {
   'Quadriceps': ['Quads'],
@@ -72,10 +72,8 @@ export default function MiniMuscleMap({ fatigueSnapshot }: MiniMuscleMapProps) {
   return (
     <div className="flex gap-0.5 max-w-full overflow-hidden">
       <div className="w-24 h-32" aria-label="Front muscle map"
-           style={{ transform: `translateY(${bodyOffsetY(gender)})` }}
            dangerouslySetInnerHTML={{ __html: frontSvg }} />
       <div className="w-24 h-32" aria-label="Back muscle map"
-           style={{ transform: `translateY(${bodyOffsetY(gender)})` }}
            dangerouslySetInnerHTML={{ __html: backSvg }} />
     </div>
   )
