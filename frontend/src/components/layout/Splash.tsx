@@ -6,32 +6,32 @@
  * Holding a single neutral screen until every answer is in costs a few hundred
  * milliseconds and removes all of that.
  *
- * The mark fades in on a delay rather than immediately: a fast launch should
- * look like the app opening straight into itself, and only a launch slow enough
- * to feel like waiting should admit that anything is loading.
+ * The animated version of this screen is NOT here: it is in `index.html`, so it
+ * can paint before the bundle has even downloaded. By the time this component
+ * mounts, that node is already on screen and covering it, and `dismissBoot()`
+ * fades it out when the launch resolves. Re-rendering the same visual in React
+ * would restart the entrance and read as the logo popping twice.
+ *
+ * So this is the understudy. It only becomes visible if the boot node is gone
+ * while the app is still deciding, and it deliberately has no entrance
+ * animation — it is covering a gap, not announcing itself.
  */
 export default function Splash() {
   return (
-    <div className="fixed inset-0 bg-dark-900 flex items-center justify-center">
-      <div className="flex flex-col items-center opacity-0 animate-[splashIn_0.5s_ease-out_0.45s_forwards]">
-        <div className="w-11 h-11 rounded-2xl bg-brand-teal/15 border border-brand-teal/40
-                        flex items-center justify-center text-xl">
-          🧬
-        </div>
-        <p className="mt-3 text-[10px] tracking-[0.35em] text-dark-400 uppercase">
-          Somatrack
-        </p>
+    <div className="fixed inset-0 bg-dark-900 flex flex-col items-center justify-center">
+      <div className="relative w-44 h-44 flex items-center justify-center">
+        <div
+          className="absolute w-44 h-44 rounded-full"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(0,212,170,0.26) 0%, rgba(0,212,170,0.08) 42%, rgba(0,212,170,0) 70%)',
+          }}
+        />
+        <img src="/logo-mark.png" alt="SomaTrack" className="relative h-auto" style={{ width: 104 }} />
       </div>
-
-      <style>{`
-        @keyframes splashIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 1; transform: none; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          @keyframes splashIn { from { opacity: 0; } to { opacity: 1; } }
-        }
-      `}</style>
+      <p className="mt-[22px] text-[10px] leading-none tracking-[0.38em] indent-[0.38em] text-dark-300 uppercase">
+        SomaTrack
+      </p>
     </div>
   )
 }

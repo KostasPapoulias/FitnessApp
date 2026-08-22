@@ -13,12 +13,242 @@
     <meta name="theme-color" content="#111111" />
     <link rel="manifest" href="/manifest.json" />
 
+    <!-- The boot screen paints before any JS has run, so the mark has to be in
+         flight before the parser reaches it — otherwise the first frame is a
+         glow with a hole in the middle. -->
+    <link rel="preload" as="image" href="/logo-mark.png" />
+
     <!-- Prevents text size adjustment on orientation change -->
     <meta name="format-detection" content="telephone=no" />
     <meta name="description" content="SomaTrack - Mobile-first Fitness & Recovery Tracking" />
     <title>SomaTrack</title>
+
+    <!--
+      Boot screen.
+
+      This lives in the HTML, not in React, because the gap it covers is the one
+      React cannot: from first paint until the bundle has downloaded, parsed and
+      mounted. That window used to be an empty white document — the app looked
+      broken for as long as the network took, and on a cold native launch it is
+      the longest blank of the whole sequence.
+
+      Because the markup is already on screen when React arrives, `Splash` does
+      not re-render it; it leaves this node alone and `dismissBoot()` fades it
+      out once the launch questions are answered. Handing the same visual from
+      the parser to React would otherwise replay the entrance animation, which
+      reads as the logo popping twice.
+    -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #111111;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                     "Segoe UI", Roboto, sans-serif;
+        transition: opacity 320ms ease-out;
+      }
+      /* Set by dismissBoot(); the node is removed after the transition. */
+      #boot.boot-done { opacity: 0; pointer-events: none; }
+
+      #boot .boot-stage {
+        position: relative;
+        width: 176px;
+        height: 176px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Breathing teal bloom. Sits behind everything and is the only thing
+         visible on the very first frame, before the mark has decoded. */
+      #boot .boot-glow {
+        position: absolute;
+        width: 176px;
+        height: 176px;
+        border-radius: 50%;
+        background: radial-gradient(circle,
+                      rgba(0, 212, 170, 0.26) 0%,
+                      rgba(0, 212, 170, 0.08) 42%,
+                      rgba(0, 212, 170, 0) 70%);
+        animation: bootGlow 2800ms ease-in-out infinite;
+      }
+
+      /* Orbit track carrying the two dots the mark already has, set moving. */
+      #boot .boot-orbit {
+        position: absolute;
+        width: 152px;
+        height: 152px;
+        border-radius: 50%;
+        border: 1px solid rgba(0, 212, 170, 0.10);
+        animation: bootSpin 3400ms linear infinite;
+      }
+      #boot .boot-dot {
+        position: absolute;
+        border-radius: 50%;
+        left: 50%;
+      }
+      #boot .boot-dot-a {
+        top: -3px;
+        width: 5px;
+        height: 5px;
+        margin-left: -2.5px;
+        background: #F97316;
+        box-shadow: 0 0 10px rgba(249, 115, 22, 0.9);
+      }
+      #boot .boot-dot-b {
+        bottom: -2px;
+        width: 3px;
+        height: 3px;
+        margin-left: -1.5px;
+        background: #00D4AA;
+        box-shadow: 0 0 8px rgba(0, 212, 170, 0.9);
+      }
+
+      #boot .boot-mark-wrap {
+        position: relative;
+        width: 104px;
+        height: 99px;
+        animation: bootIn 700ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+      }
+      /* Entrance and idle are separate elements on purpose: one element cannot
+         run a `both`-filled entrance and an infinite loop on the same transform
+         without the loop stomping the entrance's final frame. */
+      #boot .boot-mark-breathe {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        animation: bootBreathe 2800ms ease-in-out 700ms infinite;
+      }
+      #boot .boot-mark {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      /* The sheen is masked BY the mark, so it travels through the strokes
+         rather than across a rectangle sitting on top of them. */
+      #boot .boot-shine {
+        position: absolute;
+        inset: 0;
+        -webkit-mask-image: url("/logo-mark.png");
+                mask-image: url("/logo-mark.png");
+        -webkit-mask-size: contain;
+                mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+                mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+                mask-position: center;
+        background-image: linear-gradient(105deg,
+                      rgba(255, 255, 255, 0) 42%,
+                      rgba(255, 255, 255, 0.55) 50%,
+                      rgba(255, 255, 255, 0) 58%);
+        background-size: 260% 100%;
+        background-repeat: no-repeat;
+        animation: bootShine 2600ms ease-in-out 900ms infinite;
+      }
+
+      #boot .boot-word {
+        margin: 22px 0 0;
+        font-size: 10px;
+        line-height: 1;
+        letter-spacing: 0.38em;
+        /* letter-spacing pads the right of the last glyph too, so without this
+           the word sits visibly left of centre. */
+        text-indent: 0.38em;
+        text-transform: uppercase;
+        color: #888888;
+        animation: bootFade 600ms ease-out 420ms both;
+      }
+
+      #boot .boot-bar {
+        margin-top: 18px;
+        width: 92px;
+        height: 2px;
+        border-radius: 2px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.07);
+        animation: bootFade 600ms ease-out 560ms both;
+      }
+      #boot .boot-bar span {
+        display: block;
+        width: 38%;
+        height: 100%;
+        border-radius: 2px;
+        background: linear-gradient(90deg,
+                      rgba(0, 212, 170, 0) 0%,
+                      #00D4AA 50%,
+                      rgba(0, 212, 170, 0) 100%);
+        animation: bootSlide 1500ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+
+      @keyframes bootIn {
+        from { opacity: 0; transform: scale(0.82); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      @keyframes bootBreathe {
+        0%, 100% { transform: scale(1); }
+        50%      { transform: scale(1.045); }
+      }
+      @keyframes bootGlow {
+        0%, 100% { opacity: 0.55; transform: scale(0.92); }
+        50%      { opacity: 1;    transform: scale(1.06); }
+      }
+      @keyframes bootSpin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes bootShine {
+        0%        { background-position: 160% 0; }
+        55%, 100% { background-position: -60% 0; }
+      }
+      @keyframes bootSlide {
+        0%   { transform: translateX(-110%); }
+        100% { transform: translateX(370%); }
+      }
+      @keyframes bootFade {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: none; }
+      }
+
+      /* Motion is decoration here — the mark and the wordmark still say which
+         screen this is — so reduced-motion keeps those and drops what moves.
+         The bar goes rather than freezes: a stopped progress bar reads as a
+         hung one. */
+      @media (prefers-reduced-motion: reduce) {
+        #boot .boot-glow,
+        #boot .boot-orbit,
+        #boot .boot-mark-wrap,
+        #boot .boot-mark-breathe,
+        #boot .boot-word { animation: none; }
+        #boot .boot-shine { display: none; }
+        #boot .boot-bar   { display: none; }
+        #boot .boot-glow  { opacity: 0.8; }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot">
+      <div class="boot-stage">
+        <div class="boot-glow"></div>
+        <div class="boot-orbit">
+          <i class="boot-dot boot-dot-a"></i>
+          <i class="boot-dot boot-dot-b"></i>
+        </div>
+        <div class="boot-mark-wrap">
+          <div class="boot-mark-breathe">
+            <img class="boot-mark" src="/logo-mark.png" alt="SomaTrack" />
+            <div class="boot-shine"></div>
+          </div>
+        </div>
+      </div>
+      <p class="boot-word">SomaTrack</p>
+      <div class="boot-bar"><span></span></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

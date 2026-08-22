@@ -38,6 +38,7 @@ import { useNotifications } from './hooks/useNotifcations'
 import { Capacitor } from '@capacitor/core'
 import PinLock from './components/security/PinLock'
 import { useAppLock } from './hooks/useAppLock'
+import { dismissBoot } from './boot'
 // Protected route wrapper
 //
 // Two gates, in order. Unauthenticated users go to /login; authenticated users
@@ -93,20 +94,39 @@ export default function App() {
     ensurePushSubscription()
   }, [isAuthenticated])
 
+  // Every launch question that must be answered before the app can know which
+  // screen it owes you: is the stored token still good, and is this device
+  // locked. The boot screen from index.html stays up for exactly this long.
+  const settling = isBootstrapping || (isAuthenticated && !lockChecked)
+
+  // Hand the screen over once they are all answered.
+  //
+  // This is the only place the boot screen is taken down, so it covers all
+  // three destinations — Login, the PIN pad, or the app itself. Whichever one
+  // wins mounts underneath it and is revealed by the fade, rather than being
+  // the thing the user watches appear.
+  //
+  // `dismissBoot` enforces its own minimum on-screen time, so a launch that
+  // resolves in one frame still plays the animation instead of flashing it.
+  useEffect(() => {
+    if (!settling) dismissBoot()
+  }, [settling])
+
   // Order matters, and this is the whole fix for the launch flicker.
   //
   // The PIN pad goes first and does not wait for the server: `useAppLock`
   // believes a device-local flag on the first frame, so a locked phone opens
   // straight onto the pad instead of onto a slice of the app that a lock then
   // drops over. Rendered before the router, so no screen — and no data on it —
-  // is ever visible behind it.
+  // is ever visible behind it. It mounts under the boot screen, which is why
+  // the pad is now something the splash fades away to reveal.
   //
   // Then the splash, which covers the gap where the app knows there is a token
   // but not yet whether it is still good or whether this device is locked.
   // Rendering the router during that window is what put Login on screen for a
   // moment before bouncing a perfectly signed-in user back into the app.
   if (locked) return <PinLock onUnlock={unlock} />
-  if (isBootstrapping || (isAuthenticated && !lockChecked)) return <Splash />
+  if (settling) return <Splash />
 
   return (
     <BrowserRouter>
