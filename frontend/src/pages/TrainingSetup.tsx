@@ -22,21 +22,30 @@ const PRESETS: { id: string; icon: string; label: string; blurb: string; items: 
   {
     id: 'gym', icon: '🏢', label: 'Full gym',
     blurb: 'Commercial gym — machines, cables, racks',
-    items: ['Barbell', 'Dumbbell', 'Kettlebell', 'EZ Bar', 'Machine', 'Cable Machine',
-            'Bench', 'Pull-up Bar', 'Dip Bars', 'Treadmill', 'Rower', 'Bike',
+    items: ['Barbell', 'Dumbbell', 'Kettlebell', 'EZ Bar', 'Trap Bar', 'Machine',
+            'Cable Machine', 'Smith Machine', 'Bench', 'Pull-up Bar', 'Dip Bars',
+            'Treadmill', 'Rower', 'Bike', 'Elliptical', 'Stair Climber',
             'Plyo Box', 'Medicine Ball', 'Resistance Band', 'Jump Rope',
-            'Foam Roller', 'Yoga Mat', 'Bodyweight'],
+            'Ab Wheel', 'Foam Roller', 'Yoga Mat', 'Bodyweight'],
   },
   {
     id: 'home', icon: '🏠', label: 'Home setup',
     blurb: 'Dumbbells, bands, a mat — the usual home kit',
     items: ['Dumbbell', 'Kettlebell', 'Resistance Band', 'Yoga Mat', 'Jump Rope',
-            'Foam Roller', 'Bench', 'Bodyweight'],
+            'Ab Wheel', 'Foam Roller', 'Bench', 'Bodyweight'],
   },
   {
     id: 'park', icon: '🌳', label: 'Calisthenics park',
     blurb: 'Bars, rings and your own bodyweight',
-    items: ['Pull-up Bar', 'Dip Bars', 'Bodyweight', 'Resistance Band', 'Jump Rope'],
+    items: ['Pull-up Bar', 'Dip Bars', 'Gymnastic Rings', 'Bodyweight',
+            'Resistance Band', 'Jump Rope'],
+  },
+  {
+    id: 'box', icon: '🏋️', label: 'CrossFit box',
+    blurb: 'Rig, bumpers, rings, rower — and a sled',
+    items: ['Barbell', 'Dumbbell', 'Kettlebell', 'Bench', 'Pull-up Bar',
+            'Gymnastic Rings', 'Plyo Box', 'Medicine Ball', 'Rower', 'Bike',
+            'Jump Rope', 'Sled', 'Battle Ropes', 'Ab Wheel', 'Bodyweight'],
   },
   {
     id: 'bodyweight', icon: '🤸', label: 'Bodyweight only',
@@ -49,10 +58,10 @@ const PRESETS: { id: string; icon: string; label: string; blurb: string; items: 
 // must match Equipment.name in seed.ts; anything unlisted falls into "Other" so
 // a new seed entry appears instead of vanishing.
 const GROUPS: { title: string; items: string[] }[] = [
-  { title: 'Free weights', items: ['Barbell', 'Dumbbell', 'Kettlebell', 'EZ Bar', 'Medicine Ball'] },
-  { title: 'Machines & cardio', items: ['Machine', 'Cable Machine', 'Treadmill', 'Rower', 'Bike'] },
-  { title: 'Bodyweight & rigs', items: ['Bodyweight', 'Pull-up Bar', 'Dip Bars', 'Bench', 'Plyo Box'] },
-  { title: 'Accessories', items: ['Resistance Band', 'Jump Rope', 'Foam Roller', 'Yoga Mat'] },
+  { title: 'Free weights', items: ['Barbell', 'Dumbbell', 'Kettlebell', 'EZ Bar', 'Trap Bar', 'Medicine Ball'] },
+  { title: 'Machines & cardio', items: ['Machine', 'Cable Machine', 'Smith Machine', 'Treadmill', 'Rower', 'Bike', 'Elliptical', 'Stair Climber'] },
+  { title: 'Bodyweight & rigs', items: ['Bodyweight', 'Pull-up Bar', 'Dip Bars', 'Gymnastic Rings', 'Bench', 'Plyo Box'] },
+  { title: 'Accessories', items: ['Resistance Band', 'Jump Rope', 'Ab Wheel', 'Sled', 'Battle Ropes', 'Foam Roller', 'Yoga Mat'] },
 ]
 
 const SEVERITIES: { value: 'avoid' | 'caution'; label: string; blurb: string }[] = [

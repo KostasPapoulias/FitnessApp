@@ -1,234 +1,342 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 // Fatigue-model tuning lives in its own module so it can also be applied
 // without running the whole seed — see scripts/apply-fatigue-tuning.ts.
 import {
   MUSCLE_HALF_LIVES,
+  DAMAGE_OVERRIDES,
+  LOAD_FACTORS,
+  REFERENCE_SPEED_KMH,
   damageFor,
   referenceSpeedFor,
   loadFactorFor,
 } from './fatigue-tuning';
+// The catalogue itself — content, edited far more often than this file.
+import {
+  MODALITIES,
+  CATEGORIES,
+  EQUIPMENT,
+  EXERCISES,
+  RENAMES,
+} from './exercise-catalogue';
 
 const prisma = new PrismaClient();
 
-// ── reference data ─────────────────────────────────────────────────────────
-const MODALITIES = ['Strength', 'Calisthenics', 'Cardio', 'WOD', 'Mobility'];
-const CATEGORIES = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
-const EQUIPMENT = [
-  'Dumbbell', 'Barbell', 'Kettlebell', 'Bodyweight', 'Treadmill', 'Cable Machine',
-  'Machine', 'Pull-up Bar', 'Bench', 'Resistance Band', 'Foam Roller', 'Rower',
-  'Bike', 'Jump Rope', 'Yoga Mat', 'Plyo Box', 'Medicine Ball', 'EZ Bar', 'Dip Bars',
-];
+// ── batching ───────────────────────────────────────────────────────────────
+// The dev database is remote, so a round trip costs ~290 ms. The catalogue is
+// past 160 exercises with roughly 800 links between them; one statement each,
+// sent one at a time, is around ten minutes of pure network latency and a
+// connection the proxy will drop long before the end (P1017).
+//
+// So: read in bulk, write in bulk, and send the unavoidable per-row updates as
+// array transactions, which Prisma pipelines into a single request.
+const chunk = <T>(items: T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
 
-// muscle impact tuple: [muscleName, impactFactor]
-type M = [string, number];
-interface Ex {
-  name: string;
-  modality: string;
-  description?: string;
-  categories?: string[];
-  equipment?: string[];
-  muscles: M[];
-}
+const runBatched = async (
+  ops: Prisma.PrismaPromise<unknown>[],
+  size = 50,
+): Promise<void> => {
+  for (const batch of chunk(ops, size)) await prisma.$transaction(batch);
+};
 
-// ── exercise catalogue ─────────────────────────────────────────────────────
-const EXERCISES: Ex[] = [
-  // ══════════════ STRENGTH ══════════════
-  // Chest
-  { name: 'Bench Press', modality: 'Strength', description: 'Barbell flat bench chest press', categories: ['Chest'], equipment: ['Barbell', 'Bench'], muscles: [['Chest', 1.0], ['Triceps', 0.6], ['Shoulders', 0.5]] },
-  { name: 'Incline Bench Press', modality: 'Strength', description: 'Barbell incline press for upper chest', categories: ['Chest'], equipment: ['Barbell', 'Bench'], muscles: [['Chest', 0.95], ['Shoulders', 0.6], ['Triceps', 0.5]] },
-  { name: 'Dumbbell Bench Press', modality: 'Strength', description: 'Dumbbell flat bench press', categories: ['Chest'], equipment: ['Dumbbell', 'Bench'], muscles: [['Chest', 0.95], ['Triceps', 0.55]] },
-  { name: 'Dumbbell Flyes', modality: 'Strength', description: 'Dumbbell chest flyes', categories: ['Chest'], equipment: ['Dumbbell', 'Bench'], muscles: [['Chest', 0.9]] },
-  { name: 'Cable Crossover', modality: 'Strength', description: 'Cable chest fly', categories: ['Chest'], equipment: ['Cable Machine'], muscles: [['Chest', 0.85], ['Shoulders', 0.3]] },
-  { name: 'Machine Chest Press', modality: 'Strength', description: 'Seated machine chest press', categories: ['Chest'], equipment: ['Machine'], muscles: [['Chest', 0.9], ['Triceps', 0.5]] },
-  // Back
-  { name: 'Deadlifts', modality: 'Strength', description: 'Conventional barbell deadlift', categories: ['Back'], equipment: ['Barbell'], muscles: [['Back', 1.0], ['Glutes', 0.8], ['Hamstrings', 0.8], ['Lower Back', 0.9], ['Traps', 0.6]] },
-  { name: 'Barbell Row', modality: 'Strength', description: 'Bent-over barbell row', categories: ['Back'], equipment: ['Barbell'], muscles: [['Lats', 0.9], ['Back', 0.85], ['Biceps', 0.5]] },
-  { name: 'Bent-Over Dumbbell Row', modality: 'Strength', description: 'Single/double dumbbell row', categories: ['Back'], equipment: ['Dumbbell'], muscles: [['Lats', 0.85], ['Back', 0.8], ['Biceps', 0.5]] },
-  { name: 'Lat Pulldown', modality: 'Strength', description: 'Cable lat pulldown', categories: ['Back'], equipment: ['Cable Machine'], muscles: [['Lats', 0.95], ['Biceps', 0.5]] },
-  { name: 'Seated Cable Row', modality: 'Strength', description: 'Seated row to the waist', categories: ['Back'], equipment: ['Cable Machine'], muscles: [['Back', 0.85], ['Lats', 0.8], ['Biceps', 0.45]] },
-  { name: 'T-Bar Row', modality: 'Strength', description: 'Chest-supported T-bar row', categories: ['Back'], equipment: ['Barbell', 'Machine'], muscles: [['Back', 0.9], ['Lats', 0.85], ['Traps', 0.5]] },
-  // Legs
-  { name: 'Squats', modality: 'Strength', description: 'Barbell back squat', categories: ['Legs'], equipment: ['Barbell'], muscles: [['Quadriceps', 1.0], ['Glutes', 0.85], ['Hamstrings', 0.7]] },
-  { name: 'Leg Press', modality: 'Strength', description: 'Machine leg press', categories: ['Legs'], equipment: ['Machine'], muscles: [['Quadriceps', 0.95], ['Glutes', 0.7]] },
-  { name: 'Romanian Deadlift', modality: 'Strength', description: 'Hip-hinge for hamstrings', categories: ['Legs'], equipment: ['Barbell'], muscles: [['Hamstrings', 1.0], ['Glutes', 0.8], ['Lower Back', 0.6]] },
-  { name: 'Leg Extension', modality: 'Strength', description: 'Machine knee extension', categories: ['Legs'], equipment: ['Machine'], muscles: [['Quadriceps', 0.9]] },
-  { name: 'Leg Curl', modality: 'Strength', description: 'Machine hamstring curl', categories: ['Legs'], equipment: ['Machine'], muscles: [['Hamstrings', 0.9]] },
-  { name: 'Bulgarian Split Squat', modality: 'Strength', description: 'Rear-foot-elevated split squat', categories: ['Legs'], equipment: ['Dumbbell'], muscles: [['Quadriceps', 0.9], ['Glutes', 0.85], ['Hamstrings', 0.5]] },
-  { name: 'Standing Calf Raise', modality: 'Strength', description: 'Loaded calf raise', categories: ['Legs'], equipment: ['Machine'], muscles: [['Calves', 1.0]] },
-  // Shoulders
-  { name: 'Shoulder Press', modality: 'Strength', description: 'Overhead barbell/dumbbell press', categories: ['Shoulders'], equipment: ['Barbell', 'Dumbbell'], muscles: [['Shoulders', 1.0], ['Triceps', 0.6]] },
-  { name: 'Lateral Raises', modality: 'Strength', description: 'Dumbbell lateral raise', categories: ['Shoulders'], equipment: ['Dumbbell'], muscles: [['Shoulders', 0.95]] },
-  { name: 'Arnold Press', modality: 'Strength', description: 'Rotating dumbbell overhead press', categories: ['Shoulders'], equipment: ['Dumbbell'], muscles: [['Shoulders', 0.95], ['Triceps', 0.5]] },
-  { name: 'Front Raise', modality: 'Strength', description: 'Dumbbell front raise', categories: ['Shoulders'], equipment: ['Dumbbell'], muscles: [['Shoulders', 0.85]] },
-  { name: 'Rear Delt Fly', modality: 'Strength', description: 'Reverse dumbbell fly', categories: ['Shoulders'], equipment: ['Dumbbell'], muscles: [['Shoulders', 0.8], ['Traps', 0.4]] },
-  { name: 'Upright Row', modality: 'Strength', description: 'Barbell upright row', categories: ['Shoulders'], equipment: ['Barbell'], muscles: [['Shoulders', 0.85], ['Traps', 0.6]] },
-  // Arms
-  { name: 'Barbell Curls', modality: 'Strength', description: 'Barbell biceps curl', categories: ['Arms'], equipment: ['Barbell'], muscles: [['Biceps', 1.0], ['Forearms', 0.4]] },
-  { name: 'Hammer Curls', modality: 'Strength', description: 'Neutral-grip dumbbell curl', categories: ['Arms'], equipment: ['Dumbbell'], muscles: [['Biceps', 0.9], ['Forearms', 0.6]] },
-  { name: 'Preacher Curl', modality: 'Strength', description: 'Preacher bench biceps curl', categories: ['Arms'], equipment: ['EZ Bar', 'Bench'], muscles: [['Biceps', 0.95]] },
-  { name: 'Tricep Pushdown', modality: 'Strength', description: 'Cable triceps pushdown', categories: ['Arms'], equipment: ['Cable Machine'], muscles: [['Triceps', 0.95]] },
-  { name: 'Skull Crushers', modality: 'Strength', description: 'Lying triceps extension', categories: ['Arms'], equipment: ['EZ Bar', 'Bench'], muscles: [['Triceps', 0.95]] },
-  { name: 'Cable Curl', modality: 'Strength', description: 'Standing cable biceps curl', categories: ['Arms'], equipment: ['Cable Machine'], muscles: [['Biceps', 0.9]] },
-  // Core (strength)
-  { name: 'Cable Crunch', modality: 'Strength', description: 'Kneeling cable crunch', categories: ['Core'], equipment: ['Cable Machine'], muscles: [['Abs', 0.95]] },
-  { name: 'Weighted Decline Sit-up', modality: 'Strength', description: 'Decline bench weighted sit-up', categories: ['Core'], equipment: ['Bench', 'Medicine Ball'], muscles: [['Abs', 0.9], ['Obliques', 0.5]] },
-  { name: 'Ab Wheel Rollout', modality: 'Strength', description: 'Ab wheel rollout', categories: ['Core'], equipment: ['Machine'], muscles: [['Abs', 0.95], ['Obliques', 0.4]] },
+// ── validation ─────────────────────────────────────────────────────────────
+// Every one of these has a silent failure mode. A muscle name that does not
+// exist means the link is never created and the movement quietly stops feeding
+// the fatigue model; a tuning key that matches nothing leaves the exercise on
+// its modality default. Both look exactly like working software.
+const validateCatalogue = (): void => {
+  const problems: string[] = [];
+  const muscleNames = new Set(MUSCLE_HALF_LIVES.map(([name]) => name));
+  const seen = new Set<string>();
 
-  // ══════════════ CALISTHENICS ══════════════ (compound; browse by modality)
-  { name: 'Pull-ups', modality: 'Calisthenics', description: 'Bodyweight pull-up', categories: ['Back'], equipment: ['Pull-up Bar'], muscles: [['Lats', 0.95], ['Back', 0.8], ['Biceps', 0.7]] },
-  { name: 'Chin-ups', modality: 'Calisthenics', description: 'Supinated-grip pull-up', categories: ['Back'], equipment: ['Pull-up Bar'], muscles: [['Lats', 0.9], ['Biceps', 0.8]] },
-  { name: 'Push-ups', modality: 'Calisthenics', description: 'Standard bodyweight push-up', categories: ['Chest'], equipment: ['Bodyweight'], muscles: [['Chest', 0.85], ['Triceps', 0.6], ['Shoulders', 0.5]] },
-  { name: 'Diamond Push-ups', modality: 'Calisthenics', description: 'Close-grip push-up', categories: ['Arms'], equipment: ['Bodyweight'], muscles: [['Triceps', 0.85], ['Chest', 0.6]] },
-  { name: 'Pike Push-ups', modality: 'Calisthenics', description: 'Shoulder-focused push-up', categories: ['Shoulders'], equipment: ['Bodyweight'], muscles: [['Shoulders', 0.85], ['Triceps', 0.6]] },
-  { name: 'Tricep Dips', modality: 'Calisthenics', description: 'Parallel-bar dips', categories: ['Arms'], equipment: ['Dip Bars'], muscles: [['Triceps', 0.9], ['Chest', 0.6], ['Shoulders', 0.4]] },
-  { name: 'Muscle-up', modality: 'Calisthenics', description: 'Pull-up transitioning to dip', categories: ['Back'], equipment: ['Pull-up Bar'], muscles: [['Lats', 0.9], ['Triceps', 0.7], ['Chest', 0.6]] },
-  { name: 'Inverted Row', modality: 'Calisthenics', description: 'Horizontal bodyweight row', categories: ['Back'], equipment: ['Barbell'], muscles: [['Back', 0.85], ['Lats', 0.7], ['Biceps', 0.5]] },
-  { name: 'Bodyweight Squat', modality: 'Calisthenics', description: 'Air squat', categories: ['Legs'], equipment: ['Bodyweight'], muscles: [['Quadriceps', 0.8], ['Glutes', 0.7]] },
-  { name: 'Pistol Squat', modality: 'Calisthenics', description: 'Single-leg squat', categories: ['Legs'], equipment: ['Bodyweight'], muscles: [['Quadriceps', 0.9], ['Glutes', 0.8]] },
-  { name: 'Lunges', modality: 'Calisthenics', description: 'Walking lunges', categories: ['Legs'], equipment: ['Bodyweight'], muscles: [['Quadriceps', 0.85], ['Glutes', 0.8], ['Hamstrings', 0.6]] },
-  { name: 'Nordic Curl', modality: 'Calisthenics', description: 'Eccentric hamstring curl', categories: ['Legs'], equipment: ['Bodyweight'], muscles: [['Hamstrings', 0.95], ['Glutes', 0.5]] },
-  { name: 'Plank', modality: 'Calisthenics', description: 'Front plank hold', categories: ['Core'], equipment: ['Bodyweight'], muscles: [['Abs', 0.9], ['Obliques', 0.6]] },
-  { name: 'Hollow Body Hold', modality: 'Calisthenics', description: 'Hollow position isometric', categories: ['Core'], equipment: ['Bodyweight'], muscles: [['Abs', 0.95]] },
-  { name: 'Hanging Leg Raise', modality: 'Calisthenics', description: 'Hanging straight-leg raise', categories: ['Core'], equipment: ['Pull-up Bar'], muscles: [['Abs', 0.9], ['Obliques', 0.5]] },
-  { name: 'L-Sit Hold', modality: 'Calisthenics', description: 'L-sit isometric hold', categories: ['Core'], equipment: ['Dip Bars'], muscles: [['Abs', 0.95], ['Quadriceps', 0.4]] },
-  { name: 'Wall Sit', modality: 'Calisthenics', description: 'Isometric wall sit', categories: ['Legs'], equipment: ['Bodyweight'], muscles: [['Quadriceps', 0.9]] },
-  { name: 'Russian Twists', modality: 'Calisthenics', description: 'Seated rotational core', categories: ['Core'], equipment: ['Bodyweight'], muscles: [['Obliques', 0.9], ['Abs', 0.7]] },
+  for (const ex of EXERCISES) {
+    if (seen.has(ex.name)) problems.push(`duplicate exercise: ${ex.name}`);
+    seen.add(ex.name);
 
-  // ══════════════ CARDIO ══════════════ (choose a type; plan a target)
-  { name: 'Running', modality: 'Cardio', description: 'Outdoor or treadmill run', equipment: ['Treadmill'], muscles: [['Quadriceps', 0.6], ['Hamstrings', 0.6], ['Calves', 0.7], ['Glutes', 0.5]] },
-  { name: 'Walking', modality: 'Cardio', description: 'Brisk walk', equipment: ['Bodyweight'], muscles: [['Calves', 0.4], ['Quadriceps', 0.3]] },
-  { name: 'Cycling', modality: 'Cardio', description: 'Road or stationary bike', equipment: ['Bike'], muscles: [['Quadriceps', 0.7], ['Hamstrings', 0.5], ['Glutes', 0.6]] },
-  { name: 'Swimming', modality: 'Cardio', description: 'Lap swimming', equipment: ['Bodyweight'], muscles: [['Back', 0.6], ['Shoulders', 0.6], ['Lats', 0.5]] },
-  { name: 'Rowing', modality: 'Cardio', description: 'Indoor rowing erg', equipment: ['Rower'], muscles: [['Back', 0.6], ['Quadriceps', 0.5], ['Lats', 0.5]] },
-  { name: 'Jump Rope', modality: 'Cardio', description: 'Skipping intervals', equipment: ['Jump Rope'], muscles: [['Calves', 0.7], ['Shoulders', 0.3]] },
-  { name: 'Hiking', modality: 'Cardio', description: 'Trail / incline hike', equipment: ['Bodyweight'], muscles: [['Quadriceps', 0.6], ['Glutes', 0.6], ['Calves', 0.6]] },
+    if (!MODALITIES.includes(ex.modality)) {
+      problems.push(`${ex.name}: unknown modality "${ex.modality}"`);
+    }
+    if (!ex.description?.trim()) {
+      problems.push(`${ex.name}: no description`);
+    }
+    if (ex.muscles.length === 0) {
+      problems.push(`${ex.name}: no muscle links — it would log no fatigue at all`);
+    }
+    for (const [muscle, impact] of ex.muscles) {
+      if (!muscleNames.has(muscle)) problems.push(`${ex.name}: unknown muscle "${muscle}"`);
+      if (impact <= 0 || impact > 1) problems.push(`${ex.name}: impactFactor ${impact} for ${muscle} is outside 0–1`);
+    }
+    for (const category of ex.categories ?? []) {
+      if (!CATEGORIES.includes(category)) problems.push(`${ex.name}: unknown category "${category}"`);
+    }
+    for (const item of ex.equipment ?? []) {
+      if (!EQUIPMENT.includes(item)) problems.push(`${ex.name}: unknown equipment "${item}"`);
+    }
+  }
 
-  // ══════════════ MOBILITY ══════════════ (choose a flow)
-  { name: 'Cat-Cow Stretch', modality: 'Mobility', description: 'Dynamic spinal flexion/extension', equipment: ['Yoga Mat'], muscles: [['Back', 0.4], ['Lower Back', 0.4]] },
-  { name: 'Foam Rolling', modality: 'Mobility', description: 'Self-myofascial release', equipment: ['Foam Roller'], muscles: [['Quadriceps', 0.3], ['Back', 0.3]] },
-  { name: "World's Greatest Stretch", modality: 'Mobility', description: 'Full-body dynamic lunge stretch', equipment: ['Yoga Mat'], muscles: [['Hamstrings', 0.4], ['Glutes', 0.4], ['Back', 0.3]] },
-  { name: '90/90 Hip Switch', modality: 'Mobility', description: 'Seated hip internal/external rotation', equipment: ['Yoga Mat'], muscles: [['Glutes', 0.4]] },
-  { name: 'Couch Stretch', modality: 'Mobility', description: 'Hip-flexor and quad stretch', equipment: ['Yoga Mat'], muscles: [['Quadriceps', 0.4], ['Glutes', 0.3]] },
-  { name: 'Deep Squat Hold', modality: 'Mobility', description: 'Loaded/unloaded deep squat sit', equipment: ['Bodyweight'], muscles: [['Glutes', 0.4], ['Quadriceps', 0.4]] },
-  { name: 'Thoracic Opener', modality: 'Mobility', description: 'Bench thoracic extension', equipment: ['Bench'], muscles: [['Back', 0.4], ['Shoulders', 0.3]] },
-  { name: 'Hamstring Stretch', modality: 'Mobility', description: 'Static hamstring lengthening', equipment: ['Yoga Mat'], muscles: [['Hamstrings', 0.5]] },
-  { name: 'Pigeon Pose', modality: 'Mobility', description: 'Glute and hip external rotation', equipment: ['Yoga Mat'], muscles: [['Glutes', 0.5]] },
-  { name: 'Sun Salutation Flow', modality: 'Mobility', description: 'Full-body yoga vinyasa flow', equipment: ['Yoga Mat'], muscles: [['Back', 0.3], ['Hamstrings', 0.3], ['Shoulders', 0.3]] },
+  for (const [from, to] of RENAMES) {
+    if (!seen.has(to)) problems.push(`rename ${from} → ${to}: "${to}" is not in the catalogue`);
+    if (seen.has(from)) problems.push(`rename ${from} → ${to}: "${from}" is still in the catalogue`);
+  }
 
-  // ══════════════ WOD ══════════════ (movements you plan into a metcon)
-  { name: 'Burpees', modality: 'WOD', description: 'Full-body drop-and-jump', equipment: ['Bodyweight'], muscles: [['Chest', 0.6], ['Quadriceps', 0.7], ['Glutes', 0.7], ['Shoulders', 0.5]] },
-  { name: 'Thrusters', modality: 'WOD', description: 'Front squat into overhead press', equipment: ['Barbell'], muscles: [['Quadriceps', 0.8], ['Shoulders', 0.7], ['Glutes', 0.6]] },
-  { name: 'Wall Balls', modality: 'WOD', description: 'Squat and medicine-ball throw', equipment: ['Medicine Ball'], muscles: [['Quadriceps', 0.7], ['Shoulders', 0.6], ['Glutes', 0.6]] },
-  { name: 'Box Jumps', modality: 'WOD', description: 'Explosive jump to a box', equipment: ['Plyo Box'], muscles: [['Quadriceps', 0.7], ['Glutes', 0.7], ['Calves', 0.6]] },
-  { name: 'Kettlebell Swings', modality: 'WOD', description: 'Hip-hinge KB swing', equipment: ['Kettlebell'], muscles: [['Glutes', 0.8], ['Hamstrings', 0.7], ['Lower Back', 0.5]] },
-  { name: 'Double Unders', modality: 'WOD', description: 'Two rope passes per jump', equipment: ['Jump Rope'], muscles: [['Calves', 0.7], ['Shoulders', 0.4]] },
-  { name: 'Toes-to-Bar', modality: 'WOD', description: 'Hanging toes to the bar', equipment: ['Pull-up Bar'], muscles: [['Abs', 0.9], ['Lats', 0.5]] },
-  { name: 'Clean and Jerk', modality: 'WOD', description: 'Olympic ground-to-overhead lift', equipment: ['Barbell'], muscles: [['Quadriceps', 0.7], ['Shoulders', 0.7], ['Traps', 0.6], ['Glutes', 0.6]] },
-];
+  if (problems.length) {
+    throw new Error(`Catalogue is inconsistent:\n  ${problems.join('\n  ')}`);
+  }
 
-async function upsertByName<T extends { id: string }>(
-  model: { upsert: (a: any) => Promise<T> },
-  name: string,
-  extraCreate: Record<string, unknown> = {},
-): Promise<T> {
-  return model.upsert({
-    where: { name },
-    update: {},
-    create: { name, ...extraCreate },
+  // Not fatal — a stray tuning key does no harm beyond doing nothing — but it
+  // is almost always a rename that was only half applied, so say so loudly.
+  const strays = [
+    ...Object.keys(DAMAGE_OVERRIDES).map(name => ['damage', name] as const),
+    ...Object.keys(LOAD_FACTORS).map(name => ['loadFactor', name] as const),
+    ...Object.keys(REFERENCE_SPEED_KMH).map(name => ['referenceSpeed', name] as const),
+  ].filter(([, name]) => !seen.has(name));
+
+  for (const [table, name] of strays) {
+    console.warn(`  ! ${table} tuning for "${name}" matches no exercise — it will never be applied`);
+  }
+};
+
+// ── reference tables ───────────────────────────────────────────────────────
+const seedReferenceTables = async () => {
+  await runBatched([
+    ...MODALITIES.map(name =>
+      prisma.modality.upsert({ where: { name }, update: {}, create: { name } })),
+    ...CATEGORIES.map(name =>
+      prisma.exerciseCategory.upsert({ where: { name }, update: {}, create: { name } })),
+    ...EQUIPMENT.map(name =>
+      prisma.equipment.upsert({ where: { name }, update: {}, create: { name } })),
+    // Recovery half-lives are re-applied on every seed run so tuning them
+    // propagates without a migration.
+    ...MUSCLE_HALF_LIVES.map(([name, recoveryHalfLifeHours]) =>
+      prisma.muscle.upsert({
+        where: { name },
+        update: { recoveryHalfLifeHours },
+        create: { name, recoveryHalfLifeHours },
+      })),
+  ]);
+
+  const [modalities, categories, equipment, muscles] = await Promise.all([
+    prisma.modality.findMany({ select: { id: true, name: true } }),
+    prisma.exerciseCategory.findMany({ select: { id: true, name: true } }),
+    prisma.equipment.findMany({ select: { id: true, name: true } }),
+    prisma.muscle.findMany({ select: { id: true, name: true } }),
+  ]);
+
+  const byName = (rows: { id: string; name: string }[]) =>
+    new Map(rows.map(r => [r.name, r.id]));
+
+  return {
+    modalities: byName(modalities),
+    categories: byName(categories),
+    equipment: byName(equipment),
+    muscles: byName(muscles),
+  };
+};
+
+// ── renames ────────────────────────────────────────────────────────────────
+// An Exercise id is referenced by every logged set, strength estimate and
+// template that ever used it. Renaming in place keeps all of that; adding the
+// new name as a fresh row would orphan the athlete's history behind a name
+// they can no longer find, and leave a duplicate in the list.
+const applyRenames = async (): Promise<number> => {
+  const names = RENAMES.flat();
+  const rows = await prisma.exercise.findMany({
+    where: { name: { in: names }, createdByUserId: null },
+    select: { id: true, name: true },
   });
-}
+  const byName = new Map(rows.map(r => [r.name, r.id]));
+
+  const renames = RENAMES
+    // Only when the old name is there and the new one is not: a second run is
+    // then a no-op, and a row someone created by hand is never overwritten.
+    .filter(([from, to]) => byName.has(from) && !byName.has(to))
+    .map(([from, to]) =>
+      prisma.exercise.update({ where: { id: byName.get(from)! }, data: { name: to } }));
+
+  await runBatched(renames);
+  return renames.length;
+};
+
+// ── exercises ──────────────────────────────────────────────────────────────
+const seedExercises = async (modalities: Map<string, string>) => {
+  // Scoped to createdByUserId: null throughout. Exercise.name is unique in the
+  // schema but has no index behind it in the database, so a user's own custom
+  // exercise can legitimately share a name with a catalogue one — and a
+  // findFirst that ignored the owner would rewrite theirs.
+  const existing = await prisma.exercise.findMany({
+    where: { name: { in: EXERCISES.map(e => e.name) }, createdByUserId: null },
+    select: {
+      id: true, name: true, modalityId: true, description: true,
+      damageFactor: true, referenceSpeedKmh: true, loadFactor: true,
+    },
+  });
+  const byName = new Map(existing.map(e => [e.name, e]));
+
+  const desired = EXERCISES.map(ex => ({
+    name: ex.name,
+    modalityId: modalities.get(ex.modality)!,
+    description: ex.description,
+    damageFactor: damageFor(ex.name, ex.modality),
+    referenceSpeedKmh: referenceSpeedFor(ex.name),
+    loadFactor: loadFactorFor(ex.name),
+  }));
+
+  const missing = desired.filter(d => !byName.has(d.name));
+  if (missing.length) await prisma.exercise.createMany({ data: missing });
+
+  // Only the rows that actually differ, so a re-run of an unchanged catalogue
+  // costs one read and nothing else.
+  const changed = desired.filter(d => {
+    const row = byName.get(d.name);
+    if (!row) return false;
+    return row.modalityId !== d.modalityId
+      || row.description !== d.description
+      || row.damageFactor !== d.damageFactor
+      || row.referenceSpeedKmh !== d.referenceSpeedKmh
+      || row.loadFactor !== d.loadFactor;
+  });
+
+  await runBatched(changed.map(d => prisma.exercise.update({
+    where: { id: byName.get(d.name)!.id },
+    data: {
+      modalityId: d.modalityId,
+      description: d.description,
+      damageFactor: d.damageFactor,
+      referenceSpeedKmh: d.referenceSpeedKmh,
+      loadFactor: d.loadFactor,
+    },
+  })));
+
+  const rows = await prisma.exercise.findMany({
+    where: { name: { in: EXERCISES.map(e => e.name) }, createdByUserId: null },
+    select: { id: true, name: true },
+  });
+
+  return {
+    ids: new Map(rows.map(r => [r.name, r.id])),
+    created: missing.length,
+    updated: changed.length,
+  };
+};
+
+// ── links ──────────────────────────────────────────────────────────────────
+// Stale links are deleted, not just left behind. The seed is the authority on
+// what a catalogue exercise needs, and it has to be able to take something
+// away: 'Barbell Overhead Press' was tagged Barbell AND Dumbbell, which under
+// canPerform's all-of rule meant it needed both, and no amount of upserting
+// would have removed the wrong one.
+const seedLinks = async (
+  exerciseIds: Map<string, string>,
+  ref: { categories: Map<string, string>; muscles: Map<string, string>; equipment: Map<string, string> },
+) => {
+  const managedIds = [...exerciseIds.values()];
+  const key = (a: string, b: string) => `${a}::${b}`;
+
+  const wantCategories = new Map<string, { exerciseId: string; categoryId: string }>();
+  const wantMuscles = new Map<string, { muscleId: string; exerciseId: string; impactFactor: number }>();
+  const wantEquipment = new Map<string, { equipmentId: string; exerciseId: string }>();
+
+  for (const ex of EXERCISES) {
+    const exerciseId = exerciseIds.get(ex.name)!;
+    for (const name of ex.categories ?? []) {
+      const categoryId = ref.categories.get(name)!;
+      wantCategories.set(key(exerciseId, categoryId), { exerciseId, categoryId });
+    }
+    for (const [name, impactFactor] of ex.muscles) {
+      const muscleId = ref.muscles.get(name)!;
+      wantMuscles.set(key(exerciseId, muscleId), { muscleId, exerciseId, impactFactor });
+    }
+    for (const name of ex.equipment ?? []) {
+      const equipmentId = ref.equipment.get(name)!;
+      wantEquipment.set(key(exerciseId, equipmentId), { equipmentId, exerciseId });
+    }
+  }
+
+  const [haveCategories, haveMuscles, haveEquipment] = await Promise.all([
+    prisma.exerciseCategoryMap.findMany({ where: { exerciseId: { in: managedIds } } }),
+    prisma.muscleExercise.findMany({ where: { exerciseId: { in: managedIds } } }),
+    prisma.equipmentExercise.findMany({ where: { exerciseId: { in: managedIds } } }),
+  ]);
+
+  const staleCategories = haveCategories.filter(l => !wantCategories.has(key(l.exerciseId, l.categoryId)));
+  const staleMuscles = haveMuscles.filter(l => !wantMuscles.has(key(l.exerciseId, l.muscleId)));
+  const staleEquipment = haveEquipment.filter(l => !wantEquipment.has(key(l.exerciseId, l.equipmentId)));
+
+  const haveCategoryKeys = new Set(haveCategories.map(l => key(l.exerciseId, l.categoryId)));
+  const haveEquipmentKeys = new Set(haveEquipment.map(l => key(l.exerciseId, l.equipmentId)));
+  // impactFactor is tuning, so an existing muscle link still has to be checked
+  // rather than merely counted as present.
+  const haveMuscleFactors = new Map(haveMuscles.map(l => [key(l.exerciseId, l.muscleId), l.impactFactor]));
+
+  const newCategories = [...wantCategories.values()].filter(l => !haveCategoryKeys.has(key(l.exerciseId, l.categoryId)));
+  const newEquipment = [...wantEquipment.values()].filter(l => !haveEquipmentKeys.has(key(l.exerciseId, l.equipmentId)));
+  const newMuscles = [...wantMuscles.values()].filter(l => !haveMuscleFactors.has(key(l.exerciseId, l.muscleId)));
+  const retunedMuscles = [...wantMuscles.values()].filter(l => {
+    const current = haveMuscleFactors.get(key(l.exerciseId, l.muscleId));
+    return current !== undefined && current !== l.impactFactor;
+  });
+
+  await Promise.all([
+    newCategories.length ? prisma.exerciseCategoryMap.createMany({ data: newCategories }) : null,
+    newMuscles.length ? prisma.muscleExercise.createMany({ data: newMuscles }) : null,
+    newEquipment.length ? prisma.equipmentExercise.createMany({ data: newEquipment }) : null,
+  ]);
+
+  await runBatched(retunedMuscles.map(l => prisma.muscleExercise.update({
+    where: { muscleId_exerciseId: { muscleId: l.muscleId, exerciseId: l.exerciseId } },
+    data: { impactFactor: l.impactFactor },
+  })));
+
+  await Promise.all([
+    staleCategories.length
+      ? prisma.exerciseCategoryMap.deleteMany({
+          where: { OR: staleCategories.map(({ exerciseId, categoryId }) => ({ exerciseId, categoryId })) },
+        })
+      : null,
+    staleMuscles.length
+      ? prisma.muscleExercise.deleteMany({
+          where: { OR: staleMuscles.map(({ exerciseId, muscleId }) => ({ exerciseId, muscleId })) },
+        })
+      : null,
+    staleEquipment.length
+      ? prisma.equipmentExercise.deleteMany({
+          where: { OR: staleEquipment.map(({ exerciseId, equipmentId }) => ({ exerciseId, equipmentId })) },
+        })
+      : null,
+  ]);
+
+  return {
+    created: newCategories.length + newMuscles.length + newEquipment.length,
+    retuned: retunedMuscles.length,
+    removed: staleCategories.length + staleMuscles.length + staleEquipment.length,
+  };
+};
 
 async function main() {
   console.log('Seeding database...');
+  validateCatalogue();
 
-  // reference tables
-  const modalities: Record<string, { id: string }> = {};
-  for (const n of MODALITIES) modalities[n] = await upsertByName(prisma.modality, n);
+  const ref = await seedReferenceTables();
 
-  const categories: Record<string, { id: string }> = {};
-  for (const n of CATEGORIES) categories[n] = await upsertByName(prisma.exerciseCategory, n);
+  const renamed = await applyRenames();
+  if (renamed) console.log(`  renamed ${renamed} exercise${renamed === 1 ? '' : 's'} in place`);
 
-  // Recovery half-lives are re-applied on every seed run so tuning them here
-  // propagates without a migration.
-  const muscles: Record<string, { id: string }> = {};
-  for (const [name, recoveryHalfLifeHours] of MUSCLE_HALF_LIVES) {
-    muscles[name] = await prisma.muscle.upsert({
-      where: { name },
-      update: { recoveryHalfLifeHours },
-      create: { name, recoveryHalfLifeHours },
-    });
-  }
+  const exercises = await seedExercises(ref.modalities);
+  console.log(`  exercises: ${exercises.created} created, ${exercises.updated} updated, ${EXERCISES.length} total in the catalogue`);
 
-  const equipment: Record<string, { id: string }> = {};
-  for (const n of EQUIPMENT) equipment[n] = await upsertByName(prisma.equipment, n);
-
-  // exercises + relationships
-  // NB: Exercise's name-uniqueness (@@unique([name])) isn't guaranteed to exist
-  // as a DB constraint, so we look up by name rather than upsert-on-conflict.
-  for (const ex of EXERCISES) {
-    const modalityId = modalities[ex.modality].id;
-    // Re-applied on every seed run, so tuning the tables above propagates
-    // without another migration.
-    const damageFactor = damageFor(ex.name, ex.modality);
-    const referenceSpeedKmh = referenceSpeedFor(ex.name);
-    const loadFactor = loadFactorFor(ex.name);
-
-    const existing = await prisma.exercise.findFirst({ where: { name: ex.name } });
-    const exercise = existing
-      ? await prisma.exercise.update({
-          where: { id: existing.id },
-          data: {
-            modalityId,
-            description: ex.description ?? null,
-            damageFactor,
-            referenceSpeedKmh,
-            loadFactor,
-          },
-        })
-      : await prisma.exercise.create({
-          data: {
-            name: ex.name,
-            modalityId,
-            description: ex.description ?? null,
-            damageFactor,
-            referenceSpeedKmh,
-            loadFactor,
-          },
-        });
-
-    for (const catName of ex.categories ?? []) {
-      const categoryId = categories[catName].id;
-      await prisma.exerciseCategoryMap.upsert({
-        where: { exerciseId_categoryId: { exerciseId: exercise.id, categoryId } },
-        update: {},
-        create: { exerciseId: exercise.id, categoryId },
-      });
-    }
-
-    for (const [muscleName, impactFactor] of ex.muscles) {
-      const muscleId = muscles[muscleName].id;
-      await prisma.muscleExercise.upsert({
-        where: { muscleId_exerciseId: { muscleId, exerciseId: exercise.id } },
-        update: { impactFactor },
-        create: { muscleId, exerciseId: exercise.id, impactFactor },
-      });
-    }
-
-    for (const eqName of ex.equipment ?? []) {
-      const equipmentId = equipment[eqName].id;
-      await prisma.equipmentExercise.upsert({
-        where: { equipmentId_exerciseId: { equipmentId, exerciseId: exercise.id } },
-        update: {},
-        create: { equipmentId, exerciseId: exercise.id },
-      });
-    }
-  }
+  const links = await seedLinks(exercises.ids, ref);
+  console.log(`  links: ${links.created} created, ${links.retuned} retuned, ${links.removed} removed`);
 
   // counts per modality for a quick sanity check
-  for (const n of MODALITIES) {
-    const count = await prisma.exercise.count({ where: { modality: { name: n } } });
-    console.log(`  ${n}: ${count} exercises`);
-  }
+  const counts = await Promise.all(MODALITIES.map(async name => [
+    name,
+    await prisma.exercise.count({ where: { modality: { name }, createdByUserId: null } }),
+  ] as const));
+  for (const [name, count] of counts) console.log(`  ${name}: ${count} exercises`);
+
   console.log('Seeding completed!');
 }
 

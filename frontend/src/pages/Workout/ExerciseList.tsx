@@ -1,17 +1,38 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { Exercise } from '../../types'
 import { exerciseEmoji } from './helpers'
 
-const SUB_FILTERS: Record<string, string[]> = {
-  Legs:      ['All', 'Quads', 'Hamstrings', 'Glutes', 'Calves'],
-  Chest:     ['All', 'Upper', 'Mid', 'Lower'],
-  Back:      ['All', 'Lats', 'Traps', 'Lower Back'],
-  Shoulders: ['All', 'Front Delt', 'Side Delt', 'Rear Delt'],
-  Arms:      ['All', 'Biceps', 'Triceps', 'Forearms'],
-  Core:      ['All', 'Abs', 'Obliques'],
+// Muscle sub-filters, as label → the muscle names the API actually returns.
+//
+// These were bare strings matched with `includes` against the muscle name, and
+// most of them could never match: "Quads" is not a substring of "Quadriceps",
+// and "Upper" / "Side Delt" name regions of a muscle the model does not split.
+// Chest and Shoulders therefore have no muscle row at all — the equipment row
+// is what narrows those.
+const MUSCLE_FILTERS: Record<string, { label: string; muscles: string[] }[]> = {
+  Legs: [
+    { label: 'Quads', muscles: ['Quadriceps'] },
+    { label: 'Hamstrings', muscles: ['Hamstrings'] },
+    { label: 'Glutes', muscles: ['Glutes'] },
+    { label: 'Calves', muscles: ['Calves'] },
+  ],
+  Back: [
+    { label: 'Lats', muscles: ['Lats'] },
+    { label: 'Traps', muscles: ['Traps'] },
+    { label: 'Lower Back', muscles: ['Lower Back'] },
+  ],
+  Arms: [
+    { label: 'Biceps', muscles: ['Biceps'] },
+    { label: 'Triceps', muscles: ['Triceps'] },
+    { label: 'Forearms', muscles: ['Forearms'] },
+  ],
+  Core: [
+    { label: 'Abs', muscles: ['Abs'] },
+    { label: 'Obliques', muscles: ['Obliques'] },
+  ],
 }
 
 // How the modality reads in the header + what the tray does next
@@ -35,24 +56,46 @@ export default function ExerciseList() {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
   const [subFilter, setSubFilter] = useState('All')
+  const [equipmentFilter, setEquipmentFilter] = useState('All')
   const [isLoading, setIsLoading] = useState(true)
 
-  const subFilters = category ? (SUB_FILTERS[category] ?? ['All']) : ['All']
+  const muscleFilters = category ? (MUSCLE_FILTERS[category] ?? []) : []
   const meta = MODALITY_META[modality] ?? MODALITY_META.Strength
 
   useEffect(() => {
     setIsLoading(true)
+    // Both filters are about the list that is on screen, so neither survives a
+    // change of it — a stuck "Cable Machine" on a screen with none reads as an
+    // empty catalogue.
+    setSubFilter('All')
+    setEquipmentFilter('All')
     // Strength narrows by muscle group; every other modality lists by modality only.
     exerciseService.getExercises(category ? { category, modality } : { modality })
       .then(setExercises)
       .finally(() => setIsLoading(false))
   }, [category, modality])
 
+  // Built from what came back rather than a fixed list, so it can never offer a
+  // filter that empties the screen. Worth a row now that the same movement
+  // exists in barbell, dumbbell, machine and cable versions.
+  const equipmentOptions = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const ex of exercises) {
+      for (const item of ex.equipment) counts.set(item, (counts.get(item) ?? 0) + 1)
+    }
+    return [...counts.entries()]
+      .filter(([, n]) => n > 1)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name)
+  }, [exercises])
+
+  const activeMuscles = muscleFilters.find(f => f.label === subFilter)?.muscles
+
   const filtered = exercises.filter(ex => {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase())
-    const matchesSub = !category || subFilter === 'All' ||
-      ex.muscles.some(m => m.name.toLowerCase().includes(subFilter.toLowerCase()))
-    return matchesSearch && matchesSub
+    const matchesSub = !activeMuscles || ex.muscles.some(m => activeMuscles.includes(m.name))
+    const matchesEquipment = equipmentFilter === 'All' || ex.equipment.includes(equipmentFilter)
+    return matchesSearch && matchesSub && matchesEquipment
   })
 
   // Suggestions must be things they can actually do today: fresh enough, not
@@ -113,14 +156,34 @@ export default function ExerciseList() {
       </div>
 
       {/* Sub-filters (strength muscle groups only) */}
-      {category && (
-        <div className="px-5 mb-3">
+      {muscleFilters.length > 0 && (
+        <div className="px-5 mb-2">
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {subFilters.map(f => (
+            {['All', ...muscleFilters.map(f => f.label)].map(f => (
               <button key={f} onClick={() => setSubFilter(f)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all
                            ${subFilter === f
                              ? 'bg-brand-teal text-black border-brand-teal'
+                             : 'bg-dark-800 text-dark-300 border-dark-600'}`}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Equipment. The catalogue carries the same movement on a barbell, a
+          dumbbell, a machine and a cable, so "what is in front of me" narrows
+          the list faster than anything else. Second colour so the two rows do
+          not read as one set of chips. */}
+      {equipmentOptions.length > 1 && (
+        <div className="px-5 mb-3">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {['All', ...equipmentOptions].map(f => (
+              <button key={f} onClick={() => setEquipmentFilter(f)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all
+                           ${equipmentFilter === f
+                             ? 'bg-dark-100 text-black border-dark-100'
                              : 'bg-dark-800 text-dark-300 border-dark-600'}`}>
                 {f}
               </button>

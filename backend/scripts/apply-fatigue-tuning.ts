@@ -1,6 +1,6 @@
 /**
  * Applies the fatigue-model tuning tables — muscle recovery half-lives, and
- * per-exercise damage factors and reference speeds.
+ * per-exercise damage factors, reference speeds and load factors.
  *
  *   npx tsx scripts/apply-fatigue-tuning.ts
  *
@@ -20,6 +20,7 @@ import {
   MUSCLE_HALF_LIVES,
   DAMAGE_OVERRIDES,
   REFERENCE_SPEED_KMH,
+  LOAD_FACTORS,
 } from '../prisma/fatigue-tuning'
 
 const prisma = new PrismaClient()
@@ -66,7 +67,7 @@ async function main() {
       UPDATE "Exercise" AS e
       SET "damageFactor" = ${damage}::double precision
       FROM "Modality" AS m
-      WHERE e."modalityId" = m.id AND m.name = ${modality}
+      WHERE e."modalityId" = m.id AND m.name = ${modality} AND e."createdByUserId" IS NULL
     `)
     console.log(`  damage ${String(damage).padEnd(4)} → ${String(n).padStart(3)} ${modality} exercises`)
   }
@@ -79,14 +80,15 @@ async function main() {
     UPDATE "Exercise" AS e
     SET "damageFactor" = v.damage
     FROM (VALUES ${Prisma.join(damageRows)}) AS v(name, damage)
-    WHERE e.name = v.name
+    WHERE e.name = v.name AND e."createdByUserId" IS NULL
   `)
   console.log(`  damage overrides: ${overrides} of ${damageRows.length} matched`)
 
   // ── reference speeds ──────────────────────────────────────────────────
   // Cleared first so removing an entry from the table actually takes effect.
   await withRetry('clear speeds', () => prisma.$executeRaw`
-    UPDATE "Exercise" SET "referenceSpeedKmh" = NULL WHERE "referenceSpeedKmh" IS NOT NULL
+    UPDATE "Exercise" SET "referenceSpeedKmh" = NULL
+    WHERE "referenceSpeedKmh" IS NOT NULL AND "createdByUserId" IS NULL
   `)
   const speedRows = Object.entries(REFERENCE_SPEED_KMH).map(
     ([name, kmh]) => Prisma.sql`(${name}, ${kmh}::double precision)`
@@ -95,19 +97,40 @@ async function main() {
     UPDATE "Exercise" AS e
     SET "referenceSpeedKmh" = v.kmh
     FROM (VALUES ${Prisma.join(speedRows)}) AS v(name, kmh)
-    WHERE e.name = v.name
+    WHERE e.name = v.name AND e."createdByUserId" IS NULL
   `)
   console.log(`  reference speeds: ${speeds} of ${speedRows.length} matched`)
 
+  // ── load factors ──────────────────────────────────────────────────────
+  // Cleared first, same as the speeds: an exercise dropped from the table
+  // should stop suggesting a weight, not keep the last one it was given.
+  await withRetry('clear load factors', () => prisma.$executeRaw`
+    UPDATE "Exercise" SET "loadFactor" = NULL
+    WHERE "loadFactor" IS NOT NULL AND "createdByUserId" IS NULL
+  `)
+  const loadRows = Object.entries(LOAD_FACTORS).map(
+    ([name, factor]) => Prisma.sql`(${name}, ${factor}::double precision)`
+  )
+  const loads = await withRetry('load factors', () => prisma.$executeRaw`
+    UPDATE "Exercise" AS e
+    SET "loadFactor" = v.factor
+    FROM (VALUES ${Prisma.join(loadRows)}) AS v(name, factor)
+    WHERE e.name = v.name AND e."createdByUserId" IS NULL
+  `)
+  console.log(`  load factors: ${loads} of ${loadRows.length} matched`)
+
   // ── report ────────────────────────────────────────────────────────────
   const sample = await withRetry('verify', () => prisma.exercise.findMany({
-    where: { name: { in: ['Running', 'Cycling', 'Swimming', 'Romanian Deadlift', 'Leg Press', 'Box Jumps'] } },
-    select: { name: true, damageFactor: true, referenceSpeedKmh: true },
+    where: {
+      name: { in: ['Running', 'Cycling', 'Swimming', 'Romanian Deadlift', 'Leg Press', 'Box Jump'] },
+      createdByUserId: null,
+    },
+    select: { name: true, damageFactor: true, referenceSpeedKmh: true, loadFactor: true },
     orderBy: { name: 'asc' },
   }))
   console.log('\n  applied:')
   for (const e of sample) {
-    console.log(`    ${e.name.padEnd(20)} damage ${String(e.damageFactor).padEnd(5)} speed ${e.referenceSpeedKmh ?? '—'}`)
+    console.log(`    ${e.name.padEnd(20)} damage ${String(e.damageFactor).padEnd(5)} speed ${String(e.referenceSpeedKmh ?? '—').padEnd(5)} load ${e.loadFactor ?? '—'}`)
   }
 
   const run = sample.find(e => e.name === 'Running')
