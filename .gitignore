@@ -66,6 +66,7 @@ Thumbs.db
 # Working notes and session records — local only, not part of the codebase
 docs/
 CLAUDE.md
+TODO.md
 
 # Capacitor
 /node_modules
