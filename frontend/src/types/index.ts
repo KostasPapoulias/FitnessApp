@@ -117,8 +117,11 @@ export interface Exercise {
   categories: string[]
   equipment: string[]
   isCustom: boolean
-  fatigueWarning: boolean
-  maxMuscleFatigue: number
+  // Only the catalogue carries these: they describe how fatigued the athlete
+  // is right now, not the movement. An exercise reached through a saved plan
+  // arrives without them.
+  fatigueWarning?: boolean
+  maxMuscleFatigue?: number
   /** Loads a muscle flagged "work around it" in Training Setup. */
   injuryCaution?: boolean
   /** Needs kit not ticked in Training Setup. Still listed, sorted last. */

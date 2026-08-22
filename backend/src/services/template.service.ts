@@ -140,20 +140,80 @@ export const validateTemplateInput = async (
   }
 }
 
+const EXERCISE_INCLUDE = {
+  modality: true,
+  muscleLinks: { include: { muscle: true } },
+  categoryLinks: { include: { category: true } },
+  equipmentLinks: { include: { equipment: true } },
+}
+
 const TEMPLATE_INCLUDE = {
   exercises: {
     orderBy: { orderIndex: 'asc' as const },
     include: {
-      exercise: { include: { modality: true } },
+      exercise: { include: EXERCISE_INCLUDE },
       sets: { orderBy: { setNumber: 'asc' as const } },
     },
   },
 }
 
+/**
+ * Flatten an exercise into the shape the catalogue endpoint serves.
+ *
+ * The planner and the live views read exercises from either source and cannot
+ * tell them apart, so the two must agree. This file used to hand back Prisma's
+ * raw row, where `modality` is the related RECORD rather than its name and the
+ * muscle/category/equipment links are still link rows. Both differences were
+ * crashes, not cosmetic: React refuses to render an object as a child, so
+ * opening a saved plan blanked the whole app, and `exercise.muscles` being
+ * absent took the live session down one screen later.
+ *
+ * Fatigue flags are deliberately not reproduced here. They describe the
+ * athlete at this moment rather than the plan, they cost a lookup per request,
+ * and no screen in the planner shows them.
+ */
+const serializeExercise = (exercise: {
+  id: string
+  name: string
+  description: string | null
+  createdByUserId: string | null
+  modality: { name: string }
+  muscleLinks: { muscleId: string; impactFactor: number; muscle: { name: string } }[]
+  categoryLinks: { category: { name: string } }[]
+  equipmentLinks: { equipment: { name: string } }[]
+}) => ({
+  id: exercise.id,
+  name: exercise.name,
+  description: exercise.description,
+  modality: exercise.modality.name,
+  muscles: exercise.muscleLinks.map(ml => ({
+    id: ml.muscleId,
+    name: ml.muscle.name,
+    impactFactor: ml.impactFactor,
+  })),
+  categories: exercise.categoryLinks.map(cl => cl.category.name),
+  equipment: exercise.equipmentLinks.map(el => el.equipment.name),
+  isCustom: exercise.createdByUserId !== null,
+})
+
+type RawTemplateExercise = { exercise: Parameters<typeof serializeExercise>[0] }
+
+/** Everything else on the row is passed through untouched — including Dates,
+ *  which callers such as the AI tool layer still format themselves. */
+const serializeTemplate = <T extends { exercises: RawTemplateExercise[] }>(template: T) => ({
+  ...template,
+  exercises: template.exercises.map(te => ({ ...te, exercise: serializeExercise(te.exercise) })),
+})
+
+const serializeScheduled = <T extends { template: { exercises: RawTemplateExercise[] } }>(slot: T) => ({
+  ...slot,
+  template: serializeTemplate(slot.template),
+})
+
 export const createTemplate = async (userId: string, input: TemplateInput) => {
   const clean = await validateTemplateInput(input)
 
-  return prisma.workoutTemplate.create({
+  return serializeTemplate(await prisma.workoutTemplate.create({
     data: {
       userId,
       name: clean.name,
@@ -174,24 +234,28 @@ export const createTemplate = async (userId: string, input: TemplateInput) => {
       },
     },
     include: TEMPLATE_INCLUDE,
-  })
+  }))
 }
 
 export const listTemplates = async (
   userId: string,
   { includeArchived = false }: { includeArchived?: boolean } = {}
-) =>
-  prisma.workoutTemplate.findMany({
+) => {
+  const templates = await prisma.workoutTemplate.findMany({
     where: { userId, ...(includeArchived ? {} : { archivedAt: null }) },
     include: TEMPLATE_INCLUDE,
     orderBy: [{ archivedAt: 'asc' }, { lastPerformedAt: 'desc' }, { createdAt: 'desc' }],
   })
+  return templates.map(serializeTemplate)
+}
 
-export const getTemplate = async (userId: string, id: string) =>
-  prisma.workoutTemplate.findFirst({
+export const getTemplate = async (userId: string, id: string) => {
+  const template = await prisma.workoutTemplate.findFirst({
     where: { id, userId },
     include: TEMPLATE_INCLUDE,
   })
+  return template && serializeTemplate(template)
+}
 
 /**
  * Replace a template's contents.
@@ -208,7 +272,7 @@ export const updateTemplate = async (userId: string, id: string, input: Template
 
   return prisma.$transaction(async tx => {
     await tx.templateExercise.deleteMany({ where: { templateId: id } })
-    return tx.workoutTemplate.update({
+    return serializeTemplate(await tx.workoutTemplate.update({
       where: { id },
       data: {
         name: clean.name,
@@ -228,7 +292,7 @@ export const updateTemplate = async (userId: string, id: string, input: Template
         },
       },
       include: TEMPLATE_INCLUDE,
-    })
+    }))
   })
 }
 
@@ -237,11 +301,11 @@ export const setTemplateArchived = async (userId: string, id: string, archived: 
   const owned = await prisma.workoutTemplate.findFirst({ where: { id, userId }, select: { id: true } })
   if (!owned) return null
 
-  return prisma.workoutTemplate.update({
+  return serializeTemplate(await prisma.workoutTemplate.update({
     where: { id },
     data: { archivedAt: archived ? new Date() : null },
     include: TEMPLATE_INCLUDE,
-  })
+  }))
 }
 
 /**
@@ -360,7 +424,7 @@ export const scheduleTemplate = async (
     notificationId = notification.id
   }
 
-  return prisma.scheduledWorkout.create({
+  return serializeScheduled(await prisma.scheduledWorkout.create({
     data: {
       userId,
       templateId,
@@ -370,18 +434,20 @@ export const scheduleTemplate = async (
       status: 'standby',
     },
     include: SCHEDULED_INCLUDE,
-  })
+  }))
 }
 
 export const listScheduled = async (
   userId: string,
   { status }: { status?: string } = {}
-) =>
-  prisma.scheduledWorkout.findMany({
+) => {
+  const slots = await prisma.scheduledWorkout.findMany({
     where: { userId, ...(status ? { status } : {}) },
     include: SCHEDULED_INCLUDE,
     orderBy: { scheduledFor: 'asc' },
   })
+  return slots.map(serializeScheduled)
+}
 
 /**
  * Cancel a standby slot, withdrawing its reminder.
@@ -400,11 +466,11 @@ export const cancelScheduled = async (userId: string, id: string) => {
     })
   }
 
-  return prisma.scheduledWorkout.update({
+  return serializeScheduled(await prisma.scheduledWorkout.update({
     where: { id },
     data: { status: 'cancelled', notificationId: null },
     include: SCHEDULED_INCLUDE,
-  })
+  }))
 }
 
 /**
@@ -437,11 +503,11 @@ export const startScheduled = async (userId: string, id: string, sessionId: stri
       where: { id: scheduled.templateId },
       data: { timesPerformed: { increment: 1 }, lastPerformedAt: new Date() },
     })
-    return tx.scheduledWorkout.update({
+    return serializeScheduled(await tx.scheduledWorkout.update({
       where: { id },
       data: { status: 'started', sessionId },
       include: SCHEDULED_INCLUDE,
-    })
+    }))
   })
 }
 
@@ -454,9 +520,9 @@ export const closeScheduled = async (
   const scheduled = await prisma.scheduledWorkout.findFirst({ where: { id, userId }, select: { id: true } })
   if (!scheduled) return null
 
-  return prisma.scheduledWorkout.update({
+  return serializeScheduled(await prisma.scheduledWorkout.update({
     where: { id },
     data: { status, completedAt: status === 'completed' ? new Date() : null },
     include: SCHEDULED_INCLUDE,
-  })
+  }))
 }
