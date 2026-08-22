@@ -18,6 +18,7 @@ import securityRoutes from './routes/security.routes';
 import configRoutes from './routes/config.routes';
 import templateRoutes from './routes/template.routes';
 import settingsRoutes from './routes/settings.routes';
+import progressRoutes from './routes/progress.routes';
 import { startNotificationScheduler } from './lib/notificationScheduler';
 import { startSessionSweeper } from './lib/sessionSweeper';
 import { apiLimiter } from './middleware/rateLimit.middleware';
@@ -77,6 +78,7 @@ app.use('/api/security', securityRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/progress', progressRoutes);
 
 
 // 404 handler

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import ExerciseHistoryCard from '../../components/progress/ExerciseHistoryCard'
 
 export default function ExerciseDetail() {
   const navigate = useNavigate()
@@ -146,34 +147,12 @@ export default function ExerciseDetail() {
             </div>
           )}
 
-          {/* Personal best */}
-          <div className="p-4">
-            <p className="text-dark-300 text-xs uppercase tracking-wider mb-1">
-              Your Personal Best
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-[#0d2218] border border-brand-teal/30
-                              rounded-xl p-3 text-center">
-                <p className="text-brand-teal text-lg font-bold">
-                  {exercise.personalBest
-                    ? `${exercise.personalBest.weight}kg`
-                    : '—'
-                  }
-                </p>
-                <p className="text-dark-400 text-xs mt-1">Max weight</p>
-              </div>
-              <div className="bg-dark-700 rounded-xl p-3 text-center">
-                <p className="text-white text-lg font-bold">
-                  {exercise.timesLogged ?? 0}×
-                </p>
-                <p className="text-dark-400 text-xs mt-1">Times logged</p>
-              </div>
-              <div className="bg-dark-700 rounded-xl p-3 text-center">
-                <p className="text-white text-lg font-bold">—</p>
-                <p className="text-dark-400 text-xs mt-1">Avg RPE</p>
-              </div>
-            </div>
-          </div>
+          {/* Your history.
+              Replaces a "Personal Best" block whose third tile was a hardcoded
+              dash and whose "times logged" counted abandoned sessions. This
+              reads the athlete's own sets — the estimate the app actually uses,
+              the top set behind it, and what they did the last few times. */}
+          <ExerciseHistoryCard exerciseId={exerciseId} />
         </div>
       </div>
 

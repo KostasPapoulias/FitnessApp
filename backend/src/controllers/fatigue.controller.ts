@@ -12,7 +12,7 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
   try {
     const {
       muscles, readinessScore, status, fitnessLevel,
-      systemicFatigue, systemicRecoveryTargetAt,
+      systemicFatigue, systemicRecoveryTargetAt, sleep, sleepNote,
     } = await getUserReadiness(req.userId!)
 
     res.json({
@@ -25,7 +25,19 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
         fitnessLevel,
         // Whole-body fatigue: no muscle row can express what a long run costs
         systemicFatigue,
-        systemicRecoveryTargetAt
+        systemicRecoveryTargetAt,
+        // Sleep's share of the score above, and whether it had one. Sent even
+        // when it did not apply: "no sleep logged" is the answer to why the
+        // number did not move, and the client must not have to infer it.
+        sleep: {
+          adjustment: sleep.adjustment,
+          applied: sleep.applied,
+          reason: sleep.reason,
+          durationMin: sleep.durationMin,
+          sleepScore: sleep.sleepScore,
+          sleepDate: sleep.sleepDate,
+          note: sleepNote,
+        },
       }
     })
 

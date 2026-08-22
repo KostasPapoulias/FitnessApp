@@ -11,6 +11,8 @@ import AIChat from './pages/AIChat'
 import AIChatHub from './pages/AIChatHub'
 import Plans from './pages/Plans'
 import Profile from './pages/Profile'
+import Progress from './pages/Progress'
+import History from './pages/History'
 import Onboarding from './pages/Onboarding'
 import TrainingSetup from './pages/TrainingSetup'
 import NotificationSettings from './pages/NotificationSettings'
@@ -152,6 +154,8 @@ export default function App() {
           <Route path="ai" element={<AIChatHub />} />
           <Route path="ai/chat/:threadId" element={<AIChat />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="progress" element={<Progress />} />
+          <Route path="history" element={<History />} />
           <Route path="training-setup" element={<TrainingSetup />} />
           <Route path="profile/notifications" element={<NotificationSettings />} />
           <Route path="profile/security" element={<SecuritySettings />} />

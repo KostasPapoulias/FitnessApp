@@ -136,19 +136,70 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// POST /api/profile/sleep
+/**
+ * POST /api/profile/sleep
+ *
+ * One row per night, replacing any existing one for the same date. Sleep now
+ * moves the readiness score, and two rows for one night made *which* value
+ * counted depend on row ordering — logging 8h and then correcting it to 5h
+ * could leave the 8h in force. Re-logging is also the normal way to fix a
+ * mis-dragged slider, and that has to be a correction rather than a second
+ * night.
+ *
+ * Bounds are checked here for the same reason: an out-of-range duration is no
+ * longer just a bad chart point, it is readiness input.
+ */
 export const logSleep = async (req: AuthRequest, res: Response) => {
   try {
     const { sleepDate, durationMin, sleepScore, notes } = req.body
 
-    const log = await prisma.sleepLog.create({
-      data: {
-        userId: req.userId!,
-        sleepDate: new Date(sleepDate),
-        durationMin,
-        sleepScore,
-        notes
+    const parsedDate = sleepDate ? new Date(sleepDate) : new Date()
+    if (Number.isNaN(parsedDate.getTime())) {
+      res.status(400).json({ success: false, error: 'sleepDate is not a valid date' })
+      return
+    }
+    // Normalised to UTC midnight so "the same night" is a single value. The
+    // client sends a bare YYYY-MM-DD, which already parses this way; a client
+    // that sends a full timestamp must not create a second row for one night.
+    const night = new Date(Date.UTC(
+      parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate()
+    ))
+
+    const minutes = Number(durationMin)
+    if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 24 * 60) {
+      res.status(400).json({
+        success: false, error: 'durationMin must be between 1 and 1440'
+      })
+      return
+    }
+
+    let score: number | null = null
+    if (sleepScore != null) {
+      score = Number(sleepScore)
+      if (!Number.isFinite(score) || score < 0 || score > 100) {
+        res.status(400).json({
+          success: false, error: 'sleepScore must be between 0 and 100'
+        })
+        return
       }
+    }
+
+    // Not an upsert: SleepLog has no unique constraint on (userId, sleepDate),
+    // and adding one would need a migration that first has to decide what to do
+    // with the duplicate rows already in the table.
+    const log = await prisma.$transaction(async tx => {
+      await tx.sleepLog.deleteMany({
+        where: { userId: req.userId!, sleepDate: night }
+      })
+      return tx.sleepLog.create({
+        data: {
+          userId: req.userId!,
+          sleepDate: night,
+          durationMin: Math.round(minutes),
+          sleepScore: score,
+          notes: notes ?? null,
+        }
+      })
     })
 
     res.status(201).json({ success: true, data: log })

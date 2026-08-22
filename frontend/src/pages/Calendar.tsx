@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
 import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
@@ -112,10 +113,20 @@ export default function Calendar() {
   const today = new Date()
   const [tab, setTab] = useState<Tab>('Month')
 
-  const [month, setMonth] = useState(today.getMonth() + 1)
-  const [year,  setYear]  = useState(today.getFullYear())
+  // `?date=YYYY-MM-DD` opens straight onto a day. This is what makes a row in
+  // History openable: the calendar already renders sets, runs and the per-day
+  // muscle map, so a second session-detail screen would be two places to fix
+  // the same bug. Read once, on mount — a link is a starting point, and
+  // watching it would fight the user every time they picked another day.
+  const [searchParams] = useSearchParams()
+  const linkedDate = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get('date') ?? '')
+    ? searchParams.get('date')!
+    : null
+
+  const [month, setMonth] = useState(linkedDate ? Number(linkedDate.slice(5, 7)) : today.getMonth() + 1)
+  const [year,  setYear]  = useState(linkedDate ? Number(linkedDate.slice(0, 4)) : today.getFullYear())
   const [days,  setDays]  = useState<Record<string, DaySummary>>({})
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string | null>(linkedDate)
   const [dayDetail, setDayDetail] = useState<DayDetail | null>(null)
   const [isLoadingMonth, setIsLoadingMonth] = useState(true)
   const [isLoadingDay,   setIsLoadingDay]   = useState(false)
