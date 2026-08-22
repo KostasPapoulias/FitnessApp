@@ -537,7 +537,9 @@ function LogNutritionModal({ onSave, onClose }: {
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout, fetchMe } = useAuthStore()
-  const { readinessScore, systemicFatigue, trainingLoad, fetchTrainingLoad } = useFatigueStore()
+  const {
+    readinessScore, systemicFatigue, sleep, trainingLoad, fetchFatigue, fetchTrainingLoad,
+  } = useFatigueStore()
   // Only needs to READ the state here — enabling, testing and per-type choices
   // all live on the Notifications screen now.
   const { isPushSubscribed } = useNotifications()
@@ -590,6 +592,10 @@ export default function Profile() {
 
   useEffect(() => {
     fetchTrainingLoad()
+    // Readiness too, rather than trusting whatever Home last left in the store:
+    // this screen prints the score and now also explains it, and a deep link
+    // straight to /profile arrives with an empty store and would show 0%.
+    fetchFatigue()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The modal already validated and converted to metric, so this forwards its
@@ -615,6 +621,13 @@ export default function Profile() {
   const handleSaveSleep = async (data: any) => {
     await profileService.logSleep(data)
     setShowSleepModal(false)
+    // Sleep moves the readiness score, and the score is on screen directly
+    // above the button that opened this modal. Without the refetch the athlete
+    // logs four hours' sleep and watches nothing happen.
+    await Promise.all([
+      fetchFatigue(),
+      profileService.getProfile().then(setProfileData).catch(() => {}),
+    ])
   }
 
   const handleSaveNutrition = async (data: any) => {
@@ -765,6 +778,52 @@ export default function Profile() {
               color="text-brand-green"
             />
           </div>
+
+          {/* Why the number is what it is. Sleep now moves readiness, so the
+              screen has to say when it did — and equally when it did not, or an
+              unlogged night looks like a night that scored neutral. Wording
+              comes from the server so every surface says the same thing. */}
+          {sleep && (
+            <p className={`text-[11px] mt-2 leading-relaxed ${
+              sleep.applied ? 'text-dark-300' : 'text-dark-400'
+            }`}>
+              {sleep.note}
+              {!sleep.applied && (
+                <button
+                  onClick={() => setShowSleepModal(true)}
+                  className="text-brand-teal ml-1"
+                >
+                  Log it →
+                </button>
+              )}
+            </p>
+          )}
+        </div>
+
+        {/* Where the history lives. Its own group rather than rows in the
+            Settings list below — these are views, not preferences, and burying
+            the app's only charts under "Settings" is how they stay unfound. */}
+        <div className="bg-dark-800 rounded-card border border-dark-600 overflow-hidden">
+          <p className="text-dark-300 text-xs uppercase tracking-wider
+                        px-2 py-0.5 border-b border-dark-700">
+            Your Training
+          </p>
+
+          <SettingsRow
+            icon="📈"
+            label="Progress & PRs"
+            sublabel="Estimated 1RMs, weekly volume, recovery"
+            onClick={() => navigate('/progress')}
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
+          <SettingsRow
+            icon="📋"
+            label="Workout History"
+            sublabel="Every finished session, newest first"
+            onClick={() => navigate('/history')}
+          />
         </div>
 
         {/* Training load — the weeks-long trend, not today's soreness */}

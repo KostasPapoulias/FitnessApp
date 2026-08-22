@@ -31,6 +31,20 @@ import { scoreSession } from './session-scoring.service'
  * regardless of how much history there is.
  */
 
+export interface FatigueReplayEvent {
+  at: Date
+  delta: number
+  id?: string
+}
+
+export interface FatigueReplayResult {
+  level: number
+  recoveryTargetAt: Date | null
+  trace: { id: string; levelAfter: number }[]
+  /** Level at each requested sample time, in the order they were given. */
+  samples: number[]
+}
+
 /**
  * Replay one muscle's (or the systemic) curve.
  *
@@ -38,18 +52,41 @@ import { scoreSession } from './session-scoring.service'
  * else reads, then the new delta accumulates on top. `recoveryTargetAt` has to
  * be recomputed at each step because the decay is reconstructed FROM it — a
  * level without a matching window would decay along the old one and drift.
+ *
+ * `sampleAt` reads the curve at arbitrary instants without changing it, which
+ * is how the progress screen draws a fatigue history. Sampling lives here
+ * rather than in a charting service on purpose: a second implementation of
+ * this walk would disagree with the stored state in exactly the cases that are
+ * hardest to notice — a saturating session, or a long gap between events.
+ * Sample times must be sorted ascending.
  */
-const replay = (
-  events: { at: Date; delta: number; id?: string }[],
+export const replayFatigueCurve = (
+  events: FatigueReplayEvent[],
   halfLifeHours: number,
-  now: Date
-): { level: number; recoveryTargetAt: Date | null; trace: { id: string; levelAfter: number }[] } => {
+  now: Date,
+  sampleAt: Date[] = []
+): FatigueReplayResult => {
   let level = 0
   let updatedAt: Date | null = null
   let recoveryTargetAt: Date | null = null
   const trace: { id: string; levelAfter: number }[] = []
+  const samples: number[] = []
+  let nextSample = 0
+
+  // The level at `when`, decayed from the last event but WITHOUT advancing the
+  // walk — a sample must not become an event.
+  const peek = (when: Date) =>
+    updatedAt ? getEffectiveFatigueLevel({ fatigueLevel: level, updatedAt, recoveryTargetAt }, when) : 0
 
   for (const event of events) {
+    // Every sample that falls before this event reads the decay so far. Taken
+    // before the delta lands, so a sample timestamped the same instant as a
+    // session shows the state going into it, not the spike out of it.
+    while (nextSample < sampleAt.length && sampleAt[nextSample] < event.at) {
+      samples.push(peek(sampleAt[nextSample]))
+      nextSample++
+    }
+
     if (updatedAt) {
       level = getEffectiveFatigueLevel({ fatigueLevel: level, updatedAt, recoveryTargetAt }, event.at)
     }
@@ -59,13 +96,25 @@ const replay = (
     if (event.id) trace.push({ id: event.id, levelAfter: level })
   }
 
-  if (!updatedAt) return { level: 0, recoveryTargetAt: null, trace }
+  while (nextSample < sampleAt.length) {
+    samples.push(peek(sampleAt[nextSample]))
+    nextSample++
+  }
+
+  if (!updatedAt) return { level: 0, recoveryTargetAt: null, trace, samples }
 
   // Decay from the last event to now, then re-anchor the window to now so the
   // stored row means the same thing as one written by finishSession.
   level = getEffectiveFatigueLevel({ fatigueLevel: level, updatedAt, recoveryTargetAt }, now)
-  return { level, recoveryTargetAt: recoveryTargetFor(level, halfLifeHours, now), trace }
+  return {
+    level,
+    recoveryTargetAt: recoveryTargetFor(level, halfLifeHours, now),
+    trace,
+    samples,
+  }
 }
+
+const replay = replayFatigueCurve
 
 /**
  * Recompute `MuscleFatigueCurrent` and `SystemicFatigue` from what remains in

@@ -52,6 +52,24 @@ export interface MuscleFatigue {
 export type ReadinessStatus = 'ready' | 'caution' | 'rest'
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 
+/**
+ * What last night's sleep did to the readiness score.
+ *
+ * `applied: false` is a real, expected state — nothing logged, or the newest
+ * log is too old to count — and the UI must say so rather than showing a 0
+ * that looks like a measurement. The server owns the wording in `note`.
+ */
+export interface SleepReadiness {
+  /** Signed readiness points. Always 0 when `applied` is false. */
+  adjustment: number
+  applied: boolean
+  reason: 'applied' | 'none' | 'stale'
+  durationMin: number | null
+  sleepScore: number | null
+  sleepDate: string | null
+  note: string
+}
+
 export interface FatigueData {
   muscles: MuscleFatigue[]
   readinessScore: number
@@ -63,6 +81,8 @@ export interface FatigueData {
   // on the client, so the cutoffs stay in one place (readiness.service.ts).
   readinessStatus: ReadinessStatus
   fitnessLevel: FitnessLevel
+  /** Sleep's share of readinessScore above — already folded into it. */
+  sleep: SleepReadiness
 }
 
 // Training load — the weeks-long trend, as opposed to today's soreness
@@ -227,4 +247,113 @@ export interface AiProposal {
   reminderAt: string | null
   expiresAt: string
   messageId?: string | null
+}
+
+// Progress — the read side of datasets the app was computing and never showing.
+// Shapes mirror backend/src/services/progress.service.ts and
+// workout-history.service.ts; keep them in step.
+
+export interface VolumeWeek {
+  /** ISO date of the Monday. */
+  weekStart: string
+  /** Mechanical tonnage. Near zero for bodyweight- or cardio-only training. */
+  volumeKg: number
+  /** Whole-body cost in sRPE units — the same units training load uses. */
+  load: number
+  sessions: number
+  sets: number
+}
+
+export interface VolumeTrend {
+  weeks: VolumeWeek[]
+  thisWeek: VolumeWeek | null
+  previousWeek: VolumeWeek | null
+  activeWeeks: number
+}
+
+export interface StrengthEntry {
+  exerciseId: string
+  exerciseName: string
+  modality: string
+  /** kg. For calisthenics this includes bodyweight, so it is a total load. */
+  e1rm: number
+  achievedAt: string
+  lastPerformedAt: string | null
+  sessionCount: number
+}
+
+export interface E1rmPoint {
+  sessionId: string
+  at: string
+  e1rm: number
+  bestSet: { reps: number; weight: number; rpe: number | null } | null
+  /** Set a new all-time best. The series is not monotonic — it can go down. */
+  isPr: boolean
+}
+
+export interface MuscleFatigueHistory {
+  muscleId: string
+  muscleName: string
+  /** One sample per day, oldest first, replayed through the decay curve. */
+  points: { at: string; level: number }[]
+  /** Sessions that loaded this muscle inside the window. */
+  hits: { at: string; delta: number; sessionId: string | null }[]
+  averageLevel: number
+  peakLevel: number
+}
+
+export interface ProgressSummary {
+  volume: VolumeTrend
+  strength: StrengthEntry[]
+  muscles: MuscleFatigueHistory[]
+}
+
+// History
+export interface HistoryRow {
+  id: string
+  dateTime: string
+  duration: number
+  totalVolume: number
+  avgRpe: number | null
+  systemicLoad: number
+  templateName: string | null
+  exercises: { name: string; modality: string; sets: number }[]
+  setCount: number
+  distanceKm: number
+  modalities: string[]
+}
+
+export interface HistoryPage {
+  sessions: HistoryRow[]
+  /** Null on the last page — distinct from an empty page. */
+  nextCursor: string | null
+}
+
+export interface ExerciseHistorySet {
+  setNumber: number
+  rpe: number | null
+  reps: number | null
+  /** kg. Total load for calisthenics, i.e. bodyweight plus anything added. */
+  weight: number | null
+  timeSec: number | null
+  distanceKm: number | null
+  rounds: number | null
+}
+
+export interface ExerciseHistoryEntry {
+  sessionId: string
+  dateTime: string
+  sets: ExerciseHistorySet[]
+  e1rm: number | null
+  topWeight: number | null
+  totalVolume: number
+}
+
+export interface ExerciseHistory {
+  exerciseId: string
+  entries: ExerciseHistoryEntry[]
+  lastPerformedAt: string | null
+  bestE1rm: number | null
+  /** Total sessions containing this exercise — may exceed `entries.length`. */
+  sessionCount: number
 }

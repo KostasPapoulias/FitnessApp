@@ -13,18 +13,18 @@ import {
 export const buildUserContext = async (userId: string): Promise<string> => {
   // Same readiness calculation the Home/Profile screens show, so the AI
   // never quotes a different number than the UI.
-  const { readinessScore: readiness, muscles: effectiveFatigue, fitnessLevel, systemicFatigue } =
-    await getUserReadiness(userId)
+  const {
+    readinessScore: readiness, muscles: effectiveFatigue, fitnessLevel, systemicFatigue,
+    sleep, sleepNote,
+  } = await getUserReadiness(userId)
 
   // Weeks-long trend, not today's soreness — this is what tells the coach
   // whether to push, hold, or back off.
   const load = await getTrainingLoad(userId)
 
-  // Get latest sleep
-  const sleep = await prisma.sleepLog.findFirst({
-    where: { userId },
-    orderBy: { sleepDate: 'desc' }
-  })
+  // Sleep comes back with readiness rather than being fetched again — the score
+  // above already has it folded in, and a second query could disagree with the
+  // one the score was computed from.
 
   // Get latest nutrition
   const nutrition = await prisma.nutritionLog.findFirst({
@@ -142,7 +142,12 @@ ${load.trend === 'ramping'
   : `Not enough history yet (${load.sessionCount} finished session${load.sessionCount === 1 ? '' : 's'}). Do not quote fitness, form or ratio numbers — say you need a couple more weeks of training logged.`}
 
 ## Today's Health Data
-Sleep: ${sleep ? `${(sleep.durationMin / 60).toFixed(1)}h (score: ${sleep.sleepScore ?? 'not rated'})` : 'Not logged'}
+Sleep: ${sleep.durationMin != null
+  ? `${(sleep.durationMin / 60).toFixed(1)}h (quality: ${sleep.sleepScore ?? 'not rated'})`
+  : 'Not logged'}
+Sleep's effect on the readiness score above: ${sleep.applied
+  ? `${sleep.adjustment > 0 ? '+' : ''}${sleep.adjustment} points — ALREADY INCLUDED. Do not deduct for it again.`
+  : `none — ${sleepNote} The score reflects training load only, so treat it as an upper bound if they mention sleeping badly.`}
 Protein: ${nutrition ? `${nutrition.proteinG}g` : 'Not logged'}
 Calories: ${nutrition ? `${nutrition.calories} kcal` : 'Not logged'}
 

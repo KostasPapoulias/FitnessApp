@@ -10,7 +10,7 @@ import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 
 export default function Home() {
   const { user } = useAuthStore()
-  const { fetchFatigue, readinessScore, isLoading, selectedMuscle } = useFatigueStore()
+  const { fetchFatigue, readinessScore, sleep, isLoading, selectedMuscle } = useFatigueStore()
   // AppLayout does the fetching; Home only reads the result.
   const { loaded, optionalStageDoneAt } = useOnboardingStore()
   const [side, setSide] = useState<'front' | 'back'>('front')
@@ -81,9 +81,40 @@ export default function Home() {
             placement="bottom"
             className="right-0"
             title="Your readiness"
-            body="How recovered you are right now, from muscle fatigue and whole-body load. It climbs back on its own as you rest."
+            body="How recovered you are right now, from muscle fatigue, whole-body load and last night's sleep. It climbs back on its own as you rest."
           />
         </div>
+      </div>
+
+      {/* Progress and history.
+          Two slim pills rather than a card: the bottom of this screen is
+          already the setup prompt and the AI strip, and a third block down
+          there squeezes the body map on a short phone. They sit under the
+          header because that is where they read as navigation — which is all
+          they are. The bottom nav has no free slot and Calendar answers a
+          different question, so without these the app's only charts would be
+          reachable from one row inside Profile. */}
+      <div className="flex gap-2 px-5 pb-1">
+        <Link
+          to="/progress"
+          className="flex-1 bg-dark-800 border border-dark-600 rounded-btn
+                     px-3 py-2 flex items-center gap-2 active:scale-[0.98]
+                     transition-transform"
+        >
+          <span className="text-sm">📈</span>
+          <span className="text-white text-xs font-semibold flex-1">Progress</span>
+          <span className="text-dark-400 text-sm leading-none">›</span>
+        </Link>
+        <Link
+          to="/history"
+          className="flex-1 bg-dark-800 border border-dark-600 rounded-btn
+                     px-3 py-2 flex items-center gap-2 active:scale-[0.98]
+                     transition-transform"
+        >
+          <span className="text-sm">📋</span>
+          <span className="text-white text-xs font-semibold flex-1">History</span>
+          <span className="text-dark-400 text-sm leading-none">›</span>
+        </Link>
       </div>
 
       {/* Body map container */}
@@ -200,9 +231,25 @@ export default function Home() {
                         rounded-card px-2 py-3 flex items-start gap-3
                         ${showSetupPrompt ? '' : 'mt-auto'}`}>
           <span className="text-lg mt-0.5">🤖</span>
-          <p className="text-dark-200 text-sm flex-1 leading-relaxed">
-            {aiSuggestion}
-          </p>
+          <div className="flex-1">
+            <p className="text-dark-200 text-sm leading-relaxed">
+              {aiSuggestion}
+            </p>
+            {/* What sleep did to the score above. Shown when it did nothing
+                too: a readiness figure that silently ignores a variable the
+                app asks you to log is the bug this feature exists to fix, and
+                an unlogged night must not look like a neutral one. */}
+            {sleep && (
+              <p className={`text-xs mt-1.5 leading-relaxed ${
+                sleep.applied ? 'text-dark-300' : 'text-dark-400'
+              }`}>
+                {sleep.note}
+                {!sleep.applied && (
+                  <Link to="/profile" className="text-brand-teal ml-1">Log it →</Link>
+                )}
+              </p>
+            )}
+          </div>
           <button
             onClick={() => setAiVisible(false)}
             className="text-dark-400 text-lg leading-none flex-shrink-0"

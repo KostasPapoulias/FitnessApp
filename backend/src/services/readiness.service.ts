@@ -1,9 +1,17 @@
 import prisma from '../lib/prisma'
 import { getEffectiveFatigueLevel } from './fatigue.service'
+import {
+  SleepReadiness, describeSleepReadiness, resolveSleepReadiness,
+} from './sleep-readiness.service'
 
 // Single source of truth for "how ready is this user to train".
 // Both GET /api/fatigue/current and the AI system prompt read from here —
 // they used to roll their own average and drifted apart.
+//
+// The score is muscle fatigue and systemic fatigue, shifted by last night's
+// sleep. Sleep is a bounded modifier rather than a weighted term, and the
+// reasoning for that is in `sleep-readiness.service.ts` — it is the whole
+// design of the feature and it is not obvious from the arithmetic here.
 
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 
@@ -70,21 +78,32 @@ export const aggregateMuscleFatigue = (fatigueLevels: number[]): number => {
  * Pure scoring function. Blends local muscle load with whole-body fatigue —
  * without the systemic term, an hour of running left every muscle reading
  * "fresh" and readiness essentially untouched.
+ *
+ * `sleepAdjustment` is a signed shift in readiness points, already bounded by
+ * `sleep-readiness.service`. It is added rather than blended in so that an
+ * athlete who has logged nothing scores exactly what the fatigue model says —
+ * see that file for why a default value would have been worse than no value.
  */
 export const computeReadinessScore = (
   fatigueLevels: number[],
   model: ReadinessModel = READINESS_MODELS[DEFAULT_FITNESS_LEVEL],
-  systemicFatigue = 0
+  systemicFatigue = 0,
+  sleepAdjustment = 0
 ): number => {
-  if (fatigueLevels.length === 0 && systemicFatigue <= 0) return 100
+  const clamp = (score: number) => Math.round(Math.min(100, Math.max(0, score)))
+
+  // Nothing trained yet. Still not necessarily 100: four hours' sleep is a real
+  // reason not to be ready, and returning a flat 100 here would have made the
+  // modifier silently inapplicable to exactly the athletes who train least.
+  if (fatigueLevels.length === 0 && systemicFatigue <= 0) return clamp(100 + sleepAdjustment)
 
   const load =
     aggregateMuscleFatigue(fatigueLevels) * MUSCLE_SHARE +
     systemicFatigue * SYSTEMIC_SHARE
-  const score = 100 - load * model.fatiguePenalty
+  const score = 100 - load * model.fatiguePenalty + sleepAdjustment
 
   // Round once, at the end — rounding per-muscle first skews the average.
-  return Math.round(Math.min(100, Math.max(0, score)))
+  return clamp(score)
 }
 
 export interface MuscleReadiness {
@@ -106,6 +125,14 @@ export interface UserReadiness {
   /** Whole-body fatigue, decayed to now. Cardio and metcons load this. */
   systemicFatigue: number
   systemicRecoveryTargetAt: Date | null
+  /**
+   * What last night's sleep did to the score, and whether it did anything at
+   * all. The UI has to be able to say which — a score that moved for an unseen
+   * reason is worse than one that never moved.
+   */
+  sleep: SleepReadiness
+  /** One line naming the above, so every surface phrases it the same way. */
+  sleepNote: string
 }
 
 /**
@@ -116,11 +143,18 @@ export const getUserReadiness = async (
   userId: string,
   now: Date = new Date()
 ): Promise<UserReadiness> => {
-  const [allMuscles, fatigueCurrent, profile, systemic] = await Promise.all([
+  // One round trip, not five. At ~290ms to Railway the sequential version of
+  // this was the difference between a readiness call and a readiness wait.
+  const [allMuscles, fatigueCurrent, profile, systemic, lastSleep] = await Promise.all([
     prisma.muscle.findMany(),
     prisma.muscleFatigueCurrent.findMany({ where: { userId } }),
     prisma.userProfile.findUnique({ where: { userId } }),
     prisma.systemicFatigue.findUnique({ where: { userId } }),
+    prisma.sleepLog.findFirst({
+      where: { userId },
+      orderBy: { sleepDate: 'desc' },
+      select: { sleepDate: true, durationMin: true, sleepScore: true },
+    }),
   ])
 
   const fatigueMap = new Map(fatigueCurrent.map(f => [f.muscleId, f]))
@@ -156,18 +190,24 @@ export const getUserReadiness = async (
     now
   )
 
+  const sleep = resolveSleepReadiness(lastSleep, now)
+
   const fitnessLevel = normalizeFitnessLevel(profile?.fitnessLevel)
   const model = READINESS_MODELS[fitnessLevel]
   const readinessScore = computeReadinessScore(
-    muscles.map(m => m.effectiveLevel), model, systemicFatigue
+    muscles.map(m => m.effectiveLevel), model, systemicFatigue, sleep.adjustment
   )
 
   return {
     readinessScore,
+    // Banded from the final score, sleep included — the traffic light has to
+    // agree with the number printed next to it.
     status: bandReadiness(readinessScore, model),
     fitnessLevel,
     muscles,
     systemicFatigue: Math.round(systemicFatigue),
     systemicRecoveryTargetAt: systemic?.recoveryTargetAt ?? null,
+    sleep,
+    sleepNote: describeSleepReadiness(sleep),
   }
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { FitnessLevel, MuscleFatigue, ReadinessStatus, TrainingLoad } from '../types'
+import { FitnessLevel, MuscleFatigue, ReadinessStatus, SleepReadiness, TrainingLoad } from '../types'
 import { fatigueService } from '../services/fatigue.service'
 
 interface FatigueStore {
@@ -9,6 +9,9 @@ interface FatigueStore {
   fitnessLevel: FitnessLevel
   // Whole-body fatigue — what a long run or a metcon actually loads
   systemicFatigue: number
+  // Sleep's contribution to readinessScore. Null only before the first fetch —
+  // "not logged" is expressed by `applied: false`, not by absence.
+  sleep: SleepReadiness | null
   // Weeks-long trend; fetched separately since it scans session history
   trainingLoad: TrainingLoad | null
   isLoading: boolean
@@ -26,6 +29,7 @@ export const useFatigueStore = create<FatigueStore>((set, get) => ({
   readinessStatus: 'rest',
   fitnessLevel: 'intermediate',
   systemicFatigue: 0,
+  sleep: null,
   trainingLoad: null,
   isLoading: false,
   selectedMuscle: null,
@@ -40,6 +44,7 @@ export const useFatigueStore = create<FatigueStore>((set, get) => ({
         readinessStatus: data.readinessStatus,
         fitnessLevel: data.fitnessLevel,
         systemicFatigue: data.systemicFatigue,
+        sleep: data.sleep ?? null,
         isLoading: false
       })
     } catch (err) {
