@@ -32,7 +32,17 @@
 html, body {
   overscroll-behavior: none;
   overscroll-behavior-x: none;
-  touch-action: pan-y;
+  /* NOT `pan-y`, which is what this was and which broke every sideways
+     scroller in the app. `touch-action` does not inherit, but the browser
+     intersects the value of the touched element with all of its ancestors, so
+     `pan-y` here disallowed horizontal panning DOCUMENT-WIDE and no descendant
+     could opt back in — the activity heatmap physically could not be scrolled
+     by touch, and the gesture fell through to AppLayout's page swipe instead.
+     `manipulation` keeps the thing this rule was actually for (no double-tap
+     zoom, no tap delay); the rubber band is already handled by
+     `overscroll-behavior-x` above. Components that own a horizontal drag
+     declare `pan-y` on their own surface — see SwipeActions. */
+  touch-action: manipulation;
   -webkit-overflow-scrolling: touch;
   user-select: none;
   -webkit-user-select: none;

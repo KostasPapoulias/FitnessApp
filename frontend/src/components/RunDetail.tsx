@@ -81,8 +81,12 @@ export default function RunDetail({ setId, title, onClose }: Props) {
   ] : []
 
   return (
-    <div className="fixed inset-0 z-50 bg-dark-900 text-white overflow-y-auto"
-         style={{ overscrollBehavior: 'contain' }}>
+    // z-[70]: this is opened from inside the exercise sheet, which is z-[60]
+    // like every other modal. At z-50 the route would have rendered behind the
+    // sheet that launched it.
+    <div className="fixed inset-0 z-[70] bg-dark-900 text-white overflow-y-auto"
+         style={{ overscrollBehavior: 'contain' }}
+         data-no-page-swipe>
       {/* header */}
       {/* This sheet is `fixed`, so it sits outside AppLayout and gets none of
           its safe-area padding — the back button landed under the clock. */}

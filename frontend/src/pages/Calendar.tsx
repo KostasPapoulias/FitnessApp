@@ -6,6 +6,7 @@ import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 import { fmtTime } from './Workout/helpers'
 import SwipeActions from '../components/SwipeActions'
 import SetEditSheet from '../components/workout/SetEditSheet'
+import ExerciseSetsSheet from '../components/workout/ExerciseSetsSheet'
 import { workoutService } from '../services/workout.service'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
@@ -130,7 +131,17 @@ export default function Calendar() {
   const [dayDetail, setDayDetail] = useState<DayDetail | null>(null)
   const [isLoadingMonth, setIsLoadingMonth] = useState(true)
   const [isLoadingDay,   setIsLoadingDay]   = useState(false)
-  const [expandedExercise, setExpandedExercise] = useState<string | null>(null)
+  /**
+   * Which exercise has its sets open in a sheet, as IDENTIFIERS rather than as
+   * the object itself. Deleting a set reloads the day, and a snapshot taken
+   * when the sheet opened would keep rendering the set that is no longer
+   * there. `sessionId` also decides whether the rows are tappable, and the
+   * sheet renders far from the row that opened it.
+   */
+  const [openExercise, setOpenExercise] =
+    useState<{ sessionId: string; index: number } | null>(null)
+  const [confirmDeleteSet, setConfirmDeleteSet] =
+    useState<{ set: any; exerciseName: string } | null>(null)
   /** The run whose route is open over the calendar, if any. */
   const [openRun, setOpenRun] = useState<{ setId: string; title: string } | null>(null)
   // Which session's sets are currently correctable. Off by default: history is
@@ -180,6 +191,30 @@ export default function Calendar() {
     ])
     setDayDetail(day)
     setDays(monthData.days ?? {})
+  }
+
+  // Re-read on every render from the current day, so the sheet follows an
+  // edit instead of going stale. If the last set of an exercise goes, the
+  // exercise goes with it and the sheet closes on its own.
+  const openExerciseData = openExercise
+    ? dayDetail?.sessions
+        .find(s => s.id === openExercise.sessionId)
+        ?.exercises[openExercise.index] ?? null
+    : null
+
+  const handleDeleteSet = async () => {
+    if (!confirmDeleteSet) return
+    setMutating(true)
+    setMutateError(null)
+    try {
+      await workoutService.deleteSet(confirmDeleteSet.set.id)
+      setConfirmDeleteSet(null)
+      await reloadAfterMutation()
+    } catch (err: any) {
+      setMutateError(err?.response?.data?.error ?? 'Could not remove that set.')
+    } finally {
+      setMutating(false)
+    }
   }
 
   const handleDeleteSession = async () => {
@@ -536,14 +571,20 @@ export default function Calendar() {
                             SwipeActions stops the gesture propagating, so this
                             never also slides Calendar to another tab. */}
                         <SwipeActions
-                          onDelete={() => setConfirmDelete({
-                            id: session.id,
-                            label: `Session ${sIdx + 1}`,
-                          })}
-                          onEdit={() => setEditingSession(
-                            editingSession === session.id ? null : session.id
-                          )}
-                          editLabel={editingSession === session.id ? 'Done' : 'Edit'}
+                          left={{
+                            label: editingSession === session.id ? 'Done' : 'Edit',
+                            icon: '✏️',
+                            onSelect: () => setEditingSession(
+                              editingSession === session.id ? null : session.id
+                            ),
+                          }}
+                          right={{
+                            label: 'Delete', icon: '🗑️', tone: 'danger',
+                            onSelect: () => setConfirmDelete({
+                              id: session.id,
+                              label: `Session ${sIdx + 1}`,
+                            }),
+                          }}
                         >
                           <div className="flex items-center justify-between px-3 py-2.5">
                             <p className="text-dark-400 text-xs uppercase tracking-wider">
@@ -573,7 +614,6 @@ export default function Calendar() {
 
                         {session.exercises.map((ex: any, idx: number) => {
                           const key = `${session.id}-${ex.name}-${idx}`
-                          const isExpanded = expandedExercise === key
                           const totalSets  = ex.sets.length
                           const totalVol   = ex.sets.reduce((sum: number, s: any) =>
                             sum + (s.strength ? s.strength.reps * s.strength.weight : 0), 0)
@@ -593,10 +633,14 @@ export default function Calendar() {
                             <div key={key}
                               className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden">
 
-                              {/* Exercise header — tap to expand */}
+                              {/* Tap to open the sets in a sheet. Expanding in
+                                  place pushed every later exercise down the
+                                  page, and on a phone the row you tapped often
+                                  scrolled out of view as it opened. */}
                               <button
-                                onClick={() => setExpandedExercise(isExpanded ? null : key)}
-                                className="w-full flex items-center gap-3 p-4 text-left"
+                                onClick={() => setOpenExercise({ sessionId: session.id, index: idx })}
+                                className="w-full flex items-center gap-3 p-4 text-left
+                                           active:bg-dark-700/40 transition-colors"
                               >
                                 <div className="w-10 h-10 bg-dark-700 rounded-xl
                                                 flex items-center justify-center text-lg flex-shrink-0">
@@ -620,144 +664,9 @@ export default function Calendar() {
                                     )}
                                   </p>
                                 </div>
-                                <span className={`text-dark-400 text-sm transition-transform
-                                  ${isExpanded ? 'rotate-180' : ''}`}>
-                                  ▾
-                                </span>
+                                <span className="text-dark-500 text-base">›</span>
                               </button>
 
-                              {/* Expanded — a run, or a set table */}
-                              {isExpanded && isCardio && (
-                                <div className="border-t border-dark-700 px-4 py-3 flex flex-col gap-2">
-                                  {cardioSets.map((s: any) => {
-                                    // Average pace comes from the stored run when there is
-                                    // one — it was computed from unrounded metres. Falling
-                                    // back to the rounded display distance costs a second
-                                    // or two on a short run, which is better than nothing.
-                                    const paceSec = s.run?.avgPaceSec
-                                      ?? (s.cardio?.distance > 0 && s.cardio?.time > 0
-                                          ? s.cardio.time / s.cardio.distance
-                                          : 0)
-
-                                    return (
-                                      <div key={s.id}
-                                        className="bg-dark-700/60 border border-dark-600 rounded-btn px-3.5 py-3">
-                                        <div className="flex items-center gap-3">
-                                          {[
-                                            { v: `${(s.cardio?.distance ?? 0).toFixed(2)}`, u: 'km' },
-                                            { v: fmtTime(s.cardio?.time ?? 0), u: 'time' },
-                                            { v: fmtTime(paceSec), u: 'avg / km' },
-                                            ...(s.run?.elevationGainM
-                                              ? [{ v: `${s.run.elevationGainM}`, u: 'm climb' }]
-                                              : []),
-                                          ].map(stat => (
-                                            <div key={stat.u} className="flex-1 min-w-0 text-center">
-                                              <p className="text-white text-[15px] font-extrabold tabular-nums">
-                                                {stat.v}
-                                              </p>
-                                              <p className="text-dark-400 text-[9.5px] mt-0.5">{stat.u}</p>
-                                            </div>
-                                          ))}
-                                        </div>
-
-                                        {/* Only offer the route when one was recorded.
-                                            A button that opens an empty map is worse
-                                            than no button. */}
-                                        {s.run ? (
-                                          <button
-                                            onClick={() => setOpenRun({ setId: s.id, title: ex.name })}
-                                            className="w-full mt-2.5 py-2.5 rounded-btn border border-brand-teal/40
-                                                       bg-[#0d2218] text-brand-teal text-xs font-bold
-                                                       active:scale-[0.99] transition-transform"
-                                          >
-                                            {s.run.source === 'manual'
-                                              ? 'Splits →'
-                                              : 'Route & splits →'}
-                                          </button>
-                                        ) : (
-                                          <p className="text-dark-500 text-[11px] text-center mt-2">
-                                            No route recorded for this one
-                                          </p>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Expanded set table */}
-                              {isExpanded && !isCardio && (
-                                <div className="border-t border-dark-700 px-4 pb-1">
-
-                                  {/* Table header */}
-                                  <div className="grid grid-cols-4 gap-1 py-2 mb-1">
-                                    {['Set', 'Reps', 'Weight', 'RPE'].map(h => (
-                                      <p key={h}
-                                        className="text-dark-500 text-xs uppercase
-                                                   text-center">
-                                        {h}
-                                      </p>
-                                    ))}
-                                  </div>
-
-                                  {/* Set rows */}
-                                  {ex.sets.map((s: any, si: number) => (
-                                    <div key={si}
-                                      onClick={() => {
-                                        if (editingSession === session.id) {
-                                          setEditingSet({ set: s, exerciseName: ex.name })
-                                        }
-                                      }}
-                                      className={`grid grid-cols-4 gap-1 mb-0.5 ${
-                                        editingSession === session.id
-                                          ? 'cursor-pointer ring-1 ring-brand-teal/30 rounded-lg'
-                                          : ''
-                                      }`}>
-                                      <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                        <span className="text-dark-300 text-xs font-semibold">
-                                          {s.setNumber}
-                                        </span>
-                                      </div>
-                                      <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                        <span className="text-white text-xs">
-                                          {s.strength?.reps ?? s.calisthenics?.reps ?? '—'}
-                                        </span>
-                                      </div>
-                                      <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                        <span className="text-white text-xs">
-                                          {s.strength?.weight
-                                            ? `${s.strength.weight}kg`
-                                            : s.cardio?.distance
-                                            ? `${s.cardio.distance}km`
-                                            : '—'}
-                                        </span>
-                                      </div>
-                                      <div className="bg-dark-700 rounded-lg py-2 text-center">
-                                        <span className="text-xs font-semibold"
-                                          style={{
-                                            color: s.rpe >= 9 ? '#EF4444'
-                                              : s.rpe >= 7 ? '#FACC15'
-                                              : '#4ADE80'
-                                          }}>
-                                          {s.rpe ?? '—'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-
-                                  {/* Exercise volume total */}
-                                  {totalVol > 0 && (
-                                    <div className="mt-2 flex justify-between
-                                                    bg-[#0d2218] rounded-lg px-3 py-2
-                                                    border border-brand-teal/20">
-                                      <span className="text-dark-400 text-xs">Total volume</span>
-                                      <span className="text-brand-teal text-xs font-bold">
-                                        {Math.round(totalVol).toLocaleString()} kg
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
                             </div>
                           )
                         })}
@@ -947,7 +856,8 @@ export default function Calendar() {
 
       {/* The route, over everything. Its own layer rather than a route change:
           closing it must put the athlete back on the same day, scrolled to the
-          same place, with the same exercise still expanded. */}
+          same place, with the same exercise sheet still open. It is z-[70] so
+          it covers that sheet rather than opening behind it. */}
       {openRun && (
         <Suspense fallback={null}>
           <RunDetail
@@ -956,6 +866,19 @@ export default function Calendar() {
             onClose={() => setOpenRun(null)}
           />
         </Suspense>
+      )}
+
+      {/* Rendered before SetEditSheet on purpose: both are z-[60], so DOM
+          order decides, and the set editor is opened FROM this sheet. */}
+      {openExercise && openExerciseData && (
+        <ExerciseSetsSheet
+          exercise={openExerciseData}
+          editable={editingSession === openExercise.sessionId}
+          onPickSet={set => setEditingSet({ set, exerciseName: openExerciseData.name })}
+          onDeleteSet={set => setConfirmDeleteSet({ set, exerciseName: openExerciseData.name })}
+          onOpenRun={setId => setOpenRun({ setId, title: openExerciseData.name })}
+          onClose={() => setOpenExercise(null)}
+        />
       )}
 
       {editingSet && (
@@ -968,6 +891,48 @@ export default function Calendar() {
           }}
           onClose={() => setEditingSet(null)}
         />
+      )}
+
+      {/* z-[70]: this one is raised over the exercise sheet it is confirmed
+          from, which is itself z-[60] like every other modal. */}
+      {confirmDeleteSet && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+             data-no-page-swipe>
+          <div className="absolute inset-0 bg-black/70"
+               onClick={() => { setConfirmDeleteSet(null); setMutateError(null) }} />
+          <div className="relative w-full max-w-[340px] bg-dark-800 border border-dark-600
+                          rounded-card p-5">
+            <p className="text-white text-base font-bold">
+              Remove set {confirmDeleteSet.set.setNumber}?
+            </p>
+            <p className="text-dark-400 text-xs mt-2 leading-relaxed">
+              {confirmDeleteSet.exerciseName}. The workout is re-scored and the
+              fatigue it caused is rebuilt, so your readiness and muscle map
+              will change. This cannot be undone.
+            </p>
+
+            {mutateError && <p className="text-brand-red text-xs mt-3">{mutateError}</p>}
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => { setConfirmDeleteSet(null); setMutateError(null) }}
+                disabled={mutating}
+                className="flex-1 py-3 rounded-btn bg-dark-700 border border-dark-600
+                           text-dark-200 text-sm font-bold disabled:opacity-40"
+              >
+                Keep it
+              </button>
+              <button
+                onClick={handleDeleteSet}
+                disabled={mutating}
+                className="flex-1 py-3 rounded-btn bg-brand-red text-white text-sm font-bold
+                           active:scale-95 transition-transform disabled:opacity-40"
+              >
+                {mutating ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* z-60: BottomNav is fixed at z-50 and renders after <main>, so at equal

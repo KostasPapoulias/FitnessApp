@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { getEffectiveFatigueLevel, recoveryTargetFor } from './fatigue.service'
 import {
@@ -124,7 +125,7 @@ const replay = replayFatigueCurve
 export const recomputeUserFatigue = async (userId: string): Promise<void> => {
   const now = new Date()
 
-  const [profile, muscles, logs, sessions] = await Promise.all([
+  const [profile, muscles, logs, sessions, existing] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId } }),
     prisma.muscle.findMany({ select: { id: true, recoveryHalfLifeHours: true } }),
     prisma.muscleFatigueLog.findMany({
@@ -138,6 +139,15 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
       where: { userId, duration: { not: null }, systemicLoad: { not: null } },
       select: { dateTime: true, systemicLoad: true },
       orderBy: { dateTime: 'asc' },
+    }),
+    // Every muscle that has a row OR has history — a muscle whose only session
+    // was just deleted still has a stale row to clear, and skipping it would
+    // leave fatigue the athlete no longer has any record of. Read here rather
+    // than on its own line further down: it depends on nothing above it, and a
+    // sequential round trip to Railway is worth more than the tidier placement.
+    prisma.muscleFatigueCurrent.findMany({
+      where: { userId },
+      select: { muscleId: true },
     }),
   ])
 
@@ -159,13 +169,6 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
   }
   const storedLevelAfter = new Map(logs.map(l => [l.id, l.fatigueLevelAfter]))
 
-  // Every muscle that has a row OR has history — a muscle whose only session
-  // was just deleted still has a stale row to clear, and skipping it would
-  // leave fatigue the athlete no longer has any record of.
-  const existing = await prisma.muscleFatigueCurrent.findMany({
-    where: { userId },
-    select: { muscleId: true },
-  })
   const muscleIds = new Set<string>([...eventsByMuscle.keys(), ...existing.map(e => e.muscleId)])
 
   const systemic = replay(
@@ -184,41 +187,53 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
   // an athlete with years of history.
   const levelFixes: { id: string; levelAfter: number }[] = []
 
-  await prisma.$transaction(async tx => {
-    for (const muscleId of muscleIds) {
-      const events = eventsByMuscle.get(muscleId) ?? []
-      const halfLife = (halfLifeByMuscle.get(muscleId) ?? 15) * recoveryRate
-      const { level, recoveryTargetAt, trace } = replay(events, halfLife, now)
+  // The replay is pure arithmetic, so it happens OUTSIDE the transaction and
+  // the transaction becomes a list of writes with no thinking in between.
+  //
+  // This was an interactive `$transaction(async tx => ...)` issuing one
+  // statement at a time. Against the remote database that is ~290 ms each, so
+  // 15 muscle upserts alone spent 4.4 s of the 5 s Prisma allows an
+  // interactive transaction. Editing a set in a session with a few exercises
+  // therefore died on P2028 "Transaction not found", which the controller
+  // surfaced as a bare 500. The array form ships every statement in ONE round
+  // trip and is still atomic.
+  const writes: Prisma.PrismaPromise<unknown>[] = []
 
-      for (const step of trace) {
-        // Half a fatigue point is far below anything the UI can render, and
-        // rewriting rows that only differ by float noise would turn a cheap
-        // correction into a full-history write on every delete.
-        if (Math.abs((storedLevelAfter.get(step.id) ?? 0) - step.levelAfter) > 0.5) {
-          levelFixes.push(step)
-        }
+  for (const muscleId of muscleIds) {
+    const events = eventsByMuscle.get(muscleId) ?? []
+    const halfLife = (halfLifeByMuscle.get(muscleId) ?? 15) * recoveryRate
+    const { level, recoveryTargetAt, trace } = replay(events, halfLife, now)
+
+    for (const step of trace) {
+      // Half a fatigue point is far below anything the UI can render, and
+      // rewriting rows that only differ by float noise would turn a cheap
+      // correction into a full-history write on every delete.
+      if (Math.abs((storedLevelAfter.get(step.id) ?? 0) - step.levelAfter) > 0.5) {
+        levelFixes.push(step)
       }
-
-      await tx.muscleFatigueCurrent.upsert({
-        where: { userId_muscleId: { userId, muscleId } },
-        update: { fatigueLevel: level, recoveryTargetAt },
-        create: { userId, muscleId, fatigueLevel: level, recoveryTargetAt },
-      })
     }
 
-    for (const fix of levelFixes) {
-      await tx.muscleFatigueLog.update({
-        where: { id: fix.id },
-        data: { fatigueLevelAfter: fix.levelAfter },
-      })
-    }
+    writes.push(prisma.muscleFatigueCurrent.upsert({
+      where: { userId_muscleId: { userId, muscleId } },
+      update: { fatigueLevel: level, recoveryTargetAt },
+      create: { userId, muscleId, fatigueLevel: level, recoveryTargetAt },
+    }))
+  }
 
-    await tx.systemicFatigue.upsert({
-      where: { userId },
-      update: { level: systemic.level, recoveryTargetAt: systemic.recoveryTargetAt },
-      create: { userId, level: systemic.level, recoveryTargetAt: systemic.recoveryTargetAt },
-    })
-  })
+  for (const fix of levelFixes) {
+    writes.push(prisma.muscleFatigueLog.update({
+      where: { id: fix.id },
+      data: { fatigueLevelAfter: fix.levelAfter },
+    }))
+  }
+
+  writes.push(prisma.systemicFatigue.upsert({
+    where: { userId },
+    update: { level: systemic.level, recoveryTargetAt: systemic.recoveryTargetAt },
+    create: { userId, level: systemic.level, recoveryTargetAt: systemic.recoveryTargetAt },
+  }))
+
+  await prisma.$transaction(writes)
 }
 
 /** The includes `scoreSession` needs, in one place so callers cannot under-fetch. */
@@ -284,34 +299,36 @@ export const rescoreSession = async (
     duration: session.duration,
   })
 
-  await prisma.$transaction(async tx => {
-    await tx.workoutSession.update({
+  const freshLogs = [...score.muscleDeltas].map(([muscleId, { delta }]) => ({
+    userId,
+    muscleId,
+    workoutSessionId: sessionId,
+    delta,
+    // Provisional. recomputeUserFatigue replays the whole series and corrects
+    // every row's level, including these, immediately after.
+    fatigueLevelAfter: 0,
+    source: 'workout',
+    createdAt: session.dateTime,
+  }))
+
+  // Array form, and `createMany` rather than a create per muscle, for the
+  // reason spelled out in recomputeUserFatigue: one statement at a time over a
+  // ~290 ms link runs an interactive transaction out of its 5 s budget.
+  // Statements run in the order given, so the delete still precedes the insert.
+  await prisma.$transaction([
+    prisma.workoutSession.update({
       where: { id: sessionId },
       data: {
         totalVolume: score.totalVolume,
         avgRpe: score.avgRpe,
         systemicLoad: score.sessionLoad,
       },
-    })
-
-    await tx.muscleFatigueLog.deleteMany({ where: { workoutSessionId: sessionId } })
-
-    for (const [muscleId, { delta }] of score.muscleDeltas) {
-      await tx.muscleFatigueLog.create({
-        data: {
-          userId,
-          muscleId,
-          workoutSessionId: sessionId,
-          delta,
-          // Provisional. recomputeUserFatigue replays the whole series and
-          // corrects every row's level, including these, immediately after.
-          fatigueLevelAfter: 0,
-          source: 'workout',
-          createdAt: session.dateTime,
-        },
-      })
-    }
-  })
+    }),
+    prisma.muscleFatigueLog.deleteMany({ where: { workoutSessionId: sessionId } }),
+    ...(freshLogs.length
+      ? [prisma.muscleFatigueLog.createMany({ data: freshLogs })]
+      : []),
+  ])
 
   return exerciseIds
 }
@@ -380,24 +397,26 @@ export const recomputeStrengthEstimates = async (
     }
   }
 
-  await prisma.$transaction(async tx => {
-    for (const exerciseId of exerciseIds) {
-      const best = bestByExercise.get(exerciseId) ?? 0
+  // Pipelined, same as the other two: a session with a dozen exercises is a
+  // dozen sequential round trips otherwise, which is most of an interactive
+  // transaction's budget spent on the network.
+  const stale = exerciseIds.filter(id => (bestByExercise.get(id) ?? 0) <= 0)
+  const scored = exerciseIds.filter(id => (bestByExercise.get(id) ?? 0) > 0)
 
-      if (best <= 0) {
-        // Nothing left to base an estimate on. Deleted rather than left at its
-        // old value: a stale estimate is worse than none, because
-        // starting-load.service treats its absence as "no history" and falls
-        // back to the calibrated table instead of a number that is now fiction.
-        await tx.exerciseStrengthEstimate.deleteMany({ where: { userId, exerciseId } })
-        continue
-      }
-
-      await tx.exerciseStrengthEstimate.upsert({
-        where: { userId_exerciseId: { userId, exerciseId } },
-        update: { e1rm: best },
-        create: { userId, exerciseId, e1rm: best },
-      })
-    }
-  })
+  await prisma.$transaction([
+    // Nothing left to base an estimate on. Deleted rather than left at its old
+    // value: a stale estimate is worse than none, because starting-load.service
+    // treats its absence as "no history" and falls back to the calibrated
+    // table instead of a number that is now fiction.
+    ...(stale.length
+      ? [prisma.exerciseStrengthEstimate.deleteMany({
+          where: { userId, exerciseId: { in: stale } },
+        })]
+      : []),
+    ...scored.map(exerciseId => prisma.exerciseStrengthEstimate.upsert({
+      where: { userId_exerciseId: { userId, exerciseId } },
+      update: { e1rm: bestByExercise.get(exerciseId)! },
+      create: { userId, exerciseId, e1rm: bestByExercise.get(exerciseId)! },
+    })),
+  ])
 }

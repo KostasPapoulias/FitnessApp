@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
@@ -859,71 +860,92 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
     const rpe = clampField('rpe', body.rpe)
     const restSeconds = clampField('restSeconds', body.restSeconds)
 
-    await prisma.$transaction(async tx => {
-      await tx.workoutSet.update({
+    // Built as a list and sent in one round trip. As an interactive
+    // transaction this was BEGIN, two updates and COMMIT — four round trips,
+    // and on a slow link to the remote database that is past the five seconds
+    // Prisma allows one, so the edit died with P2028 and returned a bare 500.
+    const writes: Prisma.PrismaPromise<unknown>[] = [
+      prisma.workoutSet.update({
         where: { id: setId },
         data: {
           ...(rpe !== undefined ? { rpe } : {}),
           ...(restSeconds !== undefined ? { restSeconds } : {}),
         },
+      }),
+    ]
+
+    if (set.strength) {
+      const reps = clampField('reps', body.reps)
+      const weight = clampField('weight', body.weight)
+      writes.push(prisma.setStrength.update({
+        where: { setId },
+        data: {
+          ...(reps != null ? { reps: Math.round(reps) } : {}),
+          ...(weight != null ? { weight } : {}),
+        },
+      }))
+    } else if (set.calisthenics) {
+      const reps = clampField('reps', body.reps)
+      const addedWeight = clampField('addedWeight', body.addedWeight)
+      const time = clampField('time', body.time)
+      writes.push(prisma.setCalisthenics.update({
+        where: { setId },
+        data: {
+          ...(reps != null ? { reps: Math.round(reps) } : {}),
+          ...(addedWeight != null ? { addedWeight } : {}),
+          ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+        },
+      }))
+    } else if (set.cardio) {
+      const distance = clampField('distance', body.distance)
+      const time = clampField('time', body.time)
+      writes.push(prisma.setCardio.update({
+        where: { setId },
+        data: {
+          ...(distance !== undefined ? { distance } : {}),
+          ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+        },
+      }))
+    } else if (set.wod) {
+      const reps = clampField('reps', body.reps)
+      const rounds = clampField('rounds', body.rounds)
+      const time = clampField('time', body.time)
+      const distance = clampField('distance', body.distance)
+      writes.push(prisma.setWOD.update({
+        where: { setId },
+        data: {
+          ...(reps !== undefined ? { reps: reps == null ? null : Math.round(reps) } : {}),
+          ...(rounds !== undefined ? { rounds } : {}),
+          ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+          ...(distance !== undefined ? { distance } : {}),
+        },
+      }))
+    } else if (set.mobility) {
+      const time = clampField('time', body.time)
+      writes.push(prisma.setMobility.update({
+        where: { setId },
+        data: { ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}) },
+      }))
+    }
+
+    await prisma.$transaction(writes)
+
+    // The set is already committed at this point. If the rebuild fails the row
+    // is correct and everything derived from it is stale, which is a different
+    // situation from the edit not happening, and the athlete has to be told
+    // which one they are in — a generic 500 here previously left them retrying
+    // an edit that had already been applied.
+    try {
+      await applySessionEdit(req.userId!, set.workoutExercise.sessionId)
+    } catch (error) {
+      console.error('updateSet rebuild error:', error)
+      res.status(500).json({
+        success: false,
+        error: 'The set was saved, but your fatigue could not be rebuilt. It will correct itself on the next edit.',
+        code: 'REBUILD_FAILED',
       })
-
-      if (set.strength) {
-        const reps = clampField('reps', body.reps)
-        const weight = clampField('weight', body.weight)
-        await tx.setStrength.update({
-          where: { setId },
-          data: {
-            ...(reps != null ? { reps: Math.round(reps) } : {}),
-            ...(weight != null ? { weight } : {}),
-          },
-        })
-      } else if (set.calisthenics) {
-        const reps = clampField('reps', body.reps)
-        const addedWeight = clampField('addedWeight', body.addedWeight)
-        const time = clampField('time', body.time)
-        await tx.setCalisthenics.update({
-          where: { setId },
-          data: {
-            ...(reps != null ? { reps: Math.round(reps) } : {}),
-            ...(addedWeight != null ? { addedWeight } : {}),
-            ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
-          },
-        })
-      } else if (set.cardio) {
-        const distance = clampField('distance', body.distance)
-        const time = clampField('time', body.time)
-        await tx.setCardio.update({
-          where: { setId },
-          data: {
-            ...(distance !== undefined ? { distance } : {}),
-            ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
-          },
-        })
-      } else if (set.wod) {
-        const reps = clampField('reps', body.reps)
-        const rounds = clampField('rounds', body.rounds)
-        const time = clampField('time', body.time)
-        const distance = clampField('distance', body.distance)
-        await tx.setWOD.update({
-          where: { setId },
-          data: {
-            ...(reps !== undefined ? { reps: reps == null ? null : Math.round(reps) } : {}),
-            ...(rounds !== undefined ? { rounds } : {}),
-            ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
-            ...(distance !== undefined ? { distance } : {}),
-          },
-        })
-      } else if (set.mobility) {
-        const time = clampField('time', body.time)
-        await tx.setMobility.update({
-          where: { setId },
-          data: { ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}) },
-        })
-      }
-    })
-
-    await applySessionEdit(req.userId!, set.workoutExercise.sessionId)
+      return
+    }
 
     res.json({ success: true, data: { id: setId } })
 
@@ -971,9 +993,18 @@ export const deleteSet = async (req: AuthRequest, res: Response) => {
  * estimates read the sets the edit just changed.
  */
 const applySessionEdit = async (userId: string, sessionId: string) => {
+  // Order matters for the first one only: recomputeUserFatigue replays the
+  // MuscleFatigueLog rows that rescoreSession has just rewritten.
   const exerciseIds = await rescoreSession(userId, sessionId)
-  await recomputeUserFatigue(userId)
-  await recomputeStrengthEstimates(userId, exerciseIds)
+
+  // The other two are independent — one owns MuscleFatigueCurrent/SystemicFatigue,
+  // the other ExerciseStrengthEstimate, and neither reads what the other writes.
+  // Sequential, that was another five seconds of pure waiting on a remote
+  // database for no reason.
+  await Promise.all([
+    recomputeUserFatigue(userId),
+    recomputeStrengthEstimates(userId, exerciseIds),
+  ])
 }
 
 //   THE SESSION STILL OPEN, IF THERE IS ONE
