@@ -1,0 +1,11 @@
+{
+  // Typechecking, including the test files that tsconfig.json excludes from the
+  // build. `tsx` strips types without checking them, so without this a test
+  // could reference a function signature that no longer exists and still run.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
