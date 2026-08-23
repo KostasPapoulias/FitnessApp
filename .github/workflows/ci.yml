@@ -1,0 +1,102 @@
+# Continuous integration.
+#
+# Nothing ran on push before. Both sides typechecked clean, which is what had
+# been carrying quality — but only because someone remembered to run `tsc` by
+# hand, and only on the side they happened to be working in.
+#
+# The two sides are separate jobs rather than sequential steps so a frontend
+# lint failure still tells you whether the backend tests passed. They have no
+# dependency on each other and there is no reason to serialise them.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first. The old run's result is
+# about code nobody is looking at any more, and it is still holding a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      # Prisma needs a syntactically valid URL to generate a client and to
+      # construct one at import time. No query is ever issued — every test here
+      # is over pure functions — so this deliberately points nowhere.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      # Long enough to clear the 32-character floor in lib/env.ts. Not a secret;
+      # nothing is signed with it.
+      JWT_SECRET: ci-only-not-a-real-secret-0123456789abcdef
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      # Before the typecheck, not after. `@prisma/client` has no types until it
+      # is generated, so without this every model reference fails to compile and
+      # the real errors are buried under hundreds of them.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # tsconfig.test.json, so the test files are checked too — tsx strips
+      # types without checking them, and an untypechecked test can reference a
+      # signature that no longer exists and still run.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # The build is what Railway runs. Passing typecheck and failing `tsc`
+      # emit is rare but possible, and finding out at deploy time is worse.
+      - name: Build
+        run: npm run build
+
+  frontend:
+    name: Frontend — lint, typecheck, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # Warnings are not failures here on purpose. There are ~90 `any`s and
+      # exhaustive-deps warnings in the existing code; failing on them would
+      # mean the first CI run is red and the fix everyone reaches for is a
+      # blanket disable. Errors fail the build, and the warning count is a list
+      # to work through.
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
