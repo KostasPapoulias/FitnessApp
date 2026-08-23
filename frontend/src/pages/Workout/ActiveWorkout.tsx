@@ -18,7 +18,7 @@ export default function ActiveWorkout() {
     selectedExercises, sessionId, sessionStartTime,
     currentExerciseIndex, currentSetIndex, completedSets,
     startSession, completeSet, updateSet, setCurrent,
-    startError, logError, clearErrors,
+    startError, logError, clearErrors, queuedSetCount,
   } = useWorkoutStore()
 
   // The finish request, fatigue refresh and reminder reschedule all live on the
@@ -251,13 +251,28 @@ export default function ActiveWorkout() {
     )
   }
 
-  // Toast shown when a set failed to persist, so a dropped set is never silent
+  // Toast shown when a set failed to persist, so a dropped set is never silent.
+  //
+  // Two states now, and they must not look the same. A red toast means the set
+  // is GONE and the athlete has to act. The amber one means it is saved on this
+  // phone and will send itself — no action needed, but not hidden either,
+  // because a set that reads as saved while living only in IndexedDB is exactly
+  // the kind of quiet difference that becomes "the app lost my workout".
   const errorToast = logError ? (
     <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
                     rounded-card border border-brand-red/50 bg-[#2a1a1a] shadow-lg">
       <span className="text-base">⚠️</span>
       <p className="flex-1 text-[13px] text-white leading-snug">{logError}</p>
       <button onClick={clearErrors} className="text-dark-300 text-lg leading-none px-1">×</button>
+    </div>
+  ) : queuedSetCount > 0 ? (
+    <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
+                    rounded-card border border-brand-orange/40 bg-[#2a2118] shadow-lg">
+      <span className="text-base">📶</span>
+      <p className="flex-1 text-[13px] text-white leading-snug">
+        {queuedSetCount === 1 ? '1 set is' : `${queuedSetCount} sets are`} saved on this phone.
+        {' '}They will upload when you have a signal.
+      </p>
     </div>
   ) : null
 

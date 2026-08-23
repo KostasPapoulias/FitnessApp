@@ -8,18 +8,140 @@
 // It lives in public/ and is copied verbatim by Vite — no bundling, no
 // import.meta.env. Config it can't hardcode is left in Cache Storage by the
 // page (see useNotifcations.ts) and read back below.
+//
+// Two jobs, and they are independent: push delivery (the original one), and the
+// app-shell cache below that makes a cold launch instant and survives a gym
+// with no signal.
 
 const CONFIG_CACHE = 'somatrack-push-config'
 const CONFIG_KEY = '/__push-config'
 
-self.addEventListener('install', () => {
+// ── app shell cache ────────────────────────────────────────────────────────
+//
+// Runtime caching rather than a precache manifest, because this file is copied
+// verbatim and never bundled — it cannot see the content-hashed filenames Vite
+// produces, and a hardcoded list would go stale on the first deploy. Assets are
+// cached the first time they are fetched instead, which costs one online launch
+// and then works offline indefinitely.
+//
+// Bump SHELL_CACHE to evict everything at once. `activate` deletes any cache
+// that is not in the current set, so an old bundle's assets do not accumulate
+// forever on a phone.
+const SHELL_CACHE = 'somatrack-shell-v1'
+const KEEP_CACHES = [SHELL_CACHE, CONFIG_CACHE]
+
+/** The SPA entry. Every navigation falls back to this — Netlify rewrites all
+ *  paths to it anyway, so one cached copy answers every route. */
+const APP_SHELL = '/index.html'
+
+self.addEventListener('install', (event) => {
   // Take over immediately rather than waiting for every tab to close, so a
   // deploy that fixes push doesn't sit behind an open home screen app.
   self.skipWaiting()
+
+  event.waitUntil(
+    caches.open(SHELL_CACHE)
+      .then((cache) => cache.addAll([APP_SHELL, '/logo-mark.png', '/manifest.json']))
+      // A failed precache must not fail the install. An offline install, or one
+      // file 404ing after a rename, would otherwise leave the worker stuck in
+      // `installing` and push would stop working too.
+      .catch(() => {})
+  )
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((names) =>
+        Promise.all(names.filter((n) => !KEEP_CACHES.includes(n)).map((n) => caches.delete(n)))
+      ),
+    ])
+  )
+})
+
+/**
+ * Which requests this worker will answer from cache at all.
+ *
+ * The API is excluded outright, and that is not a performance decision. Serving
+ * a stale readiness score or a stale fatigue map would be actively wrong — the
+ * whole model is time-dependent, and a cached body map showing yesterday's
+ * recovery is worse than an honest failure. Writes are handled by the outbox in
+ * `lib/setQueue.ts`, on the page side where there is state to reconcile.
+ */
+const isSameOriginGet = (request, url) =>
+  request.method === 'GET' &&
+  url.origin === self.location.origin &&
+  !url.pathname.startsWith('/api/')
+
+/**
+ * Built assets only — never anything the dev server invents.
+ *
+ * This allowlist exists because the same worker runs against `vite dev`, which
+ * serves modules from `/src/`, `/node_modules/` and `/@vite/` with cache-busting
+ * query strings. Caching those first-wins would serve a stale module after
+ * every edit and break HMR, and the failure would look like "my changes stopped
+ * applying" rather than anything to do with a service worker.
+ *
+ * `/assets/` is where Vite writes its content-hashed output, and the handful of
+ * root files below are the only other things a build emits.
+ */
+const CACHEABLE_ROOT_FILES = [
+  '/logo-mark.png',
+  '/manifest.json',
+  '/apple-touch-icon.png',
+  '/favicon-32.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-192.png',
+  '/icon-maskable-512.png',
+]
+
+const isBuiltAsset = (url) =>
+  url.pathname.startsWith('/assets/') || CACHEABLE_ROOT_FILES.includes(url.pathname)
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+  const url = new URL(request.url)
+
+  if (!isSameOriginGet(request, url)) return
+
+  // Navigations: network first, so a deploy is picked up on the next launch
+  // with a signal, and the cached shell answers when there is none. Cache-first
+  // here would pin users to whatever build they first installed.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone()
+          caches.open(SHELL_CACHE).then((cache) => cache.put(APP_SHELL, copy)).catch(() => {})
+          return response
+        })
+        .catch(() => caches.match(APP_SHELL).then((cached) => cached || Response.error()))
+    )
+    return
+  }
+
+  if (!isBuiltAsset(url)) return
+
+  // The hashed JS/CSS bundles, images, fonts, the map worker. Cache-first,
+  // because a content-hashed filename can never change contents: a new build
+  // produces new names, and the old ones are evicted by the version bump above
+  // rather than by revalidation.
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      if (cached) return cached
+      return fetch(request).then((response) => {
+        // Only cache a real success. An opaque cross-origin response or a 404
+        // stored here would be served forever.
+        if (response.ok && response.type === 'basic') {
+          const copy = response.clone()
+          caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => {})
+        }
+        return response
+      })
+    })
+  )
 })
 
 // ── incoming push ──
@@ -30,7 +152,7 @@ self.addEventListener('push', (event) => {
   let data = {}
   try {
     data = event.data ? event.data.json() : {}
-  } catch (err) {
+  } catch {
     data = { body: event.data ? event.data.text() : '' }
   }
 
@@ -103,7 +225,7 @@ async function ack(nid, event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nid, event })
     })
-  } catch (err) {
+  } catch {
     // Offline, or the worker was killed early. Nothing to recover here.
   }
 }
@@ -151,7 +273,7 @@ async function resubscribe(event) {
       body: JSON.stringify({ oldEndpoint, endpoint: json.endpoint, keys: json.keys })
     })
 
-  } catch (err) {
+  } catch {
     // Nothing useful to do from here — the page repairs the subscription on
     // next launch (ensurePushSubscription), this just shortens the outage.
   }
@@ -162,7 +284,7 @@ async function readConfig() {
     const cache = await caches.open(CONFIG_CACHE)
     const res = await cache.match(CONFIG_KEY)
     return res ? await res.json() : null
-  } catch (err) {
+  } catch {
     return null
   }
 }

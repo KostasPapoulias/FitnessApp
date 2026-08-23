@@ -4,6 +4,9 @@ import { PlanSuggestion, workoutService } from '../services/workout.service'
 import { TemplateInput, templateService } from '../services/template.service'
 import { RunSummary } from '../hooks/useRunTracker'
 import { toRunPayload } from '../lib/runPayload'
+import {
+  dequeueSet, enqueueSet, isRetriableFailure, queuedSets, recordAttempt,
+} from '../lib/setQueue'
 
 interface PlannedSet {
   reps: number
@@ -77,6 +80,20 @@ interface WorkoutStore {
   selectedExercises: SelectedExercise[]
   startError: string | null
   logError: string | null
+  /**
+   * Sets saved locally because the network was gone when they were logged.
+   *
+   * Surfaced so the UI can say so — a set that reads as saved but is only on
+   * the phone is the kind of quiet difference that becomes "the app lost my
+   * workout" three days later.
+   */
+  queuedSetCount: number
+  /**
+   * Try to send everything in the outbox. Safe to call at any time: the API
+   * upserts on (workoutExercise, setNumber), so a replay of an already-saved
+   * set is a no-op rather than a duplicate.
+   */
+  flushSetQueue: () => Promise<number>
   clearErrors: () => void
   addExercise: (exercise: Exercise) => void
   setSingleExercise: (exercise: Exercise) => void // replace selection with one (cardio)
@@ -178,6 +195,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   activeSession: null,
   selectedExercises: [],
   suggestionsLoading: false,
+  queuedSetCount: 0,
   sessionId: null,
   sessionStartTime: null,
   currentExerciseIndex: 0,
@@ -602,9 +620,33 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     try {
       await workoutService.logSet(sessionId, payload)
     } catch (err) {
-      console.error('logSet error:', err)
-      set({ logError: 'That set could not be saved. Check your connection and log it again.' })
-      return false
+      // Two different failures wearing the same shape, and they need opposite
+      // handling. No connection means the set is perfectly good and just could
+      // not travel — that goes in the outbox. A rejection from the server means
+      // the payload itself is unacceptable, and queueing it would retry
+      // something that can never succeed while telling the athlete it is saved.
+      if (!isRetriableFailure(err)) {
+        console.error('logSet rejected:', err)
+        set({ logError: 'That set could not be saved. Check the numbers and log it again.' })
+        return false
+      }
+
+      const queued = await enqueueSet(sessionId, payload)
+      if (!queued) {
+        // IndexedDB unavailable — private browsing, a full disk. Nothing left
+        // to offer but the honest failure.
+        console.error('logSet failed and could not be queued:', err)
+        set({ logError: 'That set could not be saved. Check your connection and log it again.' })
+        return false
+      }
+
+      // Counted as completed below, exactly as if it had been sent. The set is
+      // recorded; the only difference is where it currently lives.
+      set(state => ({
+        logError: null,
+        queuedSetCount: state.queuedSetCount + 1,
+      }))
+      void get().flushSetQueue()
     }
 
     // The backend keys a set by (workoutExercise, setNumber) and overwrites on
@@ -622,6 +664,39 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       }
     })
     return true
+  },
+
+  flushSetQueue: async () => {
+    const pending = await queuedSets()
+    if (pending.length === 0) {
+      set({ queuedSetCount: 0 })
+      return 0
+    }
+
+    let sent = 0
+    for (const entry of pending) {
+      try {
+        await workoutService.logSet(entry.sessionId, entry.payload as never)
+        await dequeueSet(entry.id)
+        sent++
+      } catch (err) {
+        if (isRetriableFailure(err)) {
+          // Still offline. Stop rather than working through the rest: they will
+          // all fail the same way, and each one is a timeout the athlete waits
+          // through if this was called from the Finish screen.
+          await recordAttempt(entry)
+          break
+        }
+        // Refused on its merits. Retrying changes nothing, and an entry that
+        // can never drain would leave the badge lit forever.
+        console.error('queued set rejected, dropping:', err)
+        await dequeueSet(entry.id)
+      }
+    }
+
+    const remaining = await queuedSets()
+    set({ queuedSetCount: remaining.length })
+    return sent
   },
 
   nextExercise: () => {
@@ -651,6 +726,12 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     finishInFlight = (async () => {
       try {
+        // Drain the outbox BEFORE finishing. The finish is what turns sets into
+        // fatigue, and it reads them from the database — a set still sitting on
+        // the phone at that moment is not counted, and replaying it afterwards
+        // would leave a row nothing derives from. This is the one place the
+        // ordering actually matters.
+        await get().flushSetQueue()
         return await doFinish(sessionId, duration, set, sourceScheduledId)
       } finally {
         // Cleared on failure too, so a retry from the Finish screen can run
