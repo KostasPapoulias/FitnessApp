@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
+import { log } from '../lib/logger'
 
 // New-user onboarding.
 //
@@ -68,7 +69,7 @@ export const getOnboardingOptions = async (_req: AuthRequest, res: Response) => 
 
     res.json({ success: true, data: { equipment, muscles } })
   } catch (error) {
-    console.error('getOnboardingOptions error:', error)
+    log.error('getOnboardingOptions failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -186,7 +187,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true, data: profile })
   } catch (error) {
-    console.error('completeOnboarding error:', error)
+    log.error('completeOnboarding failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -228,7 +229,7 @@ export const setUserEquipment = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true, data: { equipmentIds: unique } })
   } catch (error) {
-    console.error('setUserEquipment error:', error)
+    log.error('setUserEquipment failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -305,7 +306,7 @@ export const setUserInjuries = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true, data: active })
   } catch (error) {
-    console.error('setUserInjuries error:', error)
+    log.error('setUserInjuries failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -342,7 +343,7 @@ export const getOnboardingState = async (req: AuthRequest, res: Response) => {
       },
     })
   } catch (error) {
-    console.error('getOnboardingState error:', error)
+    log.error('getOnboardingState failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -370,7 +371,7 @@ export const dismissHint = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true, data: { hintKey } })
   } catch (error) {
-    console.error('dismissHint error:', error)
+    log.error('dismissHint failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -386,7 +387,7 @@ export const resetHints = async (req: AuthRequest, res: Response) => {
     await prisma.seenHint.deleteMany({ where: { userId: req.userId! } })
     res.json({ success: true, data: { reset: true } })
   } catch (error) {
-    console.error('resetHints error:', error)
+    log.error('resetHints failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

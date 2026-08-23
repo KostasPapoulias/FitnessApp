@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma'
+import { log } from '../lib/logger'
 
 /**
  * Spend guard for every AI call in the app.
@@ -156,7 +157,7 @@ export const recordUsage = async (
   } catch (error: any) {
     // Never fail a reply the user has already been charged for because the
     // ledger write failed. The rate limit still holds the line.
-    console.error('recordUsage failed:', error.message)
+    log.error('recordUsage failed', error)
   }
 }
 

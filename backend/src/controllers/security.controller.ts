@@ -4,6 +4,7 @@ import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { validatePassword, validatePin } from '../services/credentials.service'
 import { revokeAllTokens } from '../services/token-version.service'
+import { log } from '../lib/logger'
 
 /**
  * Screen lock and session control.
@@ -43,7 +44,7 @@ export const getPinStatus = async (req: AuthRequest, res: Response) => {
       },
     })
   } catch (error) {
-    console.error('getPinStatus error:', error)
+    log.error('getPinStatus failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -102,7 +103,7 @@ export const setPin = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true })
   } catch (error) {
-    console.error('setPin error:', error)
+    log.error('setPin failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -145,7 +146,7 @@ export const removePin = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true })
   } catch (error) {
-    console.error('removePin error:', error)
+    log.error('removePin failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -215,7 +216,7 @@ export const verifyPin = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true })
   } catch (error) {
-    console.error('verifyPin error:', error)
+    log.error('verifyPin failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -227,7 +228,7 @@ export const signOutEverywhere = async (req: AuthRequest, res: Response) => {
     await revokeAllTokens(req.userId!)
     res.json({ success: true })
   } catch (error) {
-    console.error('signOutEverywhere error:', error)
+    log.error('signOutEverywhere failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -264,7 +265,7 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
 
     res.json({ success: true })
   } catch (error) {
-    console.error('changePassword error:', error)
+    log.error('changePassword failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

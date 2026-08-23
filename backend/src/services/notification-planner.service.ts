@@ -4,6 +4,7 @@ import { buildUserContext } from './ai.service'
 import { recordUsage } from './ai-budget.service'
 import { NOTIFICATION_TYPES } from './notification-preference.service'
 import { localDay, localHour, isQuietHour } from './notification-window.service'
+import { log } from '../lib/logger'
 
 /**
  * The coach tier's daily plan.
@@ -200,7 +201,7 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
     return created
 
   } catch (error: any) {
-    console.error('planCoachNotifications failed:', error.message)
+    log.error('planCoachNotifications failed', error)
     return 0
   }
 }
@@ -283,7 +284,7 @@ Rules:
     // Model down, rate limited, safety-filtered, or returned unparseable JSON.
     // One generic nudge is better than a crash and better than silence, but
     // only one — filler does not deserve a full day's allowance.
-    console.error('Coach plan generation failed, using fallback:', error.message)
+    log.error('Coach plan generation failed, using fallback', error)
     return {
       items: [{ hour: 18, minute: 0, ...FALLBACK_ITEM }],
       failure: `planner fallback: ${String(error?.message ?? error).slice(0, 180)}`,

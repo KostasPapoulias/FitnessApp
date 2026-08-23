@@ -3,6 +3,7 @@ import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { isPushConfigured } from '../lib/webpush'
 import { sendNotification } from '../services/notification-sender.service'
+import { log } from '../lib/logger'
 
 // GET /api/push/public-key
 // Unauthenticated on purpose: a VAPID public key is public by definition, and
@@ -97,7 +98,7 @@ export const rotateSubscription = async (req: Request, res: Response) => {
     res.json({ success: true })
 
   } catch (error) {
-    console.error('rotateSubscription error:', error)
+    log.error('rotateSubscription failed', error)
     res.status(500).json({ success: false, error: 'Could not rotate the subscription.' })
   }
 }
@@ -144,7 +145,7 @@ export const sendTestPush = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('sendTestPush error:', error)
+    log.error('sendTestPush failed', error)
     res.status(500).json({ success: false, error: 'Could not send the test push.' })
   }
 }

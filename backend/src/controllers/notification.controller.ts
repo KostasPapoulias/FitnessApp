@@ -3,13 +3,14 @@ import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { getPreferences, updatePreferences } from '../services/notification-preference.service'
 import { registerEngagement } from '../services/notification-engagement.service'
+import { log } from '../lib/logger'
 
 // GET /api/notifications/preferences
 export const getNotificationPreferences = async (req: AuthRequest, res: Response) => {
   try {
     res.json({ success: true, data: await getPreferences(req.userId!) })
   } catch (error) {
-    console.error('getNotificationPreferences error:', error)
+    log.error('getNotificationPreferences failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -19,7 +20,7 @@ export const putNotificationPreferences = async (req: AuthRequest, res: Response
   try {
     res.json({ success: true, data: await updatePreferences(req.userId!, req.body ?? {}) })
   } catch (error) {
-    console.error('putNotificationPreferences error:', error)
+    log.error('putNotificationPreferences failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -59,7 +60,7 @@ export const getNotificationHistory = async (req: AuthRequest, res: Response) =>
       }))
     })
   } catch (error) {
-    console.error('getNotificationHistory error:', error)
+    log.error('getNotificationHistory failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -152,7 +153,7 @@ export const ackNotification = async (req: Request, res: Response) => {
 
     res.json({ success: true })
   } catch (error) {
-    console.error('ackNotification error:', error)
+    log.error('ackNotification failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

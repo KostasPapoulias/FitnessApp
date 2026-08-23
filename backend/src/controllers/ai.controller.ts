@@ -10,6 +10,7 @@ import {
   ProposalError, applyProposal, listPendingProposals, rejectProposal,
 } from '../services/ai-tools.service'
 import prisma from '../lib/prisma'
+import { log } from '../lib/logger'
 
 // POST /api/ai/chat
 export const chat = async (req: AuthRequest, res: Response) => {
@@ -60,7 +61,7 @@ export const chat = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    console.error('AI chat error:', error)
+    log.error('AI chat failed', error)
     res.status(500).json({ success: false, error: 'AI service error' })
   }
 }
@@ -71,7 +72,7 @@ export const getUsage = async (req: AuthRequest, res: Response) => {
   try {
     res.json({ success: true, data: await getUsageToday(req.userId!) })
   } catch (error) {
-    console.error('getUsage error:', error)
+    log.error('getUsage failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -167,7 +168,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { threadId: thread.id, messages, proposals } })
 
   } catch (error) {
-    console.error('getHistory error:', error)
+    log.error('getHistory failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -196,7 +197,7 @@ export const suggestWorkout = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    console.error('suggestWorkout error:', error)
+    log.error('suggestWorkout failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -215,7 +216,7 @@ export const acceptProposal = async (req: AuthRequest, res: Response) => {
         .json({ success: false, error: error.message })
       return
     }
-    console.error('acceptProposal error:', error)
+    log.error('acceptProposal failed', error)
     res.status(500).json({ success: false, error: 'Could not apply that suggestion.' })
   }
 }
@@ -226,7 +227,7 @@ export const dismissProposal = async (req: AuthRequest, res: Response) => {
     const dismissed = await rejectProposal(req.userId!, req.params.id)
     res.json({ success: true, data: { dismissed } })
   } catch (error) {
-    console.error('dismissProposal error:', error)
+    log.error('dismissProposal failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

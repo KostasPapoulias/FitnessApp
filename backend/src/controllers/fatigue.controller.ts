@@ -5,6 +5,9 @@ import { recoveryTargetFor } from '../services/fatigue.service'
 import { getTrainingLoad } from '../services/training-load.service'
 import { recoveryRateFor, resolveAge } from '../services/fatigue-model.service'
 import { AuthRequest } from '../server'
+import { log } from '../lib/logger'
+import { parseBody } from '../lib/validate'
+import { overrideFatigueSchema } from '../schemas/fatigue.schema'
 
 // GET /api/fatigue/current
 // Returns ALL muscles with their current fatigue state
@@ -42,7 +45,7 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getCurrentFatigue error:', error)
+    log.error('getCurrentFatigue failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -56,7 +59,7 @@ export const getTrainingLoadSummary = async (req: AuthRequest, res: Response) =>
     res.json({ success: true, data: load })
 
   } catch (error) {
-    console.error('getTrainingLoadSummary error:', error)
+    log.error('getTrainingLoadSummary failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -66,15 +69,9 @@ export const getTrainingLoadSummary = async (req: AuthRequest, res: Response) =>
 export const overrideFatigue = async (req: AuthRequest, res: Response) => {
   try {
     const { muscleId } = req.params
-    const { fatigueLevel } = req.body
-
-    if (fatigueLevel < 0 || fatigueLevel > 100) {
-      res.status(400).json({
-        success: false,
-        error: 'Fatigue level must be between 0 and 100'
-      })
-      return
-    }
+    const body = parseBody(overrideFatigueSchema, req.body, res)
+    if (!body) return
+    const { fatigueLevel } = body
 
     // Recovery target follows the same exponential curve as an earned level,
     // using this muscle's own half-life — an override must not put the muscle
@@ -127,7 +124,7 @@ export const overrideFatigue = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: updated })
 
   } catch (error) {
-    console.error('overrideFatigue error:', error)
+    log.error('overrideFatigue failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

@@ -4,6 +4,7 @@ import { AuthRequest } from '../server';
 import { touchLastSeen } from '../services/notification-window.service';
 import { currentTokenVersion } from '../services/token-version.service';
 import { JWT_SECRET } from '../lib/env';
+import { enrichRequestContext } from '../lib/logger';
 
 interface TokenPayload {
   userId: string;
@@ -49,6 +50,10 @@ export const verifyToken = async (
 
   req.userId = decoded.userId;
   req.user = { id: decoded.userId, email: '' };
+  // Every log line and error report from here down is attributable. This is
+  // the earliest point the identity is known, and the request-log middleware
+  // that opened the context ran before it.
+  enrichRequestContext({ userId: decoded.userId });
   // Fire and forget, throttled internally: notifications are suppressed while
   // the user is in the app, and this is the only signal that they are.
   touchLastSeen(decoded.userId);
@@ -69,6 +74,7 @@ export const optionalAuth = async (
       if (expected !== null && (decoded.tv ?? 0) === expected) {
         req.userId = decoded.userId;
         req.user = { id: decoded.userId, email: '' };
+        enrichRequestContext({ userId: decoded.userId });
       }
     } catch (error) {
       // Optional means optional: an unusable token is treated as no token,

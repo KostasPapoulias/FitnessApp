@@ -1,5 +1,6 @@
 import prisma from './prisma'
 import webpush, { isPushConfigured } from './webpush'
+import { log } from './logger'
 
 export interface PushPayload {
   title: string
@@ -73,7 +74,7 @@ export const sendToSubscriptions = async (
           result.removed++
         } else {
           result.failed++
-          console.error('Push send failed:', error.statusCode ?? '', error.message)
+          log.error('Push send failed', error, { statusCode: error.statusCode ?? null })
         }
       }
     })

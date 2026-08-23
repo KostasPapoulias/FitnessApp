@@ -8,6 +8,7 @@ import {
 import jwt from 'jsonwebtoken';
 import { prisma } from '../server';
 import { AuthRequest } from '../server';
+import { log } from '../lib/logger';
 
 interface RegisterBody {
   email: string;
@@ -103,7 +104,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       },
     });
   } catch (error) {
-    console.error('Register error:', error);
+    log.error('Register failed', error);
     res.status(500).json({
       success: false,
       error: 'Failed to register user',
@@ -172,7 +173,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       },
     });
   } catch (error) {
-    console.error('Login error:', error);
+    log.error('Login failed', error);
     res.status(500).json({
       success: false,
       error: 'Failed to login',
@@ -215,7 +216,7 @@ export const me = async (req: AuthRequest, res: Response): Promise<void> => {
       data: user,
     });
   } catch (error) {
-    console.error('Me error:', error);
+    log.error('Me failed', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch user',
@@ -267,7 +268,7 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
   } catch (error) {
     // Logged, but never surfaced: which addresses fail to send is itself a
     // signal about which addresses exist.
-    console.error('forgotPassword error:', error);
+    log.error('forgotPassword failed', error);
     res.json(accepted);
   }
 };
@@ -309,7 +310,7 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       res.status(400).json({ success: false, error: error.message });
       return;
     }
-    console.error('resetPassword error:', error);
+    log.error('resetPassword failed', error);
     res.status(500).json({ success: false, error: 'Could not reset the password.' });
   }
 };

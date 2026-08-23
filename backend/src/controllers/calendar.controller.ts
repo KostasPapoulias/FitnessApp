@@ -5,6 +5,7 @@ import { Response } from 'express';
 // singleton, so the instance is identical.
 import prisma from '../lib/prisma';
 import type { AuthRequest } from '../server';
+import { log } from '../lib/logger'
 
 // Muscle -> muscle-group mapping, mirrors the groups used on the
 // Calendar "Muscles" tab (Chest / Back / Legs / Shoulders / Arms / Core / Calves).
@@ -141,7 +142,7 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { month, year, days: dayMap } })
 
   } catch (error) {
-    console.error('getCalendarMonth error:', error)
+    log.error('getCalendarMonth failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -292,7 +293,7 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getCalendarDay error:', error)
+    log.error('getCalendarDay failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -388,7 +389,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getCalendarActivity error:', error)
+    log.error('getCalendarActivity failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -500,7 +501,7 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getCalendarMuscles error:', error)
+    log.error('getCalendarMuscles failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

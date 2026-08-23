@@ -1,4 +1,5 @@
 import prisma from './prisma'
+import { log } from './logger'
 
 /**
  * Clears out workouts that were started and never finished.
@@ -65,11 +66,11 @@ export const startSessionSweeper = () => {
   const run = async () => {
     try {
       const swept = await sweepAbandonedSessions()
-      if (swept > 0) console.log(`🧹 Cleared ${swept} abandoned workout session(s)`)
+      if (swept > 0) log.info('Cleared abandoned workout sessions', { swept })
     } catch (error: any) {
       // A throw escaping here would kill the interval permanently and silently,
       // which is exactly how the mess this cleans up went unnoticed.
-      console.error('Session sweep failed:', error.message)
+      log.error('Session sweep failed', error)
     }
   }
 

@@ -8,6 +8,7 @@ import {
   MAX_TOOL_CALLS_PER_MESSAGE, ProposalSummary, TOOL_DECLARATIONS,
   createProposal, executeReadTool, isKnownTool, isWriteTool,
 } from './ai-tools.service'
+import { log } from '../lib/logger'
 
 // Build the fatigue context string that gets sent to ChaGPT
 export const buildUserContext = async (userId: string): Promise<string> => {
@@ -380,7 +381,7 @@ export const sendMessage = async ({
         } catch (error) {
           // A failed lookup is reported to the model, not thrown: it can say
           // it could not check rather than the whole message erroring out.
-          console.error(`AI tool "${call.name}" failed:`, error)
+          log.error('AI tool failed', error, { tool: call.name })
           response = { error: 'That lookup failed.' }
         }
       }

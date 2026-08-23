@@ -2,6 +2,11 @@ import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { yearsBetween } from './onboarding.controller'
+import { log } from '../lib/logger'
+import { parseBody } from '../lib/validate'
+import {
+  logNutritionSchema, logSleepSchema, updateProfileSchema,
+} from '../schemas/profile.schema'
 
 // GET /api/profile
 export const getProfile = async (req: AuthRequest, res: Response) => {
@@ -68,7 +73,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getProfile error:', error)
+    log.error('getProfile failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -76,10 +81,12 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 // PUT /api/profile
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
+    const parsed = parseBody(updateProfileSchema, req.body, res)
+    if (!parsed) return
     const {
       name, age, weight, height, gender, fitnessLevel, goal,
       birthDate, trainingDaysPerWeek, experienceYears,
-    } = req.body
+    } = parsed
 
     // Only write what was actually sent. Spreading the body wholesale would
     // let an omitted field null out a stored value — the Edit Profile modal
@@ -131,7 +138,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: profile })
 
   } catch (error) {
-    console.error('updateProfile error:', error)
+    log.error('updateProfile failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -151,7 +158,9 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
  */
 export const logSleep = async (req: AuthRequest, res: Response) => {
   try {
-    const { sleepDate, durationMin, sleepScore, notes } = req.body
+    const body = parseBody(logSleepSchema, req.body, res)
+    if (!body) return
+    const { sleepDate, durationMin, sleepScore, notes } = body
 
     const parsedDate = sleepDate ? new Date(sleepDate) : new Date()
     if (Number.isNaN(parsedDate.getTime())) {
@@ -165,29 +174,14 @@ export const logSleep = async (req: AuthRequest, res: Response) => {
       parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate()
     ))
 
-    const minutes = Number(durationMin)
-    if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 24 * 60) {
-      res.status(400).json({
-        success: false, error: 'durationMin must be between 1 and 1440'
-      })
-      return
-    }
-
-    let score: number | null = null
-    if (sleepScore != null) {
-      score = Number(sleepScore)
-      if (!Number.isFinite(score) || score < 0 || score > 100) {
-        res.status(400).json({
-          success: false, error: 'sleepScore must be between 0 and 100'
-        })
-        return
-      }
-    }
+    // Range checks live in logSleepSchema now — same bounds, one place.
+    const minutes = durationMin
+    const score = sleepScore ?? null
 
     // Not an upsert: SleepLog has no unique constraint on (userId, sleepDate),
     // and adding one would need a migration that first has to decide what to do
     // with the duplicate rows already in the table.
-    const log = await prisma.$transaction(async tx => {
+    const entry = await prisma.$transaction(async tx => {
       await tx.sleepLog.deleteMany({
         where: { userId: req.userId!, sleepDate: night }
       })
@@ -202,10 +196,10 @@ export const logSleep = async (req: AuthRequest, res: Response) => {
       })
     })
 
-    res.status(201).json({ success: true, data: log })
+    res.status(201).json({ success: true, data: entry })
 
   } catch (error) {
-    console.error('logSleep error:', error)
+    log.error('logSleep failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -213,9 +207,11 @@ export const logSleep = async (req: AuthRequest, res: Response) => {
 // POST /api/profile/nutrition
 export const logNutrition = async (req: AuthRequest, res: Response) => {
   try {
-    const { logDate, proteinG, calories, notes } = req.body
+    const body = parseBody(logNutritionSchema, req.body, res)
+    if (!body) return
+    const { logDate, proteinG, calories, notes } = body
 
-    const log = await prisma.nutritionLog.create({
+    const entry = await prisma.nutritionLog.create({
       data: {
         userId: req.userId!,
         logDate: new Date(logDate),
@@ -225,10 +221,10 @@ export const logNutrition = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    res.status(201).json({ success: true, data: log })
+    res.status(201).json({ success: true, data: entry })
 
   } catch (error) {
-    console.error('logNutrition error:', error)
+    log.error('logNutrition failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -287,7 +283,7 @@ export const getBiometrics = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { type: rawType, days, points } })
 
   } catch (error) {
-    console.error('getBiometrics error:', error)
+    log.error('getBiometrics failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -299,7 +295,7 @@ export const deleteAccount = async (req: AuthRequest, res: Response) => {
     await prisma.user.delete({ where: { id: req.userId! } })
     res.json({ success: true, data: { message: 'Account deleted' } })
   } catch (error) {
-    console.error('deleteAccount error:', error)
+    log.error('deleteAccount failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

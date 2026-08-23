@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
+import { log } from '../lib/logger'
 
 /**
  * The Settings row had no endpoint at all.
@@ -108,7 +109,7 @@ export const getSettings = async (req: AuthRequest, res: Response): Promise<void
 
     res.json({ success: true, data: settings })
   } catch (error) {
-    console.error('getSettings error:', error)
+    log.error('getSettings failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -136,7 +137,7 @@ export const updateSettings = async (req: AuthRequest, res: Response): Promise<v
 
     res.json({ success: true, data: settings })
   } catch (error) {
-    console.error('updateSettings error:', error)
+    log.error('updateSettings failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

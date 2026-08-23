@@ -5,6 +5,7 @@ import { sendNotification, pruneGhostSubscriptions } from '../services/notificat
 import { checkSendWindow, localHour, sentWithin } from '../services/notification-window.service'
 import { applyEngagementBackoff } from '../services/notification-engagement.service'
 import { planCoachNotifications } from '../services/notification-planner.service'
+import { log } from './logger'
 
 /**
  * The tick that actually sends things.
@@ -164,11 +165,11 @@ const runTickForUser = async (userId: string, timezone: string) => {
 export const startNotificationScheduler = () => {
   if (!isPushConfigured) return
   if (!enabled) {
-    console.log('🔕 Notification scheduler disabled (NOTIFICATION_SCHEDULER_ENABLED=false)')
+    log.info('Notification scheduler disabled', { reason: 'NOTIFICATION_SCHEDULER_ENABLED=false' })
     return
   }
 
-  console.log(`🔔 Notification scheduler every ${Math.round(TICK_MS / 1000)}s`)
+  log.info('Notification scheduler started', { tickSeconds: Math.round(TICK_MS / 1000) })
 
   setInterval(async () => {
     try {
@@ -184,12 +185,12 @@ export const startNotificationScheduler = () => {
           await runTickForUser(pref.userId, pref.timezone)
           await pruneGhostSubscriptions(pref.userId)
         } catch (error: any) {
-          console.error(`notification tick failed for ${pref.userId}:`, error.message)
+          log.error('Notification tick failed', error, { userId: pref.userId })
         }
       }
     } catch (error: any) {
       // A throw escaping here would kill the interval permanently and silently
-      console.error('Notification scheduler cycle failed:', error.message)
+      log.error('Notification scheduler cycle failed', error)
     }
   }, TICK_MS)
 }

@@ -1,4 +1,5 @@
 import { Response } from 'express'
+import { log } from '../lib/logger'
 import { AuthRequest } from '../server'
 import {
   TemplateValidationError,
@@ -19,7 +20,7 @@ const fail = (res: Response, error: unknown, fallback: string) => {
     res.status(400).json({ success: false, error: error.message })
     return
   }
-  console.error(`${fallback}:`, error)
+  log.error(fallback, error)
   res.status(500).json({ success: false, error: fallback })
 }
 

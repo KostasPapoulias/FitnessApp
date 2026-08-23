@@ -6,6 +6,7 @@ import {
   CustomExerciseError, createCustomExercise, prepareCustomExercise,
 } from '../services/custom-exercise.service';
 import { AuthRequest } from '../server';
+import { log } from '../lib/logger';
 
 // Get all exercises
 // GET /api/exercises?category=Legs&modality=Strength&search=squat
@@ -109,7 +110,7 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
     })
 
   } catch (error) {
-    console.error('getExercises error:', error)
+    log.error('getExercises failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 
@@ -201,7 +202,7 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getExerciseById error:', error)
+    log.error('getExerciseById failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -245,7 +246,7 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
         .json({ success: false, error: error.message })
       return
     }
-    console.error('createExercise error:', error)
+    log.error('createExercise failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -317,7 +318,7 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: categoriesWithFatigue })
 
   } catch (error) {
-    console.error('getCategories error:', error)
+    log.error('getCategories failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

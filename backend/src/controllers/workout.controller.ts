@@ -16,8 +16,12 @@ import { startingSets, startingWorkingLoad } from '../services/starting-load.ser
 import {
   recomputeStrengthEstimates, recomputeUserFatigue, rescoreSession,
 } from '../services/fatigue-recompute.service'
-
-const SET_TYPES = ['STRENGTH', 'CALISTHENICS', 'CARDIO', 'WOD', 'MOBILITY'] as const
+import { log } from '../lib/logger'
+import { parseBody } from '../lib/validate'
+import {
+  addExerciseSchema, finishSessionSchema, logSetSchema, startSessionSchema,
+  updateSetSchema,
+} from '../schemas/workout.schema'
 
 // Fallback bodyweight (kg) when the user has no profile weight recorded
 const DEFAULT_BODY_WEIGHT = 70
@@ -28,7 +32,9 @@ const DEFAULT_BODY_WEIGHT = 70
 // Creates an empty session and returns the ID
 export const startSession = async (req: AuthRequest, res: Response) => {
   try {
-    const { notes, weatherCondition } = req.body
+    const body = parseBody(startSessionSchema, req.body, res)
+    if (!body) return
+    const { notes, weatherCondition } = body
 
     const session = await prisma.workoutSession.create({
       data: {
@@ -42,7 +48,7 @@ export const startSession = async (req: AuthRequest, res: Response) => {
     res.status(201).json({ success: true, data: session })
 
   } catch (error) {
-    console.error('startSession error:', error)
+    log.error('startSession failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -53,7 +59,9 @@ export const startSession = async (req: AuthRequest, res: Response) => {
 export const addExercise = async (req: AuthRequest, res: Response) => {
   try {
     const { id: sessionId } = req.params
-    const { exerciseId, orderIndex, notes } = req.body
+    const body = parseBody(addExerciseSchema, req.body, res)
+    if (!body) return
+    const { exerciseId, orderIndex, notes } = body
 
     // Verify session belongs to this user
     const session = await prisma.workoutSession.findFirst({
@@ -72,7 +80,7 @@ export const addExercise = async (req: AuthRequest, res: Response) => {
     res.status(201).json({ success: true, data: workoutExercise })
 
   } catch (error) {
-    console.error('addExercise error:', error)
+    log.error('addExercise failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -156,29 +164,25 @@ const validateRun = (run: any): { row: any } | { error: string } => {
 export const logSet = async (req: AuthRequest, res: Response) => {
   try {
     const { id: sessionId } = req.params
-    const {
-      workoutExerciseId,
-      setNumber,
-      setType,
-      rpe,
-      restSeconds,
-      // Modality-specific data
-      reps, weight,          // STRENGTH
-      addedWeight,           // CALISTHENICS
-      distance, time,        // CARDIO / WOD
-      rounds,                // WOD (reps carries reps-per-round)
-      duration,              // MOBILITY
-      run                    // CARDIO — recorded route, splits, average pace
-    } = req.body
 
-    if (!SET_TYPES.includes(setType)) {
-      res.status(400).json({ success: false, error: `Invalid setType: ${setType}` })
-      return
-    }
-    if (!workoutExerciseId || !Number.isInteger(setNumber) || setNumber < 1) {
-      res.status(400).json({ success: false, error: 'workoutExerciseId and a positive setNumber are required' })
-      return
-    }
+    // The schema is a discriminated union on setType, so it does the work the
+    // three hand-written checks below it used to do — and every bound the
+    // fatigue model depends on that none of them ever checked.
+    const body = parseBody(logSetSchema, req.body, res)
+    if (!body) return
+
+    const { workoutExerciseId, setNumber, setType, rpe, restSeconds } = body
+
+    // Narrowed off the union rather than destructured: `weight` does not exist
+    // on a CARDIO set and TypeScript is right to say so.
+    const reps = 'reps' in body ? body.reps : undefined
+    const weight = 'weight' in body ? body.weight : undefined
+    const addedWeight = 'addedWeight' in body ? body.addedWeight : undefined
+    const distance = 'distance' in body ? body.distance : undefined
+    const time = 'time' in body ? body.time : undefined
+    const rounds = 'rounds' in body ? body.rounds : undefined
+    const duration = 'duration' in body ? body.duration : undefined
+    const run = 'run' in body ? body.run : undefined
 
     // The exercise must belong to THIS session, and the session to this user.
     // Checking only the session would let a caller write sets into someone
@@ -274,13 +278,13 @@ export const logSet = async (req: AuthRequest, res: Response) => {
     if (setType === 'CARDIO' && run) {
       const checked = validateRun(run)
       if ('error' in checked) {
-        console.warn(`logSet: discarding run track (${checked.error})`)
+        log.warn('logSet: discarding run track', { reason: checked.error })
       } else {
         try {
           await prisma.runTrack.deleteMany({ where: { setId: workoutSet.id } })
           await prisma.runTrack.create({ data: { setId: workoutSet.id, ...checked.row } })
         } catch (error) {
-          console.error('logSet: run track not saved:', error)
+          log.error('logSet: run track not saved', error)
         }
       }
     }
@@ -289,7 +293,7 @@ export const logSet = async (req: AuthRequest, res: Response) => {
     res.status(replaced ? 200 : 201).json({ success: true, data: workoutSet, replaced })
 
   } catch (error) {
-    console.error('logSet error:', error)
+    log.error('logSet failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -302,7 +306,10 @@ export const logSet = async (req: AuthRequest, res: Response) => {
 export const finishSession = async (req: AuthRequest, res: Response) => {
   try {
     const { id: sessionId } = req.params
-    const { duration } = req.body
+
+    const body = parseBody(finishSessionSchema, req.body, res)
+    if (!body) return
+    const { duration } = body
 
     // Load the full session with all exercises, sets, and muscle links
     const session = await prisma.workoutSession.findFirst({
@@ -385,10 +392,9 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
     // save, even if their profile is somehow incomplete.
     const bodyWeight = profile?.weight ?? DEFAULT_BODY_WEIGHT
     if (profile?.weight == null) {
-      console.warn(
-        `[fatigue] userId=${req.userId} finished a session with no profile weight; ` +
-        `calisthenics load fell back to ${DEFAULT_BODY_WEIGHT} kg`
-      )
+      log.warn('Session finished with no profile weight', {
+        fallbackBodyWeight: DEFAULT_BODY_WEIGHT,
+      })
     }
     const recoveryRate = recoveryRateFor(
       profile?.fitnessLevel,
@@ -406,7 +412,9 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
     // Scoring lives in session-scoring.service so that finishing a session and
     // re-scoring an edited one cannot drift apart.
     const { totalVolume, avgRpe, sessionLoad, muscleDeltas, newE1rm } =
-      scoreSession(session, { bodyWeight, e1rmByExercise, duration })
+      // `?? null` because the schema distinguishes "not sent" from "sent as
+      // null", and the scorer only cares that there is no client duration.
+      scoreSession(session, { bodyWeight, e1rmByExercise, duration: duration ?? null })
 
 
     // Read current fatigue for every affected muscle up front, in ONE query.
@@ -549,7 +557,7 @@ export const finishSession = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('finishSession error:', error)
+    log.error('finishSession failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -629,7 +637,7 @@ export const getPlanSuggestions = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: suggestions })
 
   } catch (error) {
-    console.error('getPlanSuggestions error:', error)
+    log.error('getPlanSuggestions failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -685,7 +693,7 @@ export const getSessions = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: sessions })
 
   } catch (error) {
-    console.error('getSessions error:', error)
+    log.error('getSessions failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -731,7 +739,7 @@ export const getSessionById = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: session })
 
   } catch (error) {
-    console.error('getSessionById error:', error)
+    log.error('getSessionById failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -798,7 +806,7 @@ export const deleteSession = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { id: sessionId, reversed: wasFinished } })
 
   } catch (error) {
-    console.error('deleteSession error:', error)
+    log.error('deleteSession failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -813,29 +821,6 @@ export const deleteSession = async (req: AuthRequest, res: Response) => {
 // Only the modality fields the set already has are writable — a STRENGTH set
 // cannot be turned into a CARDIO one. Changing a set's type would change what
 // it means, and every downstream number was derived from that meaning.
-const SET_FIELD_LIMITS = {
-  reps:        { min: 0, max: 1000 },
-  weight:      { min: 0, max: 1000 },
-  addedWeight: { min: -500, max: 500 },
-  distance:    { min: 0, max: 500_000 },
-  time:        { min: 0, max: 86_400 },
-  rounds:      { min: 0, max: 1000 },
-  rpe:         { min: 1, max: 10 },
-  restSeconds: { min: 0, max: 3600 },
-}
-
-const clampField = (
-  name: keyof typeof SET_FIELD_LIMITS,
-  raw: unknown
-): number | null | undefined => {
-  if (raw === undefined) return undefined
-  if (raw === null) return null
-  const value = Number(raw)
-  if (!Number.isFinite(value)) return undefined
-  const { min, max } = SET_FIELD_LIMITS[name]
-  return Math.min(max, Math.max(min, value))
-}
-
 export const updateSet = async (req: AuthRequest, res: Response) => {
   try {
     const { setId } = req.params
@@ -856,9 +841,9 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    const body = req.body as Record<string, unknown>
-    const rpe = clampField('rpe', body.rpe)
-    const restSeconds = clampField('restSeconds', body.restSeconds)
+    const body = parseBody(updateSetSchema, req.body, res)
+    if (!body) return
+    const { rpe, restSeconds } = body
 
     // Built as a list and sent in one round trip. As an interactive
     // transaction this was BEGIN, two updates and COMMIT — four round trips,
@@ -874,9 +859,9 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
       }),
     ]
 
+    const { reps, weight, addedWeight, distance, time, rounds } = body
+
     if (set.strength) {
-      const reps = clampField('reps', body.reps)
-      const weight = clampField('weight', body.weight)
       writes.push(prisma.setStrength.update({
         where: { setId },
         data: {
@@ -885,9 +870,6 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
         },
       }))
     } else if (set.calisthenics) {
-      const reps = clampField('reps', body.reps)
-      const addedWeight = clampField('addedWeight', body.addedWeight)
-      const time = clampField('time', body.time)
       writes.push(prisma.setCalisthenics.update({
         where: { setId },
         data: {
@@ -897,8 +879,6 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
         },
       }))
     } else if (set.cardio) {
-      const distance = clampField('distance', body.distance)
-      const time = clampField('time', body.time)
       writes.push(prisma.setCardio.update({
         where: { setId },
         data: {
@@ -907,10 +887,6 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
         },
       }))
     } else if (set.wod) {
-      const reps = clampField('reps', body.reps)
-      const rounds = clampField('rounds', body.rounds)
-      const time = clampField('time', body.time)
-      const distance = clampField('distance', body.distance)
       writes.push(prisma.setWOD.update({
         where: { setId },
         data: {
@@ -921,7 +897,6 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
         },
       }))
     } else if (set.mobility) {
-      const time = clampField('time', body.time)
       writes.push(prisma.setMobility.update({
         where: { setId },
         data: { ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}) },
@@ -938,7 +913,7 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
     try {
       await applySessionEdit(req.userId!, set.workoutExercise.sessionId)
     } catch (error) {
-      console.error('updateSet rebuild error:', error)
+      log.error('updateSet rebuild failed', error)
       res.status(500).json({
         success: false,
         error: 'The set was saved, but your fatigue could not be rebuilt. It will correct itself on the next edit.',
@@ -950,7 +925,7 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { id: setId } })
 
   } catch (error) {
-    console.error('updateSet error:', error)
+    log.error('updateSet failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -979,7 +954,7 @@ export const deleteSet = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { id: setId } })
 
   } catch (error) {
-    console.error('deleteSet error:', error)
+    log.error('deleteSet failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -1050,7 +1025,7 @@ export const getActiveSession = async (req: AuthRequest, res: Response) => {
     })
 
   } catch (error) {
-    console.error('getActiveSession error:', error)
+    log.error('getActiveSession failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -1081,7 +1056,7 @@ export const getRunTrack = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: track })
 
   } catch (error) {
-    console.error('getRunTrack error:', error)
+    log.error('getRunTrack failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

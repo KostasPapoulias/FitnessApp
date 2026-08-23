@@ -7,6 +7,7 @@ import {
   getVolumeTrend,
 } from '../services/progress.service'
 import { getExerciseHistory, getHistoryPage } from '../services/workout-history.service'
+import { log } from '../lib/logger'
 
 /**
  * GET /api/progress/summary?weeks=12&days=30
@@ -35,7 +36,7 @@ export const getProgressSummary = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { volume, strength, muscles } })
 
   } catch (error) {
-    console.error('getProgressSummary error:', error)
+    log.error('getProgressSummary failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -53,7 +54,7 @@ export const getExerciseStrengthSeries = async (req: AuthRequest, res: Response)
     res.json({ success: true, data: { exerciseId: req.params.exerciseId, points } })
 
   } catch (error) {
-    console.error('getExerciseStrengthSeries error:', error)
+    log.error('getExerciseStrengthSeries failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -76,7 +77,7 @@ export const getWorkoutHistory = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: page })
 
   } catch (error) {
-    console.error('getWorkoutHistory error:', error)
+    log.error('getWorkoutHistory failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
@@ -98,7 +99,7 @@ export const getExerciseHistoryForUser = async (req: AuthRequest, res: Response)
     res.json({ success: true, data: history })
 
   } catch (error) {
-    console.error('getExerciseHistoryForUser error:', error)
+    log.error('getExerciseHistoryForUser failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
