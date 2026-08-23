@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <!-- iOS never reads the manifest for the home-screen icon; without this it
+         screenshots the page instead. Must be a plain opaque square — iOS
+         applies its own rounded mask and does not honour transparency. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0,
                user-scalable=no, viewport-fit=cover" />
