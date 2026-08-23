@@ -642,62 +642,6 @@ export const getPlanSuggestions = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/workout/sessions
-// Used by Calendar screen
-export const getSessions = async (req: AuthRequest, res: Response) => {
-  try {
-    const { month, year, limit } = req.query
-
-    // Completed sessions only. `duration` is written by the finish claim and
-    // nothing else, so `duration: null` is an abandoned session — it carries no
-    // volume, no RPE and no fatigue, and returning it padded history with
-    // entries that render as blank rows. The open session has its own endpoint.
-    const where: any = { userId: req.userId!, duration: { not: null } }
-
-    // Filter by month/year for calendar view
-    if (month && year) {
-      const start = new Date(Number(year), Number(month) - 1, 1)
-      const end = new Date(Number(year), Number(month), 1)
-      where.dateTime = { gte: start, lt: end }
-    }
-
-    const sessions = await prisma.workoutSession.findMany({
-      where,
-      include: {
-        workoutExercises: {
-          include: {
-            exercise: {
-              include: {
-                categoryLinks: { include: { category: true } },
-                muscleLinks: { include: { muscle: true } }
-              }
-            },
-            sets: {
-              include: {
-                strength: true,
-                calisthenics: true,
-                cardio: true,
-                wod: true,
-                mobility: true
-              },
-              orderBy: { setNumber: 'asc' }
-            }
-          },
-          orderBy: { orderIndex: 'asc' }
-        }
-      },
-      orderBy: { dateTime: 'desc' },
-      take: limit ? Number(limit) : 50
-    })
-
-    res.json({ success: true, data: sessions })
-
-  } catch (error) {
-    log.error('getSessions failed', error)
-    res.status(500).json({ success: false, error: 'Server error' })
-  }
-}
-
 //   GET SINGLE SESSION 
 // GET /api/workout/sessions/:id
 export const getSessionById = async (req: AuthRequest, res: Response) => {

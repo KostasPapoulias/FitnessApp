@@ -91,11 +91,18 @@ export const setPin = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Hashed once. Both branches of an upsert are evaluated when the object is
+    // built — only one is used — so the inline version ran bcrypt TWICE on
+    // every call and threw one result away. bcrypt is deliberately slow (that
+    // is the point of it), so this was ~100 ms of pure waste per request, and
+    // unlike a round trip it is CPU on the server rather than time on the wire.
+    const pinHash = await bcrypt.hash(pin, PIN_ROUNDS)
+
     await prisma.settings.upsert({
       where: { userId: req.userId! },
-      create: { userId: req.userId!, pinHash: await bcrypt.hash(pin, PIN_ROUNDS) },
+      create: { userId: req.userId!, pinHash },
       update: {
-        pinHash: await bcrypt.hash(pin, PIN_ROUNDS),
+        pinHash,
         pinFailedAttempts: 0,
         pinLockedUntil: null,
       },

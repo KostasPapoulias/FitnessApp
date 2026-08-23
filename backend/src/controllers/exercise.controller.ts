@@ -5,6 +5,10 @@ import { rankByConstraints, getTrainingConstraints } from '../services/training-
 import {
   CustomExerciseError, createCustomExercise, prepareCustomExercise,
 } from '../services/custom-exercise.service';
+import {
+  byCatalogueName, customExercisesFor, filterCatalogue, invalidateCatalogue,
+  sharedCatalogue,
+} from '../services/exercise-catalogue.service';
 import { AuthRequest } from '../server';
 import { log } from '../lib/logger';
 
@@ -13,55 +17,37 @@ import { log } from '../lib/logger';
 // filtering by category, modality, and search term
 export const getExercises = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const {category, modality, search } = req.query
+    const { category, modality, search } = req.query
 
-    const exercises = await prisma.exercise.findMany({
-      where: {
-        //filter by caetegory
-        ...(category && {
-          categoryLinks: {
-            some: {
-              category: {name: String(category)}
-            }
-          }
-        }),
-        //filter by modality
-        ...(modality && {
-          modality: {name: String(modality) }
-        }),
-        //filter by search 
-        ...(search && {
-          name: {contains: String(search), mode: 'insensitive'}
-        }),
-        OR: [
-          {createdByUserId: null },
-          {createdByUserId: req.userId}
-        ]
-      },
-      include: {
-        modality: true,
-        muscleLinks: {
-          include: {muscle: true}
-        },
-        categoryLinks: {
-          include: {category: true}
-        },
-        equipmentLinks: {
-          include: {equipment: true}
-        }
-      },
-      orderBy: {name: 'asc'}
-    });
+    // Four independent reads, issued together rather than one after another.
+    // Measured against the real database, the sequential version cost ~1.5 s
+    // more per request at a ~515 ms round trip — see TODO item 18.
+    //
+    // In practice only three of these reach Postgres: the shared catalogue is
+    // served from memory (see exercise-catalogue.service), which is where most
+    // of this endpoint's time used to go.
+    const [shared, custom, fatigueCurrent, constraints] = await Promise.all([
+      sharedCatalogue(),
+      customExercisesFor(req.userId!),
+      prisma.muscleFatigueCurrent.findMany({ where: { userId: req.userId! } }),
+      // Equipment the athlete has, and anything they are training around. Both
+      // are no-ops until the optional onboarding stage has been answered.
+      getTrainingConstraints(req.userId!),
+    ])
 
-  // Get fatigue for the user to flag high-fatigue exercises
-    const fatigueCurrent = await prisma.muscleFatigueCurrent.findMany({
-      where: { userId: req.userId! }
-    })
+    // Filtering moved out of SQL and into memory. Over ~172 rows it is
+    // microseconds, and it is what lets one cached read serve every
+    // combination of category / modality / search the picker can produce — as
+    // a WHERE clause, each combination was its own uncacheable query.
+    const exercises = filterCatalogue([...shared, ...custom], {
+      category: category ? String(category) : undefined,
+      modality: modality ? String(modality) : undefined,
+      search: search ? String(search) : undefined,
+    }).sort(byCatalogueName)
+
+    // Fatigue for this user, to flag exercises that load something already spent.
     const fatigueMap = buildEffectiveFatigueMap(fatigueCurrent)
 
-    // Equipment the athlete has, and anything they are training around. Both
-    // are no-ops until the optional onboarding stage has been answered.
-    const constraints = await getTrainingConstraints(req.userId!)
     const { ranked, hiddenCount, missingEquipmentCount } =
       rankByConstraints(exercises, constraints)
 
@@ -236,6 +222,11 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
     })
 
     const created = await createCustomExercise(req.userId!, prepared)
+
+    // The new row is not in the cached half — custom exercises are read per
+    // request — but the merged list's ordering and counts are, so drop it.
+    invalidateCatalogue()
+
     res.status(201).json({ success: true, data: created })
 
   } catch (error) {

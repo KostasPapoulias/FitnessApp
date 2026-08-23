@@ -315,10 +315,23 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
     // invisible all week, then on Saturday it hid the whole of today.
     const queryEnd = endOfDay(gridEnd)
 
-    const sessions = await prisma.workoutSession.findMany({
-      where: { userId, dateTime: { gte: start, lte: queryEnd }, duration: { not: null } },
-      select: { dateTime: true, totalVolume: true }
-    })
+    // Year-to-date is a different window from the 53-week grid, and neither
+    // read depends on the other — so they go out together rather than one after
+    // the other. At a ~515 ms round trip that is half this endpoint's latency.
+    const yearStart = new Date(today.getFullYear(), 0, 1)
+
+    const [sessions, yearSessions] = await Promise.all([
+      prisma.workoutSession.findMany({
+        where: { userId, dateTime: { gte: start, lte: queryEnd }, duration: { not: null } },
+        select: { dateTime: true, totalVolume: true }
+      }),
+      prisma.workoutSession.findMany({
+        // endOfDay, not `today`: a midnight bound excluded everything logged
+        // today, so the year total was always a day behind.
+        where: { userId, dateTime: { gte: yearStart, lte: endOfDay(today) }, duration: { not: null } },
+        select: { dateTime: true }
+      }),
+    ])
 
     const volumeByDay = new Map<string, number>()
     for (const s of sessions) {
@@ -371,14 +384,8 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
     let current = 0
     for (let i = flat.length - 1; i >= 0; i--) { if (flat[i].level > 0) current++; else break }
 
-    // Year-to-date totals (independent of the 53-week rolling window).
-    const yearStart = new Date(today.getFullYear(), 0, 1)
-    const yearSessions = await prisma.workoutSession.findMany({
-      // endOfDay, not `today`: a midnight bound excluded everything logged
-      // today, so the year total was always a day behind.
-      where: { userId, dateTime: { gte: yearStart, lte: endOfDay(today) }, duration: { not: null } },
-      select: { dateTime: true }
-    })
+    // Year-to-date totals (independent of the 53-week rolling window — the
+    // read for these was issued at the top, alongside the grid's).
     const totalThisYear = new Set(yearSessions.map(s => dayKey(s.dateTime))).size
     const daysElapsed = Math.floor((today.getTime() - yearStart.getTime()) / 86400000) + 1
     const consistencyPct = daysElapsed > 0 ? Math.round((totalThisYear / daysElapsed) * 100) : 0
@@ -405,16 +412,24 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     rangeStart.setDate(rangeStart.getDate() - WEEKS * 7 + 1)
     rangeStart.setHours(0, 0, 0, 0)
 
-    const workoutExercises = await prisma.workoutExercise.findMany({
-      where: {
-        session: { userId, dateTime: { gte: rangeStart, lte: today }, duration: { not: null } },
-      },
-      include: {
-        session: { select: { dateTime: true } },
-        exercise: { include: { muscleLinks: { include: { muscle: true } } } },
-        sets: { select: { id: true } }
-      }
-    })
+    // Eight weeks of volume, and the current per-muscle fatigue used for the
+    // coach tip at the bottom. Independent reads, issued together.
+    const [workoutExercises, fatigue] = await Promise.all([
+      prisma.workoutExercise.findMany({
+        where: {
+          session: { userId, dateTime: { gte: rangeStart, lte: today }, duration: { not: null } },
+        },
+        include: {
+          session: { select: { dateTime: true } },
+          exercise: { include: { muscleLinks: { include: { muscle: true } } } },
+          sets: { select: { id: true } }
+        }
+      }),
+      prisma.muscleFatigueCurrent.findMany({
+        where: { userId },
+        include: { muscle: true }
+      }),
+    ])
 
     const weekIndexFor = (date: Date) => {
       const diffDays = Math.floor((date.getTime() - rangeStart.getTime()) / 86400000)
@@ -464,11 +479,8 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
       muscleInsight = 'Your training is well balanced across muscle groups over the last 8 weeks.'
     }
 
-    // AI coach tip, derived from current per-muscle fatigue levels.
-    const fatigue = await prisma.muscleFatigueCurrent.findMany({
-      where: { userId },
-      include: { muscle: true }
-    })
+    // AI coach tip, derived from current per-muscle fatigue levels (read at the
+    // top, alongside the volume query).
     const fatigueByGroup: Record<string, number[]> = {}
     for (const f of fatigue) {
       const g = MUSCLE_GROUP[f.muscle.name]

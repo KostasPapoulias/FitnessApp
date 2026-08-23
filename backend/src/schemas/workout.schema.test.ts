@@ -96,13 +96,25 @@ describe('logSetSchema', () => {
     rejects(logSetSchema, { ...assisted, addedWeight: -900 })
   })
 
+  test('distance is kilometres, so a client sending metres is rejected', () => {
+    // SetCardio.distance is km rounded to 2dp (RunTrack.distanceM is the metre
+    // one). The bound inherited from the old clamp table read it as metres and
+    // allowed 500_000, so a 5 km run sent as 5000 was stored as 5000 km.
+    accepts(logSetSchema, {
+      workoutExerciseId: 'we_1', setNumber: 1, setType: 'CARDIO', time: 1800, distance: 5,
+    })
+    rejects(logSetSchema, {
+      workoutExerciseId: 'we_1', setNumber: 1, setType: 'CARDIO', time: 1800, distance: 5000,
+    })
+  })
+
   test('drops a field that does not belong to the modality', () => {
     const parsed = logSetSchema.safeParse({
       workoutExerciseId: 'we_1',
       setNumber: 1,
       setType: 'CARDIO',
       time: 1800,
-      distance: 5000,
+      distance: 5,
       weight: 200,
     })
     assert.ok(parsed.success)

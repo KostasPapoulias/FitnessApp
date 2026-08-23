@@ -5,7 +5,6 @@ import {
   addExercise,
   logSet,
   finishSession,
-  getSessions,
   getSessionById,
   getActiveSession,
   deleteSession,
@@ -29,12 +28,15 @@ router.post('/plan-suggestions', getPlanSuggestions)
  * @returns created workout session
  */
 router.post('/sessions', startSession)
-/**
- * @route GET /api/workout/sessions
- * @protected
- * @returns list of user's workout sessions
+/*
+ * GET /api/workout/sessions is deliberately gone.
+ *
+ * It deep-included every set of every modality for up to 50 sessions with no
+ * cursor — measured at 122 KB and ~12 s for twenty. History moved to the
+ * cursor-paged `/api/progress/history`, and its last caller (CardioPlan,
+ * pre-filling one distance and one time) now asks
+ * `/api/progress/exercises/:id/history?limit=1` for the 0.8 KB it needs.
  */
-router.get('/sessions', getSessions)
 /**
  * @route GET /api/workout/sessions/active
  * @protected

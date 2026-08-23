@@ -69,11 +69,6 @@ export const workoutService = {
     return res.data.data
   },
 
-  getRecentSessions: async (limit = 20) => {
-    const res = await api.get('/workout/sessions', { params: { limit } })
-    return res.data.data as any[]
-  },
-
   /**
    * The workout that was started and never finished, if there is one.
    *

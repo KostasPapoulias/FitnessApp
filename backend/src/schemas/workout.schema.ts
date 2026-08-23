@@ -10,7 +10,7 @@
  */
 
 import {
-  z, id, kg, addedKg, reps, rpe, seconds, metres, rounds, restSeconds, notes,
+  z, id, kg, addedKg, reps, rpe, seconds, distanceKm, rounds, restSeconds, notes,
 } from '../lib/validate'
 
 /** Sets per exercise. High enough for a long EMOM, low enough to bound a loop. */
@@ -61,7 +61,7 @@ export const logSetSchema = z.discriminatedUnion('setType', [
   z.object({
     ...setBase,
     setType: z.literal('CARDIO'),
-    distance: metres.nullish(),
+    distance: distanceKm.nullish(),
     time: seconds.nullish(),
     /**
      * The recorded route. Left unchecked here on purpose — `validateRun` in the
@@ -74,7 +74,7 @@ export const logSetSchema = z.discriminatedUnion('setType', [
   z.object({
     ...setBase,
     setType: z.literal('WOD'),
-    distance: metres.nullish(),
+    distance: distanceKm.nullish(),
     time: seconds.nullish(),
     /** Reps per round — with `rounds`, this is the metcon's score. */
     reps: reps.nullish(),
@@ -108,7 +108,7 @@ export const updateSetSchema = z.object({
   reps: reps.nullish(),
   weight: kg.nullish(),
   addedWeight: addedKg.nullish(),
-  distance: metres.nullish(),
+  distance: distanceKm.nullish(),
   time: seconds.nullish(),
   rounds: rounds.nullish(),
 })

@@ -117,8 +117,17 @@ export const rpe = z.number().min(1).max(10)
 /** Seconds. Capped at a day — anything longer is a forgotten stopwatch. */
 export const seconds = z.number().min(0).max(86_400)
 
-/** Metres. 500 km covers an ultra and stops at obvious nonsense. */
-export const metres = z.number().min(0).max(500_000)
+/**
+ * Kilometres — the unit `SetCardio.distance` and `SetWOD.distance` are stored
+ * in, rounded to two decimals. (`RunTrack.distanceM` is the metre one; it is
+ * validated by `validateRun`, not here.)
+ *
+ * 1000 km is past any single session ever logged and still catches the failure
+ * that matters: a client sending metres. The bound this replaced was
+ * `max: 500_000`, inherited from the old clamp table, which read the field as
+ * metres — so a 5000 km "run" was accepted as valid.
+ */
+export const distanceKm = z.number().min(0).max(1000)
 
 export const rounds = z.number().int().min(0).max(1000)
 

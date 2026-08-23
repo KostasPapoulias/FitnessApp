@@ -5,10 +5,12 @@
 // time with no month boundary, the other needs a list ordered by time filtered
 // to one movement.
 //
-// Both are deliberately LEAN reads. `getSessions` deep-includes every set with
-// all five modality relations for fifty sessions at a time, which is what made
-// paging it impossible; a list row needs the exercise names and a couple of
-// totals, and nothing else. The sets are fetched when a session is opened.
+// Both are deliberately LEAN reads. They replaced `GET /api/workout/sessions`,
+// which deep-included every set with all five modality relations for up to
+// fifty sessions and had no cursor — measured at 122 KB and ~12 s for twenty,
+// which is what made paging it impossible. A list row needs the exercise names
+// and a couple of totals, and nothing else; the sets are fetched when a session
+// is opened. That endpoint has since been deleted.
 
 import prisma from '../lib/prisma'
 import { estimateE1rm, HOLD_SECONDS_PER_REP } from './fatigue-model.service'

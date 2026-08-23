@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { workoutService } from '../../services/workout.service'
+import { progressService } from '../../services/progress.service'
 import { exerciseEmoji, fmtTime } from './helpers'
 
 type TargetType = 'distance' | 'time'
@@ -16,27 +16,35 @@ export default function CardioPlan() {
   const [timeMin, setTimeMin] = useState(30)        // minutes
   const [recent, setRecent] = useState<{ distance: number; time: number } | null>(null)
 
-  // Pre-fill from the user's most recent session of this activity
+  // Pre-fill from the athlete's most recent session of THIS activity.
+  //
+  // Asks for one exercise's history rather than for whole sessions. The version
+  // this replaces called `getRecentSessions(20)`, which deep-included every set
+  // of every modality for twenty sessions — measured at 122 KB and ~12 s — and
+  // then scanned it in the browser for two numbers. The same answer is 0.8 KB.
   useEffect(() => {
     if (!activity) return
     let cancelled = false
-    workoutService.getRecentSessions(20).then(sessions => {
-      if (cancelled) return
-      for (const s of sessions) {
-        for (const we of s.workoutExercises ?? []) {
-          if (we.exercise?.id !== activity.exercise.id) continue
-          const cardioSet = (we.sets ?? []).find((st: any) => st.cardio)
-          if (cardioSet?.cardio) {
-            const dist = cardioSet.cardio.distance ?? 0
-            const time = cardioSet.cardio.time ?? 0
-            setRecent({ distance: dist, time })
-            if (dist > 0) setDistanceKm(Math.round(dist * 2) / 2)
-            if (time > 0) setTimeMin(Math.max(5, Math.round(time / 60)))
-            return
-          }
-        }
-      }
-    }).catch(() => {})
+
+    progressService.getExerciseHistory(activity.exercise.id, 1)
+      .then(history => {
+        if (cancelled) return
+
+        // `entries` is newest-first and `limit: 1` asks for one session, so the
+        // first cardio set in it is the most recent one performed.
+        const set = history.entries[0]?.sets.find(
+          s => s.distanceKm != null || s.timeSec != null
+        )
+        if (!set) return
+
+        const dist = set.distanceKm ?? 0
+        const time = set.timeSec ?? 0
+        setRecent({ distance: dist, time })
+        if (dist > 0) setDistanceKm(Math.round(dist * 2) / 2)
+        if (time > 0) setTimeMin(Math.max(5, Math.round(time / 60)))
+      })
+      .catch(() => {})
+
     return () => { cancelled = true }
   }, [activity?.exercise.id])
 
