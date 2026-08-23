@@ -1,8 +1,10 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import BottomNav from './BottomNav'
+import ErrorBoundary from '../ErrorBoundary'
 import { useDeviceType } from '../../hooks/useDeviceType'
 import { useOnboardingStore } from '../../store/useOnboardingStore'
+import { useOfflineQueue } from '../../hooks/useOfflineQueue'
 
 const SWIPE_ROUTES = ['/', '/calendar', '/ai', '/profile']
 
@@ -51,6 +53,12 @@ export default function AppLayout() {
   useEffect(() => {
     fetchOnboardingState()
   }, [])
+
+  // Drains sets logged with no signal. Here rather than on the workout screen
+  // because the athlete has usually navigated away by the time the connection
+  // comes back — and because this is also what restores the badge count after
+  // a cold launch.
+  useOfflineQueue()
 
   const touchStartX  = useRef(0)
   const touchStartY  = useRef(0)
@@ -148,7 +156,21 @@ export default function AppLayout() {
           transition: isDragging ? 'none' : 'transform 0.3s ease',
         }}
       >
-        <Outlet />
+        {/*
+          A second boundary, around the routed page only.
+
+          Keyed on the path so navigating away from a screen that threw clears
+          the error — without the key, React keeps the boundary's state and
+          every subsequent route renders the crash screen instead, which reads
+          as the whole app being broken rather than one page.
+
+          Retry is offered here because the surrounding shell is still alive:
+          re-rendering one page after a transient failure (a half-loaded store,
+          a race on a fetch) genuinely can succeed.
+        */}
+        <ErrorBoundary boundary="page" allowRetry key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
       <BottomNav />
     </div>
