@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFatigueStore } from '../../store/useFatigueStore'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
 import { templateService } from '../../services/template.service'
 import CoachMark, { HINTS } from '../../components/onboarding/CoachMark'
+import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
 import { ScheduledWorkout } from '../../types'
 import { workoutService, ActiveSession } from '../../services/workout.service'
 
@@ -60,12 +62,17 @@ const IcSpark = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="curr
 const IcCheck = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
 
 // iOS-style toggle
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ on, onChange, disabled }: {
+  on: boolean; onChange: (v: boolean) => void; disabled?: boolean
+}) {
   return (
     <button
-      onClick={() => onChange(!on)}
+      onClick={() => !disabled && onChange(!on)}
+      disabled={disabled}
+      aria-pressed={on}
       className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-all duration-200
-                 ${on ? 'bg-brand-teal justify-end' : 'bg-dark-600 justify-start'}`}
+                 disabled:opacity-30
+                 ${on && !disabled ? 'bg-brand-teal justify-end' : 'bg-dark-600 justify-start'}`}
     >
       <div className="w-5 h-5 bg-white rounded-full shadow" />
     </button>
@@ -79,9 +86,18 @@ export default function StartWorkout() {
 
   const [feeling, setFeeling] = useState(3)
   const [modality, setModality] = useState<ModId>('strength')
-  const [voice, setVoice] = useState(true)
-  const [haptic, setHaptic] = useState(true)
-  const [audio, setAudio] = useState(false)
+
+  // Persisted and device-local — the screen that owns these switches is
+  // unmounted by the time the workout they govern starts, so they cannot live
+  // in local state and still reach the live session.
+  const {
+    voice, haptic, audio, voiceSupported,
+    setVoice, setHaptic, setAudio, probeVoiceSupport,
+  } = useSessionPrefsStore()
+
+  const [showVoiceHelp, setShowVoiceHelp] = useState(false)
+
+  useEffect(() => { void probeVoiceSupport() }, [probeVoiceSupport])
 
   const activeMod = MODALITIES.find(m => m.id === modality)!
 
@@ -220,23 +236,80 @@ export default function StartWorkout() {
 
       {/* Smart features */}
       <Eyebrow>SMART FEATURES</Eyebrow>
-      <div className="bg-dark-800 border border-dark-600 rounded-card px-4 mb-6">
+      <div className="relative bg-dark-800 border border-dark-600 rounded-card px-4 mb-6">
+        {/* Priority 1 so it waits for the modality hint at the top of the page —
+            only one coach mark shows at a time, and picking your training comes
+            before learning to talk to it. */}
+        <CoachMark
+          hintKey={HINTS.voiceSetup}
+          enabled={voiceSupported !== false}
+          placement="top"
+          className="left-0"
+          priority={1}
+          title="Train hands-free"
+          body="With these on you can log a set by saying “set done”, and the phone buzzes and calls the next set when rest ends."
+        />
         {[
-          { icon: <IcMic />, label: 'Voice Commands', sub: '"Set done", "Next exercise"', on: voice, set: setVoice },
-          { icon: <IcVibrate />, label: 'Haptic Rest Alerts', sub: 'Vibrate when rest ends', on: haptic, set: setHaptic },
-          { icon: <IcSpeaker />, label: 'Audio Cues', sub: 'Announce next exercise', on: audio, set: setAudio },
+          {
+            icon: <IcMic />,
+            label: 'Voice Commands',
+            // Unsupported is stated rather than hidden: a missing row reads as
+            // a bug, an explained one reads as a device limit.
+            sub: voiceSupported === false
+              ? 'This device has no speech recognition'
+              : '"Set done", "eight reps at sixty"',
+            on: voice, set: setVoice,
+            off: voiceSupported === false,
+          },
+          {
+            icon: <IcVibrate />,
+            label: 'Haptic Rest Alerts',
+            sub: 'Vibrate when rest ends',
+            on: haptic, set: setHaptic,
+          },
+          {
+            icon: <IcSpeaker />,
+            label: 'Audio Cues',
+            sub: 'Announce the next set out loud',
+            on: audio, set: setAudio,
+          },
         ].map((item, i) => (
           <div key={item.label}
             className={`flex items-center gap-3 py-3.5 ${i < 2 ? 'border-b border-dark-700' : ''}`}>
-            <span className="text-brand-teal">{item.icon}</span>
+            <span className={item.off ? 'text-dark-500' : 'text-brand-teal'}>{item.icon}</span>
             <span className="flex-1">
-              <span className="block text-sm font-semibold">{item.label}</span>
+              <span className={`block text-sm font-semibold ${item.off ? 'text-dark-400' : ''}`}>
+                {item.label}
+              </span>
               <span className="block text-xs text-dark-300">{item.sub}</span>
             </span>
-            <Toggle on={item.on} onChange={item.set} />
+            <Toggle on={item.on} onChange={item.set} disabled={item.off} />
           </div>
         ))}
       </div>
+
+      {/* A way in to the full list, rather than a paragraph of it. Shown only
+          when voice is on and can work — a command list under a dead switch is
+          just noise. */}
+      {voice && voiceSupported !== false && (
+        <button
+          onClick={() => setShowVoiceHelp(true)}
+          className="w-full -mt-3 mb-6 flex items-center gap-2.5 px-3.5 py-3 rounded-btn
+                     border border-dashed border-dark-600 text-left
+                     active:scale-[0.99] transition-transform"
+        >
+          <span className="text-[15px]">🎤</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[12.5px] text-dark-200">
+              “set done” · “eight reps” · “log eight at sixty”
+            </span>
+            <span className="block text-[11px] text-dark-400 mt-0.5">
+              See all voice commands
+            </span>
+          </span>
+          <span className="text-dark-400 text-sm">→</span>
+        </button>
+      )}
 
       {/* CTA */}
       <button
@@ -245,6 +318,8 @@ export default function StartWorkout() {
                    text-[15px] active:scale-95 transition-transform">
         {activeMod.cta}
       </button>
+
+      {showVoiceHelp && <VoiceCommandSheet onClose={() => setShowVoiceHelp(false)} />}
     </div>
   )
 }

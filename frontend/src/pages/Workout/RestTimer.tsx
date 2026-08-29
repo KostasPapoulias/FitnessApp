@@ -1,5 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
+import { hapticCountdownTick } from '../../lib/haptics'
+import { announce } from '../../lib/speech'
 import { rpeColor } from './helpers'
 
 interface RestTimerProps {
@@ -8,6 +11,10 @@ interface RestTimerProps {
   workoutTime: string
   onDone: () => void
   onSkip: () => void
+  /** Pause lives in ActiveWorkout so a spoken "pause" can reach it — the voice
+   *  session is owned one level up, where it can outlive this screen. */
+  paused: boolean
+  onPausedChange: (paused: boolean) => void
 }
 
 // Small stepper used in the "adjust next set" card
@@ -23,14 +30,19 @@ function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: (
 }
 
 export default function RestTimer({
-  seconds, setInfo, workoutTime, onDone, onSkip,
+  seconds, setInfo, workoutTime, onDone, onSkip, paused, onPausedChange,
 }: RestTimerProps) {
   const [remaining, setRemaining] = useState(seconds)
   const [target, setTarget] = useState(seconds)
-  const [paused, setPaused] = useState(false)
   const doneRef = useRef(false)
   const onDoneRef = useRef(onDone)
   const pausedRef = useRef(false)
+
+  const { haptic, audio } = useSessionPrefsStore()
+  // Read through refs inside the interval: the tick closure is created once per
+  // `seconds` change and would otherwise hold whatever the toggles were then.
+  const cueRef = useRef({ haptic, audio })
+  cueRef.current = { haptic, audio }
 
   useEffect(() => { onDoneRef.current = onDone }, [onDone])
   useEffect(() => { pausedRef.current = paused }, [paused])
@@ -49,6 +61,11 @@ export default function RestTimer({
           onDoneRef.current()
           return 0
         }
+        // Warning at ten seconds, then a tap on each of the last three, so the
+        // athlete can rack up without watching the screen. onDone owns the
+        // end-of-rest alert itself.
+        if (next === 10 && cueRef.current.audio) void announce('Ten seconds.')
+        if (next <= 3 && cueRef.current.haptic) void hapticCountdownTick()
         return next
       })
     }, 1000)
@@ -201,16 +218,24 @@ export default function RestTimer({
         </div>
       )}
 
-      {/* Vibrate note */}
-      <div className="mt-3.5 flex items-center gap-2.5 px-3.5 py-3 rounded-btn border border-dashed border-dark-600">
-        <span className="text-[15px]">📳</span>
-        <span className="text-[12.5px] text-dark-300">Phone will vibrate when rest ends</span>
-      </div>
+      {/* What will actually happen when the timer hits zero. This used to
+          promise a vibration unconditionally, including when the toggle was
+          off and on devices that cannot vibrate at all. */}
+      {(haptic || audio) && (
+        <div className="mt-3.5 flex items-center gap-2.5 px-3.5 py-3 rounded-btn border border-dashed border-dark-600">
+          <span className="text-[15px]">{haptic ? '📳' : '🔊'}</span>
+          <span className="text-[12.5px] text-dark-300">
+            {haptic && audio ? 'Phone will vibrate and call the next set'
+              : haptic ? 'Phone will vibrate when rest ends'
+              : 'Next set will be called out loud'}
+          </span>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="grid grid-cols-[1fr_1.4fr] gap-2.5 mt-4">
         <button
-          onClick={() => setPaused(p => !p)}
+          onClick={() => onPausedChange(!paused)}
           className="py-4 rounded-btn border border-dark-600 bg-dark-800
                      text-[15px] font-bold active:scale-95 transition-transform">
           {paused ? '▶ Resume' : '‖ Pause'}
