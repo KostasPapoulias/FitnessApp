@@ -6,6 +6,7 @@ import {
   getThreadHistory
 } from '../services/ai.service'
 import { AiBudgetError, getUsageToday } from '../services/ai-budget.service'
+import { AiNotConfiguredError } from '../lib/aiProvider'
 import {
   ProposalError, applyProposal, listPendingProposals, rejectProposal,
 } from '../services/ai-tools.service'
@@ -58,6 +59,15 @@ export const chat = async (req: AuthRequest, res: Response) => {
       res.status(429)
         .set('Retry-After', String(error.retryAfterSeconds))
         .json({ success: false, error: error.message, retryAfter: error.retryAfterSeconds })
+      return
+    }
+
+    // No provider configured is a deployment state, not a fault. 503 with the
+    // real reason, and no Sentry alert — an unconfigured server would otherwise
+    // file an identical issue on every message anyone sends.
+    if (error instanceof AiNotConfiguredError) {
+      log.warn('AI chat attempted with no provider configured', { reason: error.message })
+      res.status(503).json({ success: false, error: 'The AI coach is not configured on this server.' })
       return
     }
 

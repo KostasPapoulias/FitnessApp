@@ -1,12 +1,13 @@
-import { Content, GoogleGenerativeAI, Part } from '@google/generative-ai'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import prisma from '../lib/prisma'
+import { getAiClient, resolveAiProvider } from '../lib/aiProvider'
 import { getUserReadiness } from './readiness.service'
 import { getTrainingLoad } from './training-load.service'
 import { resolveAge } from './fatigue-model.service'
 import { assertWithinBudget, recordUsage } from './ai-budget.service'
 import {
-  MAX_TOOL_CALLS_PER_MESSAGE, ProposalSummary, TOOL_DECLARATIONS,
-  createProposal, executeReadTool, isKnownTool, isWriteTool,
+  MAX_TOOL_CALLS_PER_MESSAGE, ProposalSummary,
+  createProposal, executeReadTool, isKnownTool, isWriteTool, toolsForChatCompletions,
 } from './ai-tools.service'
 import { log } from '../lib/logger'
 
@@ -190,6 +191,17 @@ They show the athlete a card which they must tap to accept. So:
   - after drafting, say it is ready for them to review and tap
   - NEVER say you have saved, added, scheduled or created anything
 
+NEVER mention a card, or tell them to accept, review or tap anything, unless you
+actually called propose_workout, propose_schedule or propose_exercise in THIS
+reply. Describing a plan in prose does not create a card. Saying "accept the
+card below" when there is no card is worse than saying nothing at all — they
+sit there looking for a button that does not exist. If you have a plan in mind
+but have not drafted it, either call the tool now or ask whether they want it.
+
+If search_exercises returns nothing, do not stop and apologise. Read its hint,
+search again with one distinctive word, and only if that also fails tell them
+the movement is not in the catalogue and offer propose_exercise.
+
 ## Movements the catalogue does not have
 If search_exercises cannot find something they want to train, you may draft it
 with propose_exercise. Before you do:
@@ -270,8 +282,10 @@ export const sendMessage = async ({
   message: string
   history: { role: 'user' | 'assistant'; content: string }[]
 }): Promise<{ reply: string; proposals: ProposalSummary[] }> => {
-  const geminiApiKey = process.env.GEMINI_API_KEY
-  if (!geminiApiKey) throw new Error('Gemini is not configured. Set GEMINI_API_KEY.')
+  // Throws AiNotConfiguredError when no provider is set, which the controller
+  // turns into a clear 503 rather than a stack trace.
+  const provider = resolveAiProvider()
+  const client = getAiClient(provider)
 
   // The consent gate. Absent row reads as consent given, matching the column
   // default — the switch is opt-OUT, and an account whose settings row went
@@ -287,20 +301,11 @@ export const sendMessage = async ({
   // sent to Google.
   const systemContext = personalised ? await buildUserContext(userId) : null
 
-  const genAI = new GoogleGenerativeAI(geminiApiKey)
-  const rawModelName = (process.env.GEMINI_MODEL ?? 'models/gemini-2.5-flash').trim()
-  const modelName = rawModelName.startsWith('models/')
-    ? rawModelName
-    : `models/${rawModelName}`
+  const modelName = provider.model
   // Withheld rather than declared-and-refused. A model that cannot see a tool
   // cannot call it, so consent-off needs no per-call enforcement further down
   // and there is no path by which a read tool runs against this user's rows.
-  const model = genAI.getGenerativeModel(
-    personalised
-      ? { model: modelName, tools: [{ functionDeclarations: TOOL_DECLARATIONS }] }
-      : { model: modelName },
-    { apiVersion: 'v1' }
-  )
+  const tools = personalised ? toolsForChatCompletions() : undefined
 
   // Live data goes LAST, not first. Older assistant turns assert concrete
   // numbers ("your readiness is 58%"), and a context block pinned at the
@@ -316,16 +321,19 @@ export const sendMessage = async ({
   // model to ignore them is a request, not a guarantee.
   const replayHistory = personalised ? history : []
 
-  const contents: Content[] = [
-    { role: 'user', parts: [{ text: personalised ? AI_PERSONA : AI_PERSONA_NO_DATA }] },
+  // The persona moves from a faked first user turn to a real system message —
+  // the one place the chat-completions shape is genuinely better than what it
+  // replaced, since a system role is what every provider trains against.
+  const messages: ChatCompletionMessageParam[] = [
+    { role: 'system', content: personalised ? AI_PERSONA : AI_PERSONA_NO_DATA },
     ...replayHistory.map(item => ({
-      role: item.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: item.content }]
+      role: item.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+      content: item.content,
     })),
     {
       role: 'user',
-      parts: [{ text: systemContext ? `${systemContext}\n\n---\n\n${message}` : message }],
-    }
+      content: systemContext ? `${systemContext}\n\n---\n\n${message}` : message,
+    },
   ]
 
   const proposals: ProposalSummary[] = []
@@ -339,67 +347,94 @@ export const sendMessage = async ({
     // to answer. Without this a stuck model returns nothing but calls and the
     // athlete sees an empty bubble.
     const isLastRound = round === MAX_TOOL_ROUNDS - 1
-    const result = isLastRound || !personalised
-      ? await model.generateContent({ contents, tools: [] })
-      : await model.generateContent({ contents })
+    const offerTools = tools && !isLastRound
+
+    const result = await client.chat.completions.create({
+      model: modelName,
+      messages,
+      ...(offerTools ? { tools, tool_choice: 'auto' as const } : {}),
+    })
 
     // Bill from the provider's own counts before anything else can throw, and
     // at the price of the model actually used
-    await recordUsage(userId, result.response.usageMetadata, { modelName })
+    await recordUsage(userId, result.usage, { modelName })
 
-    const calls = result.response.functionCalls()
-    if (!calls || calls.length === 0) {
-      replyText = result.response.text().trim()
+    const modelTurn = result.choices[0]?.message
+    const calls = modelTurn?.tool_calls ?? []
+
+    if (calls.length === 0) {
+      replyText = (modelTurn?.content ?? '').trim()
       break
     }
 
-    // Echo the model's own turn back before answering it — a function response
-    // with no matching call in the transcript is rejected by the API.
-    const modelParts = result.response.candidates?.[0]?.content?.parts ?? []
-    contents.push({ role: 'model', parts: modelParts })
+    // Echo the model's own turn back before answering it — a tool result with
+    // no matching call in the transcript is rejected by the API.
+    messages.push(modelTurn as ChatCompletionMessageParam)
 
     const budgetLeft = Math.max(0, MAX_TOOL_CALLS_PER_MESSAGE - toolCallsUsed)
     const allowed = calls.slice(0, budgetLeft)
     const refused = calls.slice(budgetLeft)
     toolCallsUsed += allowed.length
 
-    const responseParts: Part[] = []
-
     for (const call of allowed) {
-      const args = (call.args ?? {}) as Record<string, any>
+      // Only function calls carry a name and arguments; anything else in the
+      // union is a shape this app never declared and cannot execute.
+      if (call.type !== 'function') {
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Unsupported tool type.' }) })
+        continue
+      }
+
+      const name = call.function.name
       let response: object
 
-      if (!isKnownTool(call.name)) {
-        response = { error: `Unknown tool "${call.name}".` }
-      } else if (isWriteTool(call.name)) {
-        const drafted = await createProposal(userId, threadId, call.name, args)
+      // Arguments arrive as a JSON *string* here rather than a parsed object,
+      // and a model that emits malformed JSON must be told so rather than
+      // taking the whole message down with a SyntaxError.
+      let args: Record<string, any> = {}
+      let argsValid = true
+      try {
+        args = call.function.arguments ? JSON.parse(call.function.arguments) : {}
+      } catch {
+        argsValid = false
+      }
+
+      if (!argsValid) {
+        response = { error: 'Arguments were not valid JSON. Call the tool again with well-formed arguments.' }
+      } else if (!isKnownTool(name)) {
+        response = { error: `Unknown tool "${name}".` }
+      } else if (isWriteTool(name)) {
+        const drafted = await createProposal(userId, threadId, name, args)
         if (drafted.proposal) proposals.push(drafted.proposal)
         response = drafted.toModel
       } else {
         try {
-          response = await executeReadTool(userId, call.name, args)
+          response = await executeReadTool(userId, name, args)
         } catch (error) {
           // A failed lookup is reported to the model, not thrown: it can say
           // it could not check rather than the whole message erroring out.
-          log.error('AI tool failed', error, { tool: call.name })
+          log.error('AI tool failed', error, { tool: name })
           response = { error: 'That lookup failed.' }
         }
       }
 
-      responseParts.push({ functionResponse: { name: call.name, response } })
-    }
-
-    for (const call of refused) {
-      responseParts.push({
-        functionResponse: {
-          name: call.name,
-          response: { error: 'Tool call limit reached for this message. Answer with what you already have.' },
-        },
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify(response),
       })
     }
 
-    // Function responses travel under the 'function' role, not 'user'.
-    contents.push({ role: 'function', parts: responseParts })
+    // Every call in the assistant turn must be answered, refused ones included:
+    // the API rejects a transcript where a tool_call has no matching result.
+    for (const call of refused) {
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify({
+          error: 'Tool call limit reached for this message. Answer with what you already have.',
+        }),
+      })
+    }
   }
 
   if (!replyText) {

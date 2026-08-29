@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import prisma from '../lib/prisma'
+import { getAiClient, resolveAiProvider } from '../lib/aiProvider'
 import { buildUserContext } from './ai.service'
 import { recordUsage } from './ai-budget.service'
 import { NOTIFICATION_TYPES } from './notification-preference.service'
@@ -29,6 +29,19 @@ interface PlannedItem {
   minute: number
   title: string
   body: string
+}
+
+/**
+ * Unwrap a ```json fence.
+ *
+ * Models that do not honour `response_format` answer with the right JSON inside
+ * a markdown block, which `JSON.parse` rejects. Salvaging that costs three
+ * lines and turns a whole silent day of no notifications into a working plan.
+ */
+const stripJsonFences = (text: string): string => {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('```')) return trimmed || '{}'
+  return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim() || '{}'
 }
 
 const PLAN_SCHEMA = {
@@ -218,15 +231,21 @@ const generatePlan = async (
   slots: number,
   timezone: string
 ): Promise<PlanResult> => {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey || slots <= 0) return { items: [] }
+  if (slots <= 0) return { items: [] }
 
-  const rawModelName = (process.env.GEMINI_MODEL ?? 'models/gemini-2.5-flash-lite').trim()
-  const modelName = rawModelName.startsWith('models/') ? rawModelName : `models/${rawModelName}`
+  // No provider configured is a normal state, not a fault: the planner is the
+  // optional coach tier, and the rest of notifications works without it.
+  let provider
+  try {
+    provider = resolveAiProvider()
+  } catch {
+    return { items: [] }
+  }
+
+  const modelName = provider.plannerModel
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: modelName }, { apiVersion: 'v1' })
+    const client = getAiClient(provider)
 
     const prompt = `
 ${context}
@@ -246,17 +265,30 @@ Rules:
   a valid plan and better than filler.
 `.trim()
 
-    const response = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: PLAN_SCHEMA as any,
-      },
+    // Gemini's native `responseSchema` has no portable equivalent — support for
+    // strict structured output varies by provider and by model. `json_object`
+    // is the widely honoured mode, with the shape stated in the prompt as the
+    // real instruction. Nothing downstream trusts it either way: every field is
+    // validated below, and a malformed reply degrades to an empty plan, which
+    // this function already treats as a legitimate outcome.
+    const response = await client.chat.completions.create({
+      model: modelName,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Reply with JSON only, matching exactly this schema: ' +
+            JSON.stringify(PLAN_SCHEMA) +
+            '. No prose, no markdown fences.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_object' },
     })
 
-    await recordUsage(userId, response.response.usageMetadata, { modelName, isPlanner: true })
+    await recordUsage(userId, response.usage, { modelName, isPlanner: true })
 
-    const parsed = JSON.parse(response.response.text())
+    const parsed = JSON.parse(stripJsonFences(response.choices[0]?.message?.content ?? '{}'))
     const raw: PlannedItem[] = Array.isArray(parsed?.notifications) ? parsed.notifications : []
 
     const items = raw

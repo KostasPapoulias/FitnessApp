@@ -1,4 +1,3 @@
-import { FunctionDeclaration, SchemaType } from '@google/generative-ai'
 import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
 import {
@@ -59,30 +58,43 @@ export const isKnownTool = (name: string): boolean =>
 // ── declarations ──────────────────────────────────────────────────────────
 
 const setSchema = {
-  type: SchemaType.OBJECT,
+  type: 'object',
   properties: {
-    reps: { type: SchemaType.INTEGER, description: 'Reps. For mobility, seconds held. For a WOD movement, reps per round.' },
-    weight: { type: SchemaType.NUMBER, description: 'Kilograms. 0 for bodyweight.' },
-    rpe: { type: SchemaType.NUMBER, description: 'Target effort 1-10.' },
-    restSeconds: { type: SchemaType.INTEGER, description: 'Rest after this set.' },
-    distance: { type: SchemaType.NUMBER, description: 'Metres, for cardio or a WOD.' },
-    time: { type: SchemaType.INTEGER, description: 'Seconds, for cardio, holds or a time cap.' },
-    rounds: { type: SchemaType.NUMBER, description: 'Target rounds, for a WOD.' },
+    reps: { type: 'integer', description: 'Reps. For mobility, seconds held. For a WOD movement, reps per round.' },
+    weight: { type: 'number', description: 'Kilograms. 0 for bodyweight.' },
+    rpe: { type: 'number', description: 'Target effort 1-10.' },
+    restSeconds: { type: 'integer', description: 'Rest after this set.' },
+    distance: { type: 'number', description: 'Metres, for cardio or a WOD.' },
+    time: { type: 'integer', description: 'Seconds, for cardio, holds or a time cap.' },
+    rounds: { type: 'number', description: 'Target rounds, for a WOD.' },
   },
 } as const
 
-export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
+/**
+ * A tool the model may call, described in plain JSON Schema.
+ *
+ * Deliberately not a provider's own type. These declarations outlived one
+ * provider migration already; keeping them in the format every provider derives
+ * from means the next one costs an adapter, not a rewrite of all 800 lines.
+ */
+export interface ToolDeclaration {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: 'search_exercises',
     description:
       'Search the exercise catalogue. Call this before proposing any workout — it returns the real exercise ids that a plan must be built from. Never invent an id.',
     parameters: {
-      type: SchemaType.OBJECT,
+      type: 'object',
       properties: {
-        query: { type: SchemaType.STRING, description: 'Name or part of a name, e.g. "romanian deadlift".' },
-        modality: { type: SchemaType.STRING, description: 'One of Strength, Calisthenics, Cardio, WOD, Mobility.' },
-        muscle: { type: SchemaType.STRING, description: 'Muscle name, e.g. "Hamstrings".' },
-        limit: { type: SchemaType.INTEGER, description: 'Max results, default 15.' },
+        query: { type: 'string', description: 'Name or part of a name, e.g. "romanian deadlift".' },
+        modality: { type: 'string', description: 'One of Strength, Calisthenics, Cardio, WOD, Mobility.' },
+        muscle: { type: 'string', description: 'Muscle name, e.g. "Hamstrings".' },
+        limit: { type: 'integer', description: 'Max results, default 15.' },
       },
     },
   },
@@ -91,11 +103,11 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     description:
       'Past training sessions with their exercises and sets. Use for questions about what was done, when, and how heavy.',
     parameters: {
-      type: SchemaType.OBJECT,
+      type: 'object',
       properties: {
-        days: { type: SchemaType.INTEGER, description: 'How far back to look. Default 30, max 365.' },
-        exerciseName: { type: SchemaType.STRING, description: 'Only sessions containing this exercise.' },
-        limit: { type: SchemaType.INTEGER, description: 'Max sessions, default 10.' },
+        days: { type: 'integer', description: 'How far back to look. Default 30, max 365.' },
+        exerciseName: { type: 'string', description: 'Only sessions containing this exercise.' },
+        limit: { type: 'integer', description: 'Max sessions, default 10.' },
       },
     },
   },
@@ -104,8 +116,8 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     description:
       'Estimated one-rep max over time plus the best recent sets for one exercise. Use for "am I getting stronger" and PR questions.',
     parameters: {
-      type: SchemaType.OBJECT,
-      properties: { exerciseName: { type: SchemaType.STRING, description: 'Exercise to trace.' } },
+      type: 'object',
+      properties: { exerciseName: { type: 'string', description: 'Exercise to trace.' } },
       required: ['exerciseName'],
     },
   },
@@ -113,38 +125,38 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     name: 'get_muscle_volume',
     description: 'Sets performed per muscle per week. Use for balance, neglect and overload questions.',
     parameters: {
-      type: SchemaType.OBJECT,
-      properties: { weeks: { type: SchemaType.INTEGER, description: 'Weeks back, default 8, max 26.' } },
+      type: 'object',
+      properties: { weeks: { type: 'integer', description: 'Weeks back, default 8, max 26.' } },
     },
   },
   {
     name: 'get_recent_nutrition',
     description: 'Logged nutrition totals per day.',
     parameters: {
-      type: SchemaType.OBJECT,
-      properties: { days: { type: SchemaType.INTEGER, description: 'Days back, default 7, max 90.' } },
+      type: 'object',
+      properties: { days: { type: 'integer', description: 'Days back, default 7, max 90.' } },
     },
   },
   {
     name: 'get_recent_sleep',
     description: 'Logged sleep per night.',
     parameters: {
-      type: SchemaType.OBJECT,
-      properties: { days: { type: SchemaType.INTEGER, description: 'Days back, default 7, max 90.' } },
+      type: 'object',
+      properties: { days: { type: 'integer', description: 'Days back, default 7, max 90.' } },
     },
   },
   {
     name: 'list_templates',
     description: 'The athlete\'s saved workout plans, with how often each has been performed.',
     parameters: {
-      type: SchemaType.OBJECT,
-      properties: { includeArchived: { type: SchemaType.BOOLEAN, description: 'Include archived plans.' } },
+      type: 'object',
+      properties: { includeArchived: { type: 'boolean', description: 'Include archived plans.' } },
     },
   },
   {
     name: 'list_scheduled',
     description: 'Workouts currently on standby with a date, and their reminders.',
-    parameters: { type: SchemaType.OBJECT, properties: {} },
+    parameters: { type: 'object', properties: {} },
   },
 
   // ── drafting ──
@@ -153,25 +165,25 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     description:
       'Draft a workout for the athlete to review. This does NOT save anything — it shows them a card they must tap to accept. Always call search_exercises first so every exerciseId is real. Optionally include a date to offer scheduling on the same card.',
     parameters: {
-      type: SchemaType.OBJECT,
+      type: 'object',
       properties: {
-        name: { type: SchemaType.STRING, description: 'Short name, e.g. "Upper push - moderate".' },
-        notes: { type: SchemaType.STRING, description: 'One line on the intent of the session.' },
+        name: { type: 'string', description: 'Short name, e.g. "Upper push - moderate".' },
+        notes: { type: 'string', description: 'One line on the intent of the session.' },
         exercises: {
-          type: SchemaType.ARRAY,
+          type: 'array',
           description: 'In the order they should be performed.',
           items: {
-            type: SchemaType.OBJECT,
+            type: 'object',
             properties: {
-              exerciseId: { type: SchemaType.STRING, description: 'A real id from search_exercises.' },
-              notes: { type: SchemaType.STRING },
-              sets: { type: SchemaType.ARRAY, items: setSchema },
+              exerciseId: { type: 'string', description: 'A real id from search_exercises.' },
+              notes: { type: 'string' },
+              sets: { type: 'array', items: setSchema },
             },
             required: ['exerciseId', 'sets'],
           },
         },
-        scheduledFor: { type: SchemaType.STRING, description: 'ISO 8601 datetime to place it on, if the athlete asked for a date.' },
-        reminderAt: { type: SchemaType.STRING, description: 'ISO 8601 datetime for a reminder. Requires scheduledFor.' },
+        scheduledFor: { type: 'string', description: 'ISO 8601 datetime to place it on, if the athlete asked for a date.' },
+        reminderAt: { type: 'string', description: 'ISO 8601 datetime for a reminder. Requires scheduledFor.' },
       },
       required: ['name', 'exercises'],
     },
@@ -181,11 +193,11 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     description:
       'Draft putting an EXISTING saved plan on a date. Does NOT save — the athlete taps to accept. Get the templateId from list_templates.',
     parameters: {
-      type: SchemaType.OBJECT,
+      type: 'object',
       properties: {
-        templateId: { type: SchemaType.STRING, description: 'A real id from list_templates.' },
-        scheduledFor: { type: SchemaType.STRING, description: 'ISO 8601 datetime.' },
-        reminderAt: { type: SchemaType.STRING, description: 'ISO 8601 datetime for the reminder.' },
+        templateId: { type: 'string', description: 'A real id from list_templates.' },
+        scheduledFor: { type: 'string', description: 'ISO 8601 datetime.' },
+        reminderAt: { type: 'string', description: 'ISO 8601 datetime for the reminder.' },
       },
       required: ['templateId', 'scheduledFor'],
     },
@@ -195,37 +207,37 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
     description:
       'Draft a NEW custom exercise for the athlete to review, for a movement that search_exercises could not find. Does NOT save — they tap to accept. Always search first; if a close match already exists, use it instead of inventing a duplicate. Never guess on the athlete\'s behalf: if you do not know which muscles the movement works, ask them.',
     parameters: {
-      type: SchemaType.OBJECT,
+      type: 'object',
       properties: {
-        name: { type: SchemaType.STRING, description: 'What the movement is called, e.g. "Bulgarian Split Squat".' },
+        name: { type: 'string', description: 'What the movement is called, e.g. "Bulgarian Split Squat".' },
         modality: {
-          type: SchemaType.STRING,
+          type: 'string',
           description: 'One of: Strength, Calisthenics, Cardio, WOD, Mobility.',
         },
         description: {
-          type: SchemaType.STRING,
+          type: 'string',
           description: 'How to perform it — setup and the cues that matter. A couple of sentences.',
         },
         muscles: {
-          type: SchemaType.ARRAY,
+          type: 'array',
           description: 'The muscles worked. At least one must be primary.',
           items: {
-            type: SchemaType.OBJECT,
+            type: 'object',
             properties: {
               muscle: {
-                type: SchemaType.STRING,
+                type: 'string',
                 description: 'Muscle name, e.g. "Quadriceps", "Lats", "Lower Back".',
               },
               role: {
-                type: SchemaType.STRING,
+                type: 'string',
                 description: '"primary" if the movement is really for this muscle, "secondary" if it only assists.',
               },
             },
             required: ['muscle', 'role'],
           },
         },
-        categories: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: 'Category names, e.g. "Legs".' },
-        equipment: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING }, description: 'Equipment names needed, e.g. "Dumbbell".' },
+        categories: { type: 'array', items: { type: 'string' }, description: 'Category names, e.g. "Legs".' },
+        equipment: { type: 'array', items: { type: 'string' }, description: 'Equipment names needed, e.g. "Dumbbell".' },
       },
       required: ['name', 'modality', 'muscles'],
     },
@@ -277,9 +289,25 @@ export const executeReadTool = async (
     case 'search_exercises': {
       const limit = intArg(args.limit, 15, 40)
       const query = typeof args.query === 'string' ? args.query.trim() : ''
-      const exercises = await prisma.exercise.findMany({
+
+      /**
+       * Words the model adds for precision but the catalogue spells differently.
+       *
+       * This used to be one `contains` over the whole phrase, which meant the
+       * query had to be a contiguous substring of the name. "Barbell Squat"
+       * therefore returned nothing at all while "Barbell Back Squat" sat in the
+       * catalogue — the model searched correctly, found zero, and refused to
+       * invent an id exactly as instructed, so the conversation dead-ended with
+       * no proposal. Matching each word independently fixes the whole class:
+       * word order stops mattering, and so do the words in between.
+       */
+      const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+
+      const runSearch = (words: string[]) => prisma.exercise.findMany({
         where: {
-          ...(query ? { name: { contains: query, mode: 'insensitive' as const } } : {}),
+          ...(words.length > 0
+            ? { AND: words.map(word => ({ name: { contains: word, mode: 'insensitive' as const } })) }
+            : {}),
           ...(args.modality ? { modality: { name: { equals: String(args.modality), mode: 'insensitive' as const } } } : {}),
           ...(args.muscle
             ? { muscleLinks: { some: { muscle: { name: { equals: String(args.muscle), mode: 'insensitive' as const } } } } }
@@ -292,8 +320,36 @@ export const executeReadTool = async (
         orderBy: { name: 'asc' },
       })
 
+      let exercises = await runSearch(terms)
+      let widenedTo: string | null = null
+
+      // Still nothing: fall back to the most distinctive single word. "barbell
+      // squats" finds nothing on the plural but "squats" → "squat" does, and
+      // a slightly-too-broad list the model can pick from beats an empty one it
+      // has to give up on.
+      if (exercises.length === 0 && terms.length > 0) {
+        const singular = terms.map(t => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t))
+        exercises = await runSearch(singular)
+        if (exercises.length > 0) widenedTo = singular.join(' ')
+
+        if (exercises.length === 0) {
+          const longest = singular.reduce((a, b) => (b.length > a.length ? b : a), '')
+          if (longest.length >= 3) {
+            exercises = await runSearch([longest])
+            if (exercises.length > 0) widenedTo = longest
+          }
+        }
+      }
+
       return {
         count: exercises.length,
+        // Say what actually happened. A bare count of 0 gave the model nothing
+        // to act on, so it apologised and stopped; naming the next move keeps
+        // the conversation going instead.
+        ...(widenedTo ? { note: `No exact match for "${query}" — showing results for "${widenedTo}" instead.` } : {}),
+        ...(exercises.length === 0
+          ? { hint: `Nothing matched "${query}". Search again with one distinctive word (e.g. "squat" rather than "barbell squat"), or use the muscle filter. Do not invent an exerciseId.` }
+          : {}),
         exercises: exercises.map(e => ({
           exerciseId: e.id,
           name: e.name,
@@ -861,3 +917,20 @@ export const listPendingProposals = async (userId: string, threadId: string) => 
     }
   })
 }
+
+/**
+ * The declarations above, in the shape the chat-completions API expects.
+ *
+ * The whole adapter is this function. Everything else about tools — what they
+ * do, what they are allowed to touch, how a write becomes a proposal — is
+ * provider-neutral and stays that way.
+ */
+export const toolsForChatCompletions = () =>
+  TOOL_DECLARATIONS.map(tool => ({
+    type: 'function' as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }))

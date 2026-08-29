@@ -18,18 +18,37 @@ import { log } from '../lib/logger'
  * Prices per million tokens, keyed by model.
  *
  * A single hardcoded price is a trap: the price constants said Flash Lite while
- * GEMINI_MODEL defaulted to Flash, so an unset env var meant costs accrued at a
- * fraction of the real rate and the cap would not trip until well past the
- * budget — the exact failure this module exists to prevent.
+ * the configured model defaulted to Flash, so an unset env var meant costs
+ * accrued at a fraction of the real rate and the cap would not trip until well
+ * past the budget — the exact failure this module exists to prevent.
  *
- * Verify against current Google pricing when changing model; an unknown model
- * deliberately bills at the most expensive known rate, so drift over-reports
- * (send fewer messages) rather than under-reports (spend real money).
+ * Verify against the provider's current pricing when changing model; an unknown
+ * model deliberately bills at the most expensive known rate, so drift
+ * over-reports (send fewer messages) rather than under-reports (spend money).
  */
 const MODEL_PRICES: Record<string, { input: number; output: number }> = {
   'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
   'gemini-2.5-flash':      { input: 0.30, output: 2.50 },
   'gemini-2.0-flash':      { input: 0.10, output: 0.40 },
+  'gpt-4o-mini':           { input: 0.15, output: 0.60 },
+}
+
+/**
+ * Providers whose hosted allowance is not billed per token.
+ *
+ * NVIDIA's build.nvidia.com and a local Ollama both cost nothing per call, so
+ * pricing them against Gemini's rate card would trip the daily budget after a
+ * few dozen messages for spend that never happened. `AI_PRICE_*` still
+ * overrides this, and the per-minute rate limit still applies either way — the
+ * runaway-loop guard is not a money guard and must not be switched off with one.
+ */
+const UNMETERED_HOSTS = ['integrate.api.nvidia.com', 'localhost', '127.0.0.1']
+
+const isUnmetered = (): boolean => {
+  const base = (process.env.AI_BASE_URL ?? '').trim()
+  const provider = (process.env.AI_PROVIDER ?? '').trim().toLowerCase()
+  if (provider === 'nvidia' || provider === 'ollama') return true
+  return UNMETERED_HOSTS.some(host => base.includes(host))
 }
 
 const priceFor = (modelName?: string) => {
@@ -37,6 +56,8 @@ const priceFor = (modelName?: string) => {
   const envInput = Number(process.env.AI_PRICE_INPUT_PER_M)
   const envOutput = Number(process.env.AI_PRICE_OUTPUT_PER_M)
   if (envInput > 0 && envOutput > 0) return { input: envInput, output: envOutput }
+
+  if (isUnmetered()) return { input: 0, output: 0 }
 
   const key = (modelName ?? '').replace(/^models\//, '').trim()
   const known = MODEL_PRICES[key]
@@ -125,16 +146,30 @@ export const assertWithinBudget = async (userId: string) => {
  *
  * Estimating token counts from string length drifts badly once context blocks
  * and history are involved, and the drift is always in the direction of
- * under-billing — so the numbers come from usageMetadata or not at all.
+ * under-billing — so the numbers come from the provider's usage block or not
+ * at all.
+ *
+ * Both field namings are accepted. `prompt_tokens`/`completion_tokens` is the
+ * chat-completions shape every provider returns; the Gemini-native
+ * `promptTokenCount` spelling is kept so this keeps totalling correctly for
+ * rows written before the provider migration, and for any caller still on the
+ * old SDK.
  */
+export interface AiUsageCounts {
+  prompt_tokens?: number
+  completion_tokens?: number
+  promptTokenCount?: number
+  candidatesTokenCount?: number
+}
+
 export const recordUsage = async (
   userId: string,
-  usage: { promptTokenCount?: number; candidatesTokenCount?: number } | undefined,
+  usage: AiUsageCounts | undefined,
   options: { modelName?: string; isPlanner?: boolean } = {}
 ) => {
   const price = priceFor(options.modelName)
-  const inputTokens = usage?.promptTokenCount ?? 0
-  const outputTokens = usage?.candidatesTokenCount ?? 0
+  const inputTokens = usage?.prompt_tokens ?? usage?.promptTokenCount ?? 0
+  const outputTokens = usage?.completion_tokens ?? usage?.candidatesTokenCount ?? 0
   const costUsd =
     (inputTokens / 1_000_000) * price.input +
     (outputTokens / 1_000_000) * price.output

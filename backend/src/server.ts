@@ -152,13 +152,44 @@ process.on('SIGTERM', () => {
 });
 
 // Start server
-app.listen(port, () => {
+const server = app.listen(port, () => {
   log.info('SomaTrack API listening', {
     port,
     env: process.env.NODE_ENV || 'development',
   });
   startNotificationScheduler();
   startSessionSweeper();
+});
+
+/**
+ * A failed listen is the one startup error that usually is not a defect.
+ *
+ * `tsx watch` spawns a child that routinely outlives the terminal it was
+ * started from, so meeting EADDRINUSE is the ordinary consequence of starting
+ * the dev server twice rather than a crash. With no handler here it reached
+ * `uncaughtException`, which printed a ten-frame stack trace instead of the one
+ * sentence that fixes it — and filed a Sentry issue for a crash that never
+ * happened. An alerting channel that cries wolf every time someone double-taps
+ * `npm run dev` is one people stop reading.
+ *
+ * The port case is logged with plain fields on purpose: `log.error` forwards to
+ * Sentry only when handed a real Error (see logger.ts), so this is loud in the
+ * terminal and silent in the alerting channel. Anything else that can break a
+ * listen — EACCES on a privileged port, a bad host — is genuinely unexpected,
+ * so it keeps the Error and therefore keeps the alert.
+ */
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    log.error(`Port ${port} is already in use — the server is probably already running`, {
+      port,
+      code: error.code,
+      fix: `Stop the other process (npx kill-port ${port}) or start this one with a different PORT.`,
+    });
+    process.exit(1);
+  }
+
+  log.error('Server could not start', error, { port, code: error.code ?? null });
+  void flushErrorReports().finally(() => process.exit(1));
 });
 
 export default app;
