@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore, WodFormat } from '../../store/useWorkoutStore'
 import { fmtTime, exerciseEmoji } from './helpers'
-import { ModalityViewProps, CoachTip, LiveStartGate, EffortPrompt } from './LiveShared'
+import { ModalityViewProps, LiveStartGate, EffortPrompt } from './LiveShared'
 
 const FORMATS: [WodFormat, string][] = [['amrap', 'AMRAP'], ['fortime', 'For Time'], ['emom', 'EMOM'], ['rounds', 'Rounds']]
 // exIdx -1 marks a demo movement with no WorkoutExercise behind it — nothing to log
@@ -11,7 +11,7 @@ const DEFAULT_MOVES = [
   { exIdx: -1, reps: 15, name: 'Air Squats' },
 ]
 
-export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
+export default function WodView({ onFinish }: ModalityViewProps) {
   const { wodConfig, selectedExercises, completeSet } = useWorkoutStore()
 
   // Planned movements, each keeping its index in the store so the metcon can be
@@ -165,12 +165,6 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
     scoreValue = String(rounds * roundReps); scoreLabel = 'Total reps'
   }
 
-  const coachTip = format === 'amrap'
-    ? 'Pace the first few rounds like they’re easy — break sets before you have to. Consistent unbroken sets beat a fast start.'
-    : format === 'emom'
-    ? 'Aim to finish each minute with ~15s to spare. If you can’t, scale the reps to keep the rest window.'
-    : 'Settle into a sustainable rhythm and only surge on the final two rounds.'
-
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
       {/* header */}
@@ -268,7 +262,6 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
         </button>
       </div>
 
-      {coachEnabled !== false && <CoachTip text={coachTip} />}
 
       <button onClick={() => setRating(true)}
         className="w-full mt-3 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]

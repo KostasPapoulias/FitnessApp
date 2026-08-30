@@ -543,7 +543,7 @@ export default function Profile() {
   // Only needs to READ the state here — enabling, testing and per-type choices
   // all live on the Notifications screen now.
   const { isPushSubscribed } = useNotifications()
-  const { equipmentIds, injuries, resetHints } = useOnboardingStore()
+  const { equipmentIds, injuries } = useOnboardingStore()
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -923,17 +923,6 @@ export default function Profile() {
             onClick={() => navigate('/training-setup')}
           />
 
-          <div className="h-px bg-dark-700 mx-4" />
-
-          <SettingsRow
-            icon="💡"
-            label="Show Tips Again"
-            sublabel="Replay the in-app hints"
-            // Navigate only once the reset has landed, or Home renders before
-            // the store clears and the tips do not reappear. The catch keeps a
-            // failed reset from surfacing as an unhandled rejection.
-            onClick={() => { resetHints().then(() => navigate('/')).catch(() => {}) }}
-          />
 
           <div className="h-px bg-dark-700 mx-4" />
 

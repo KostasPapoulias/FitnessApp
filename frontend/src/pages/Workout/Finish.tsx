@@ -89,7 +89,6 @@ export default function Finish() {
   const durationSec = result?.duration ?? snapshot.elapsed
   const volume = result?.totalVolume
     ?? snapshot.exercises.reduce((v, e) => v + e.topWeight * e.topReps * e.count, 0)
-  const avgRpe = result?.avgRpe
 
   // Prefer backend musclesAffected (has fatigue level) else snapshot names
   const muscleChips: string[] =
@@ -104,13 +103,6 @@ export default function Finish() {
     { value: String(snapshot.setsLogged), label: 'Sets logged' },
     { value: volumeLabel, label: 'Volume (kg)' },
   ]
-
-  const coachTip =
-    avgRpe != null && avgRpe >= 8
-      ? `You pushed hard today (avg RPE ${avgRpe}) — prioritise sleep tonight; those muscle groups will need 48h+ before hitting them hard again.`
-      : snapshot.setsLogged === 0
-      ? 'No sets logged this time. Even a short session counts — come back stronger.'
-      : 'Great session. Log a protein-rich meal within the next couple of hours to kick off recovery.'
 
   const handleDone = () => {
     clearExercises()
@@ -181,17 +173,6 @@ export default function Finish() {
           ))}
         </div>
       )}
-
-      {/* Coach */}
-      <div className="text-left mt-4 flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25 rounded-card p-3.5">
-        <span className="text-base">🤖</span>
-        <div>
-          <p className="text-[10px] tracking-wide text-brand-teal font-bold mb-1">
-            COACH · POWERED BY GEMINI
-          </p>
-          <p className="text-[13px] text-dark-200 leading-relaxed">{coachTip}</p>
-        </div>
-      </div>
 
       <button
         onClick={handleDone}

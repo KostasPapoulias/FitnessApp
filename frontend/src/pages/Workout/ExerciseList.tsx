@@ -98,12 +98,6 @@ export default function ExerciseList() {
     return matchesSearch && matchesSub && matchesEquipment
   })
 
-  // Suggestions must be things they can actually do today: fresh enough, not
-  // loading an injury, and not requiring kit they never listed.
-  const aiPicks = filtered
-    .filter(ex => !ex.fatigueWarning && !ex.injuryCaution && !ex.needsMissingEquipment)
-    .slice(0, 3)
-    .map(ex => ex.name)
   const isSelected = (id: string) => selectedExercises.some(se => se.exercise.id === id)
 
   const toggleExercise = (exercise: Exercise) => {
@@ -187,21 +181,6 @@ export default function ExerciseList() {
                              : 'bg-dark-800 text-dark-300 border-dark-600'}`}>
                 {f}
               </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* AI picks (only when muscle-group browsing) */}
-      {category && aiPicks.length > 0 && (
-        <div className="mx-5 mb-3 bg-[#0a2a22] border border-brand-teal/30 rounded-card p-3">
-          <p className="text-brand-teal text-xs font-semibold mb-2">🤖 Recovered & recommended</p>
-          <div className="flex gap-2 flex-wrap">
-            {aiPicks.map(name => (
-              <span key={name}
-                className="bg-brand-teal/20 border border-brand-teal/40 text-brand-teal text-xs px-2 py-1 rounded-lg font-semibold">
-                {name} ✦
-              </span>
             ))}
           </div>
         </div>

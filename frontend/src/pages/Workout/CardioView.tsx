@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { fmtTime } from './helpers'
-import { ModalityViewProps, CoachTip, LiveStartGate, EffortPrompt } from './LiveShared'
+import { ModalityViewProps, LiveStartGate, EffortPrompt } from './LiveShared'
 import { useRunTracker, RunSummary } from '../../hooks/useRunTracker'
 import { useWakeLock } from '../../hooks/useWakeLock'
 import { Split, averagePace, paceFromSpeed, splitPace } from '../../lib/geo'
@@ -26,7 +26,7 @@ const KCAL_PER_METRE = 0.058
  */
 const MAP_BOX = 'w-full h-[190px]'
 
-export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps) {
+export default function CardioView({ onFinish }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, cardioTarget, completeSet } = useWorkoutStore()
   const activity = selectedExercises[currentExerciseIndex]?.exercise.name ?? 'Outdoor Run'
 
@@ -127,10 +127,6 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
       pace: `${fmtTime(splitPace(sp))} /km`,
       time: fmtTime(sp.seconds),
     }))
-
-  const coachTip = km < 0.5
-    ? 'Start conservative — hold back for the first km and let your heart rate settle into the zone before you push.'
-    : 'Nice rhythm. Keep your cadence quick and light; if breathing stays conversational you can lift the pace on the next split.'
 
   // goal from the plan
   const goalLabel = cardioTarget
@@ -390,7 +386,6 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
         </div>
       </div>
 
-      {coachEnabled !== false && <CoachTip text={coachTip} />}
 
       {/* controls */}
       <div className="grid grid-cols-2 gap-2.5 mt-4">

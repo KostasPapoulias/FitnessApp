@@ -2,7 +2,6 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
-import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 import { fmtTime } from './Workout/helpers'
 import SwipeActions from '../components/SwipeActions'
 import SetEditSheet from '../components/workout/SetEditSheet'
@@ -322,20 +321,12 @@ export default function Calendar() {
     <div className="flex-1 bg-dark-900 flex flex-col">
 
       {/* Header */}
-      <div className="relative flex items-center justify-between px-5 pt-4 pb-2">
+      <div className="flex items-center justify-between px-5 pt-4 pb-2">
         <h1 className="text-white text-2xl font-bold">Calendar</h1>
         <div className="flex items-center gap-2 text-brand-teal text-xs font-bold">
           <span className="w-2 h-2 rounded-full bg-brand-teal shadow-[0_0_8px_#00D4AA]" />
           {isLoadingActivity ? '…' : `${activity?.streak.current ?? 0} day streak`}
         </div>
-
-        <CoachMark
-          hintKey={HINTS.calendar}
-          placement="bottom"
-          className="left-5"
-          title="Your history"
-          body="Every session lands here. Switch to Muscles to see which areas you've been hitting — and which you've been avoiding."
-        />
       </div>
 
       {/* Tabs */}
@@ -836,16 +827,6 @@ export default function Calendar() {
                   <div>
                     <p className="text-brand-yellow text-sm font-bold mb-0.5">Imbalance detected</p>
                     <p className="text-dark-200 text-xs leading-relaxed">{muscles.muscleInsight}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 bg-[#0a2a22] border border-brand-teal/30 rounded-card p-3.5">
-                <div className="flex gap-2.5">
-                  <span className="text-xl">🤖</span>
-                  <div>
-                    <p className="text-brand-teal text-sm font-bold mb-0.5">AI coach · today</p>
-                    <p className="text-dark-200 text-xs leading-relaxed">{muscles.coachTip}</p>
                   </div>
                 </div>
               </div>

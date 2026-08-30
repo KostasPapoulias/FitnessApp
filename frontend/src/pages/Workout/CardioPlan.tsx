@@ -141,17 +141,6 @@ export default function CardioPlan() {
         )}
       </div>
 
-      {/* coach */}
-      <div className="flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25 rounded-card p-3.5 mb-2">
-        <span className="text-base">🤖</span>
-        <div>
-          <p className="text-[10px] tracking-wide text-brand-teal font-bold mb-1">COACH · POWERED BY GEMINI</p>
-          <p className="text-[13px] text-dark-200 leading-relaxed">
-            Ease into the first few minutes — settle your heart rate into the zone before you push the pace.
-          </p>
-        </div>
-      </div>
-
       {/* start */}
       <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2 w-[calc(100%-2.5rem)] max-w-[390px]">
         <button onClick={start}

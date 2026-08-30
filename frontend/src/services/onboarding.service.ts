@@ -28,7 +28,6 @@ export interface OnboardingState {
   optionalStageDoneAt: string | null
   equipmentIds: string[]
   injuries: Injury[]
-  seenHints: string[]
 }
 
 // Always metric on the wire. The form converts at the edge so that a user on
@@ -69,14 +68,6 @@ export const onboardingService = {
   setInjuries: async (injuries: InjuryInput[]) => {
     const res = await api.put('/profile/injuries', { injuries })
     return res.data.data
-  },
-
-  dismissHint: async (hintKey: string) => {
-    await api.post(`/profile/hints/${hintKey}`)
-  },
-
-  resetHints: async () => {
-    await api.delete('/profile/hints')
   },
 }
 

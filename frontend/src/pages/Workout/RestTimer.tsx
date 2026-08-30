@@ -105,15 +105,6 @@ export default function RestTimer({
         : `Set 1 · ${nextExObj!.exercise.name}`)
     : ''
 
-  // ── coach tip from last RPE ──
-  const rpe = setInfo.rpe
-  const aiTip =
-    rpe >= 9
-      ? `That was near-max (RPE ${rpe}). Consider holding weight or dropping 2.5kg to keep reps clean.`
-      : rpe >= 7
-      ? `Solid working set at RPE ${rpe}. You've got room — keep the weight and chase one more rep.`
-      : `That felt easy (RPE ${rpe}). Bump the load 2.5–5kg on the next set.`
-
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-6">
 
@@ -162,17 +153,6 @@ export default function RestTimer({
             {d > 0 ? `+${d}s` : `${d}s`}
           </button>
         ))}
-      </div>
-
-      {/* Coach */}
-      <div className="mt-4 flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25 rounded-card p-3.5">
-        <span className="text-base">🤖</span>
-        <div>
-          <p className="text-[10px] tracking-wide text-brand-teal font-bold mb-1">
-            COACH · POWERED BY GEMINI
-          </p>
-          <p className="text-[13px] text-dark-200 leading-relaxed">{aiTip}</p>
-        </div>
       </div>
 
       {/* Next set edit */}

@@ -19,7 +19,6 @@ export interface ModalityViewProps {
   onRest: (p: LogPayload) => void       // log set → show rest timer
   onAdvance: (p: LogPayload) => void    // log set → next set/exercise, no rest
   onFinish: () => void                  // end the session → Finish screen
-  coachEnabled?: boolean
 }
 
 // ── LIVE header (pulse badge + workout time + exercise counter) ──
@@ -167,21 +166,6 @@ export function EffortPrompt({
                    disabled:opacity-50">
         {busy ? 'Saving…' : confirmLabel}
       </button>
-    </div>
-  )
-}
-
-// ── Gemini coach tip strip ──
-export function CoachTip({ text }: { text: string }) {
-  return (
-    <div className="mt-4 flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25 rounded-card p-3.5">
-      <span className="text-base">🤖</span>
-      <div>
-        <p className="text-[10px] tracking-wide text-brand-teal font-bold mb-1">
-          COACH · POWERED BY GEMINI
-        </p>
-        <p className="text-[13px] text-dark-200 leading-relaxed">{text}</p>
-      </div>
     </div>
   )
 }

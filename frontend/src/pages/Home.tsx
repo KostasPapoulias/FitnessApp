@@ -6,7 +6,6 @@ import { useOnboardingStore } from '../store/useOnboardingStore'
 import MuscleMap from '../components/muscle/MuscleMap'
 import { useDeviceTilt } from '../hooks/useDeviceTilt'
 import MuscleFatiguePopup from '../components/muscle/MuscleFatiguePopup'
-import CoachMark, { HINTS } from '../components/onboarding/CoachMark'
 
 export default function Home() {
   const { user } = useAuthStore()
@@ -14,7 +13,6 @@ export default function Home() {
   // AppLayout does the fetching; Home only reads the result.
   const { loaded, optionalStageDoneAt } = useOnboardingStore()
   const [side, setSide] = useState<'front' | 'back'>('front')
-  const [aiVisible, setAiVisible] = useState(true)
   // Degrees of counter-rotation from the phone's tilt. Always 0 on desktop,
   // and on any device that declines the sensor.
   const tilt = useDeviceTilt()
@@ -38,14 +36,6 @@ export default function Home() {
     readinessScore >= 40 ? 'bg-brand-yellow/20 border-brand-yellow/40' :
     'bg-brand-red/20 border-brand-red/40'
 
-  // AI suggestion based on readiness
-  const aiSuggestion =
-    readinessScore >= 70
-      ? 'Your body is ready. Today is a great day to train hard.'
-      : readinessScore >= 40
-      ? 'Moderate fatigue detected. Consider a lighter session today.'
-      : 'High fatigue. Rest or do mobility work today to recover.'
-
   return (
     <div className="relative flex flex-col flex-1 min-h-full bg-dark-800">
 
@@ -59,30 +49,16 @@ export default function Home() {
         </div>
 
         {/* Readiness badge */}
-        <div className="relative">
-          <div className={`border rounded-2xl px-3 py-2 text-center ${readinessBg}`}>
-            <p className="text-dark-300 text-[10px] uppercase tracking-wide">
-              Readiness
-            </p>
-            {isLoading
-              ? <div className="w-8 h-5 bg-dark-600 rounded animate-pulse mx-auto mt-0.5" />
-              : <p className={`text-lg font-bold ${readinessColor}`}>
-                  {readinessScore}%
-                </p>
-            }
-          </div>
-
-          {/* Explained first, against the user's own number — it is the one
-              figure the rest of the app is built around. */}
-          <CoachMark
-            hintKey={HINTS.readiness}
-            priority={0}
-            enabled={!isLoading}
-            placement="bottom"
-            className="right-0"
-            title="Your readiness"
-            body="How recovered you are right now, from muscle fatigue, whole-body load and last night's sleep. It climbs back on its own as you rest."
-          />
+        <div className={`border rounded-2xl px-3 py-2 text-center ${readinessBg}`}>
+          <p className="text-dark-300 text-[10px] uppercase tracking-wide">
+            Readiness
+          </p>
+          {isLoading
+            ? <div className="w-8 h-5 bg-dark-600 rounded animate-pulse mx-auto mt-0.5" />
+            : <p className={`text-lg font-bold ${readinessColor}`}>
+                {readinessScore}%
+              </p>
+          }
         </div>
       </div>
 
@@ -170,20 +146,6 @@ export default function Home() {
           }
         </div>
 
-        {/* Anchored to the map's own container so it sits under the body
-            rather than floating over the middle of the screen. */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2">
-          <CoachMark
-            hintKey={HINTS.bodyMap}
-            priority={1}
-            enabled={!isLoading}
-            placement="bottom"
-            className="-left-24"
-            title="Your body map"
-            body="Each muscle is coloured by how much load it's still carrying. Tap one to see what hit it and when it'll be recovered."
-          />
-        </div>
-
         {/* Muscle popup */}
         {selectedMuscle && <MuscleFatiguePopup />}
 
@@ -225,47 +187,26 @@ export default function Home() {
         </Link>
       )}
 
-      {/* AI suggestion strip */}
-      {aiVisible && (
-        <div className={`relative mx-1 mb-1 bg-dark-800 border border-brand-teal/30
-                        rounded-card px-2 py-3 flex items-start gap-3
-                        ${showSetupPrompt ? '' : 'mt-auto'}`}>
-          <span className="text-lg mt-0.5">🤖</span>
-          <div className="flex-1">
-            <p className="text-dark-200 text-sm leading-relaxed">
-              {aiSuggestion}
-            </p>
-            {/* What sleep did to the score above. Shown when it did nothing
-                too: a readiness figure that silently ignores a variable the
-                app asks you to log is the bug this feature exists to fix, and
-                an unlogged night must not look like a neutral one. */}
-            {sleep && (
-              <p className={`text-xs mt-1.5 leading-relaxed ${
-                sleep.applied ? 'text-dark-300' : 'text-dark-400'
-              }`}>
-                {sleep.note}
-                {!sleep.applied && (
-                  <Link to="/profile" className="text-brand-teal ml-1">Log it →</Link>
-                )}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={() => setAiVisible(false)}
-            className="text-dark-400 text-lg leading-none flex-shrink-0"
-          >
-            ×
-          </button>
+      {/* What sleep did to the readiness score at the top of this screen.
+          Shown when it did nothing too: a readiness figure that silently
+          ignores a variable the app asks you to log is the bug this exists to
+          fix, and an unlogged night must not look like a neutral one.
 
-          <CoachMark
-            hintKey={HINTS.aiStrip}
-            priority={2}
-            enabled={!isLoading}
-            placement="top"
-            className="left-0"
-            title="Today's call"
-            body="A read on what your body can take today. Tap the AI tab for a full session built around it."
-          />
+          This used to be the tail of an AI suggestion strip. The suggestion is
+          gone; the sleep note is not a suggestion, it is why the number above
+          reads what it reads. */}
+      {sleep && (
+        <div className={`mx-1 mb-1 bg-dark-800 border border-dark-600
+                        rounded-card px-3 py-2.5
+                        ${showSetupPrompt ? '' : 'mt-auto'}`}>
+          <p className={`text-xs leading-relaxed ${
+            sleep.applied ? 'text-dark-300' : 'text-dark-400'
+          }`}>
+            {sleep.note}
+            {!sleep.applied && (
+              <Link to="/profile" className="text-brand-teal ml-1">Log it →</Link>
+            )}
+          </p>
         </div>
       )}
     </div>

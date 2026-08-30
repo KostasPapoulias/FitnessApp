@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { rpeColor, rpeWord, exerciseEmoji, fmtTime } from './helpers'
 import {
-  ModalityViewProps, LiveHeader, SegmentBar, RpeRow, CoachTip, UpNext,
+  ModalityViewProps, LiveHeader, SegmentBar, RpeRow, UpNext,
 } from './LiveShared'
 
 const TEMPOS = ['2-0-1', '3-1-1', '2-1-2', '1-0-X', 'Slow neg']
@@ -23,7 +23,7 @@ const bigStep =
 // per-exercise extras the backend model doesn't hold (live-only)
 interface Extra { level: number; tempo: string; load: number }
 
-export default function CalisthenicsView({ elapsed, onRest, onFinish, coachEnabled }: ModalityViewProps) {
+export default function CalisthenicsView({ elapsed, onRest, onFinish }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, currentSetIndex, completedSets, updateSet, setCurrent } =
     useWorkoutStore()
 
@@ -72,12 +72,6 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, coachEnabl
   } else {
     un = { t: 'Last set', d: 'Own the full range of motion' }
   }
-
-  const coachTip = hold
-    ? `Beat your last ${set.reps}s hold at the ${levels[extra.level]} level. Clear it clean twice, then progress the variation.`
-    : extra.level === 0
-    ? 'You’re on an assisted variation. Reduce the assistance a notch once you can clear all sets at RPE 8.'
-    : 'Strong bodyweight work. Add a little load next session before adding reps to keep building strength.'
 
   const restSeconds = set.restSeconds ?? 90
   const logReps = () => onRest({ reps: set.reps, weight: Math.max(0, extra.load), rpe: set.rpe, restSeconds })
@@ -216,7 +210,6 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, coachEnabl
         )}
       </div>
 
-      {coachEnabled !== false && <CoachTip text={coachTip} />}
       <UpNext title={un.t} detail={un.d} />
 
       <button onClick={onFinish}

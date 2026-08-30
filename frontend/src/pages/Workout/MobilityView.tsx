@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { fmtTime } from './helpers'
-import { ModalityViewProps, CoachTip, UpNext, LiveStartGate } from './LiveShared'
+import { ModalityViewProps, UpNext, LiveStartGate } from './LiveShared'
 
 function isPerSide(name: string) {
   return /stretch|hip|lunge|pigeon|couch|90|thoracic|shoulder|side|twist|rotation/i.test(name)
 }
 
-export default function MobilityView({ elapsed, onAdvance, onFinish, coachEnabled }: ModalityViewProps) {
+export default function MobilityView({ elapsed, onAdvance, onFinish }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, currentSetIndex } = useWorkoutStore()
   const ex = selectedExercises[currentExerciseIndex]
   const set = ex?.sets[currentSetIndex]
@@ -171,7 +171,6 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, coachEnable
         </button>
       </div>
 
-      {coachEnabled !== false && <CoachTip text="Ease into end-range and let the breath do the work — never force a stretch. Aim for a 6–7/10 tension, not pain." />}
       <UpNext
         title={perSide && !leftDone ? `${ex.exercise.name} · Right side` : (nextEx ? nextEx.exercise.name : 'Flow complete')}
         detail={perSide && !leftDone ? `Same pose, other side · ${target}s` : (nextEx ? `Hold · ${Math.max(5, nextEx.sets[0]?.reps || 30)}s` : 'Great work — you’ve moved every joint')}
