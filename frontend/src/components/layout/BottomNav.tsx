@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useDeviceType } from '../../hooks/useDeviceType'
@@ -13,7 +13,11 @@ export default function BottomNav() {
   // Publish the nav's real height so fixed overlays (chat input) can sit
   // exactly on top of it. Measured rather than hardcoded: the raised centre
   // button and the safe-area inset both change it per device.
-  useEffect(() => {
+  //
+  // Layout effect, not a passive one: `<main>` pads its bottom by this on every
+  // form factor now, so a value published after the first paint is a visible
+  // jump — desktop laying out against the 78px fallback and then snapping to 0.
+  useLayoutEffect(() => {
     const root = document.documentElement
     if (!isPhone) {
       root.style.setProperty('--bottom-nav-h', '0px')

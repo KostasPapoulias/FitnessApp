@@ -44,7 +44,7 @@ export default function WorkoutQueue() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-24">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-6">
 
       {/* Header */}
       <div className="flex items-center justify-between pb-3.5 border-b border-dark-600">

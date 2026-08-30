@@ -26,6 +26,21 @@
      `max()` keeps them at 0 on hardware that has no inset to eat into. */
   --page-top: max(0px, calc(var(--safe-top) - 14px));
   --nav-bottom: max(0px, calc(var(--safe-bottom) - 6px));
+
+  /* Bottom padding for a page that floats an action tray over its own content.
+     The tray is pinned `1rem` above the nav and measures 65px at its tallest (the
+     continue tray on the exercise list), so this is that plus breathing room —
+     the exact distance the last row has to stand clear of, and nothing more.
+
+     It is measured from `<main>`'s content box, which already stops at the top
+     of the nav on a phone and at the window edge on desktop. That is why
+     `<main>` pads by `--bottom-nav-h` on BOTH: the moment the two differ, one
+     number cannot serve both and every page with a tray needs two.
+
+     Pages whose tray only appears once something is selected apply this only
+     while it is showing. Padding for a tray that is not there is exactly the
+     dead strip at the bottom of the page this replaced. */
+  --tray-clear: 6rem;
 }
 
 /* Prevent all default browser gestures */

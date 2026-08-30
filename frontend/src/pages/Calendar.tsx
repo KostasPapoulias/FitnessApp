@@ -319,7 +319,7 @@ export default function Calendar() {
     : 0
 
   return (
-    <div className="min-h-853 bg-dark-900 flex flex-col">
+    <div className="flex-1 bg-dark-900 flex flex-col">
 
       {/* Header */}
       <div className="relative flex items-center justify-between px-5 pt-4 pb-2">
@@ -461,7 +461,7 @@ export default function Calendar() {
           </div>
 
           {/* Day detail panel */}
-          <div className="flex-1 overflow-y-auto px-2 pb-24">
+          <div className="flex-1 overflow-y-auto px-2 pb-6">
 
             {!selectedDate && (
               <div className="text-center py-12">
@@ -682,7 +682,7 @@ export default function Calendar() {
 
       {/* ============ ACTIVITY TAB ============ */}
       {tab === 'Activity' && (
-        <div className="flex-1 overflow-y-auto px-5 pb-24">
+        <div className="flex-1 overflow-y-auto px-5 pb-6">
 
           <div className="flex items-center justify-between mb-3">
             <p className="text-white text-[15px] font-bold">Training streak</p>
@@ -785,7 +785,7 @@ export default function Calendar() {
 
       {/* ============ MUSCLES TAB ============ */}
       {tab === 'Muscles' && (
-        <div className="flex-1 overflow-y-auto px-5 pb-24">
+        <div className="flex-1 overflow-y-auto px-5 pb-6">
 
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-white text-[15px] font-bold">Muscle balance</p>

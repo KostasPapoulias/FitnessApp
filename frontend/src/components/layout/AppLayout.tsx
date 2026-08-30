@@ -90,6 +90,11 @@ export default function AppLayout() {
   // re-anchors every `position: fixed` sheet inside it.
   useEffect(() => { endGesture() }, [location.pathname])
 
+  // `<main>` is the scrolling element and it outlives the page inside it, so
+  // without this a new screen opens at wherever the last one was scrolled to.
+  const mainRef = useRef<HTMLElement>(null)
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0 }) }, [location.pathname])
+
   const onTouchStart = (e: React.TouchEvent<HTMLElement>) => {
     if (isWorkoutFlow || !isSwipeable) return
     if (claimedBySomethingCloser(e.target, e.currentTarget)) return
@@ -136,17 +141,34 @@ export default function AppLayout() {
     endGesture()
   }
   return (
-    <div className={`min-h-dvh bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
+    <div className={`h-dvh overflow-hidden bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
       {/* The sidebar renders on !isPhone, so the offset keys off the same flag —
           `lg:pl-72` left a 768–1024px gap where the sidebar covered content. */}
       {/* The top inset is applied once, here, rather than on each page header:
           under `viewport-fit=cover` the status bar overlays the page, and every
           screen's own `pt-4`/`pt-6` is far short of a 59px notch.
           The bottom clears the real nav rather than a guessed 5rem. */}
+      {/*
+        `h-dvh`, not `min-h-dvh`, and this is the whole shape of the shell.
+
+        With a minimum the height was indefinite, so every page added its own
+        `min-h-dvh` to get one — and a 100dvh child inside a 100dvh box that
+        also pads for the notch and the nav makes a document taller than the
+        screen by exactly those insets. On a phone that is a strip of empty
+        background you can scroll down into on every single screen, and enough
+        overflow to make the browser's URL bar collapse and the viewport jump
+        the first time you touch anything.
+
+        A definite height fixes both ends: the document is exactly the viewport
+        and never scrolls, `<main>` is the one scrolling region, and pages fill
+        it with `flex-1` instead of restating the viewport. It is also what
+        pages with their own sticky header and inner scroller were relying on
+        the old 100dvh for.
+      */}
       <main
-        className={`flex flex-col min-h-dvh overflow-y-auto pt-[var(--page-top)] ${
-          isPhone ? 'pb-[var(--bottom-nav-h)]' : 'pb-8 pl-72'
-        }`}
+        ref={mainRef}
+        className={`flex flex-col h-dvh overflow-y-auto overscroll-contain
+                    pt-[var(--page-top)] pb-[var(--bottom-nav-h)] ${isPhone ? '' : 'pl-72'}`}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

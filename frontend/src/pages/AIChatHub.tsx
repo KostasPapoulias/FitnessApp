@@ -82,7 +82,7 @@ export default function AIChatHub() {
   }
 
   return (
-    <div className="min-h-853 bg-dark-900 flex flex-col">
+    <div className="flex-1 bg-dark-900 flex flex-col">
 
       {/* Header */}
       <div className="px-5 pt-4 pb-4">

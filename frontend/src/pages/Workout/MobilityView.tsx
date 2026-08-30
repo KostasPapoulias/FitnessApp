@@ -86,7 +86,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, coachEnable
     || 'Ease into end-range and let the breath do the work — never force a stretch. Aim for a 6–7/10 tension, not pain.'
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-4">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
       {/* header (teal accent for mobility) */}
       <div className="flex justify-between items-start pb-3.5 border-b border-dark-600">
         <div className="min-w-0">

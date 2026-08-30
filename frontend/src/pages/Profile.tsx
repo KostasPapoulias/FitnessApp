@@ -689,13 +689,13 @@ export default function Profile() {
   }
 
   if (isLoading) return (
-    <div className="min-h-853 bg-dark-900 flex items-center justify-center">
+    <div className="flex-1 bg-dark-900 flex items-center justify-center">
       <div className="text-dark-300 text-sm">Loading profile...</div>
     </div>
   )
 
   return (
-    <div className="min-h-853 bg-dark-900">
+    <div className="flex-1 bg-dark-900">
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-2 pb-0">

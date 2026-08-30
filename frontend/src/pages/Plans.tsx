@@ -110,7 +110,7 @@ export default function Plans() {
   ]
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-24">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-6">
       <h1 className="text-xl font-extrabold">Plans</h1>
       <p className="text-dark-400 text-[12.5px] mt-0.5">
         Saved workouts, and what you have lined up.

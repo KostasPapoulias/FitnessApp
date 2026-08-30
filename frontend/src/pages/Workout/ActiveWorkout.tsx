@@ -9,7 +9,6 @@ import { announce, alert as speakAlert, cues } from '../../lib/speech'
 import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { ROTATING_EXAMPLES } from '../../constants/voiceCommands'
 import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
-import CoachMark, { HINTS } from '../../components/onboarding/CoachMark'
 import RestTimer from './RestTimer'
 import CalisthenicsView from './CalisthenicsView'
 import MobilityView from './MobilityView'
@@ -391,7 +390,7 @@ export default function ActiveWorkout() {
   // selection, so without this the screen flashes an empty state on the way out.
   if (isFinishing) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4 animate-pulse">💾</div>
           <p className="text-white font-semibold">Saving your workout...</p>
@@ -403,7 +402,7 @@ export default function ActiveWorkout() {
   // ── START FAILED ──
   if (startError) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center max-w-[320px]">
           <div className="text-4xl mb-4">⚠️</div>
           <p className="text-white font-semibold mb-2">Couldn't start the workout</p>
@@ -424,7 +423,7 @@ export default function ActiveWorkout() {
   // ── LOADING ──
   if (isStarting || (!sessionId && selectedExercises.length > 0)) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-4xl mb-4 animate-pulse">💪</div>
           <p className="text-white font-semibold">Starting workout...</p>
@@ -436,7 +435,7 @@ export default function ActiveWorkout() {
   // ── NO EXERCISES ──
   if (!currentExercise) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
           <p className="text-white text-lg mb-4">No exercises selected</p>
           <button onClick={() => navigate('/workout/browse')}
@@ -523,7 +522,7 @@ export default function ActiveWorkout() {
   const cycleMode = () => setRpeMode(m => m === 'standard' ? 'beginner' : m === 'beginner' ? 'pro' : 'standard')
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-4">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
 
       {/* Top bar */}
       <div className="flex justify-between items-start pb-3.5 border-b border-dark-600">
@@ -682,28 +681,19 @@ export default function ActiveWorkout() {
           </div>
         </div>
 
-        {/* Voice hint + Set Done */}
+        {/* Voice strip + Set Done */}
         <div className="px-4 pt-3 pb-4">
-          <div className="relative">
-            <VoiceStrip
-              state={voiceState}
-              lastHeard={lastHeard}
-              lastMiss={lastMiss}
-              enabled={voice}
-              onOpenHelp={() => setShowVoiceHelp(true)}
-            />
-            {/* Anchored to the strip, and only once the microphone is actually
-                running — a tip about talking to the app is noise while the
-                engine is still starting or has been refused. */}
-            <CoachMark
-              hintKey={HINTS.voiceLive}
-              enabled={voice && voiceState === 'listening'}
-              placement="bottom"
-              className="left-0 -mt-1"
-              title="You can talk to this"
-              body="Say the numbers to change them, then “set done” to log. Nothing saves until you say it. Tap the strip for the full list."
-            />
-          </div>
+          {/* The strip itself says the microphone is live and opens the full
+              command list on tap, so the tip that used to sit under it was
+              covering the set you were mid-way through logging to explain
+              something already on screen. */}
+          <VoiceStrip
+            state={voiceState}
+            lastHeard={lastHeard}
+            lastMiss={lastMiss}
+            enabled={voice}
+            onOpenHelp={() => setShowVoiceHelp(true)}
+          />
           <button
             onClick={() => handleSetDone()}
             className="w-full py-[17px] rounded-btn bg-brand-teal text-black

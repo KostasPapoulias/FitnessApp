@@ -68,8 +68,11 @@ export default function BrowseCategories() {
 
   const selectedCount = selectedExercises.length
 
+  // The selected tray is only over the content once something is selected, so
+  // only then does the content pay for it.
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-6 pb-28 overflow-y-auto relative">
+    <div className={`flex-1 bg-dark-900 text-white px-5 pt-6 overflow-y-auto relative
+                     ${selectedCount > 0 ? 'pb-[var(--tray-clear)]' : 'pb-6'}`}>
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">

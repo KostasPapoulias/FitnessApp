@@ -142,7 +142,7 @@ export default function StartWorkout() {
   )
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-6 pb-28 overflow-y-auto">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-6 pb-6 overflow-y-auto">
 
       {/* Title */}
       <div className="relative">

@@ -115,7 +115,7 @@ export default function RestTimer({
       : `That felt easy (RPE ${rpe}). Bump the load 2.5–5kg on the next set.`
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-6">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-6">
 
       {/* Header */}
       <div className="flex justify-between items-start pb-3.5 border-b border-dark-600">

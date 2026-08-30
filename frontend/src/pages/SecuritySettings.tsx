@@ -105,7 +105,7 @@ export default function SecuritySettings() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-4 pt-4 pb-24">
+    <div className="flex-1 bg-dark-900 text-white px-4 pt-4 pb-6">
       <div className="flex items-center gap-3 mb-5">
         <button onClick={() => navigate('/profile')}
           className="w-9 h-9 rounded-full bg-dark-800 border border-dark-600

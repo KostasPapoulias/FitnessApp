@@ -19,11 +19,11 @@ export const HINTS = {
   workout:     'workout.start',
   calendar:    'calendar.history',
   trainingSetup: 'home.trainingSetup',
-  // Two, because discovering that voice exists and learning what to say to it
-  // happen on different screens, minutes apart, and the second only makes sense
-  // once there is a live set on screen to talk about.
+  // Discovering that voice exists is worth a hint. Repeating it during a live
+  // set is not: `workout.voiceLive` used to explain the voice strip from
+  // directly on top of the set being logged, and the strip already says the
+  // microphone is listening and opens the command list when tapped.
   voiceSetup:  'workout.voiceSetup',
-  voiceLive:   'workout.voiceLive',
 } as const
 
 export type HintKey = typeof HINTS[keyof typeof HINTS]

@@ -172,7 +172,7 @@ export default function WodView({ onFinish, coachEnabled }: ModalityViewProps) {
     : 'Settle into a sustainable rhythm and only surge on the final two rounds.'
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-4">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
       {/* header */}
       <div className="flex items-center justify-between pb-3">
         <div className="flex items-center gap-1.5 text-brand-red text-xs font-bold tracking-wide">

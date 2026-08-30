@@ -197,7 +197,7 @@ export default function CardioView({ onFinish, coachEnabled }: ModalityViewProps
 
   return (
     <div
-      className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-4"
+      className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4"
       // A pull-to-refresh in a standalone PWA reloads the page. The run is
       // recovered from IndexedDB if that happens, but not losing it in the
       // first place is better.

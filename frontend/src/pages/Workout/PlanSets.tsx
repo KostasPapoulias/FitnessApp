@@ -63,7 +63,7 @@ export default function PlanSets() {
 
   if (selectedExercises.length === 0) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
           <p className="text-white text-lg mb-4">No exercises selected</p>
           <button
@@ -77,7 +77,7 @@ export default function PlanSets() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white">
+    <div className="flex-1 bg-dark-900 text-white">
       <div className="px-5 pt-4 pb-2">
 
         {/* Header */}

@@ -120,7 +120,7 @@ export default function ExerciseList() {
   const headerSub = category ? modality : meta.sub
 
   return (
-    <div className="min-h-dvh bg-dark-900 flex flex-col">
+    <div className="flex-1 min-h-0 bg-dark-900 flex flex-col">
 
       {/* Header */}
       <div className="px-5 pt-6 pb-3 flex items-center gap-3">
@@ -208,7 +208,10 @@ export default function ExerciseList() {
       )}
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto px-5 pb-36">
+      {/* Padding for the continue tray only while the tray is actually there —
+          otherwise it is just a dead strip under the last exercise. */}
+      <div className={`flex-1 min-h-0 overflow-y-auto px-5
+                       ${selectedCount > 0 ? 'pb-[var(--tray-clear)]' : 'pb-6'}`}>
         <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
           {filtered.length} {singleSelect ? 'activities' : 'exercises'}
         </p>

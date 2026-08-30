@@ -74,7 +74,7 @@ export default function Finish() {
   // ── saving ──
   if (saving) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
           <div className="text-5xl mb-4 animate-pulse">💾</div>
           <p className="text-white font-semibold">Saving your workout...</p>
@@ -118,7 +118,7 @@ export default function Finish() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-14 pb-8 text-center">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-14 pb-8 text-center">
       <div className="text-[56px] leading-none">🏆</div>
       <h1 className="text-[26px] font-extrabold mt-3">Workout Complete</h1>
       <p className="text-dark-300 text-sm mt-1">Nice work. Here's how today went.</p>

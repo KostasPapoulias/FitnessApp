@@ -89,7 +89,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, coachEnabl
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-4 pb-4">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
       <LiveHeader label="LIVE · CALISTHENICS" time={fmtTime(elapsed)}
         counter={`${currentExerciseIndex + 1}/${selectedExercises.length}`} />
 

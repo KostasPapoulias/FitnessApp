@@ -43,7 +43,7 @@ export default function AIChat() {
     isUnsaved ? null : threadId ?? null
   )
 
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const sentFirst = useRef(false)
   const historyLoaded = useRef(false)
 
@@ -81,8 +81,18 @@ export default function AIChat() {
 
   // Also re-pin to the bottom when the keyboard opens, so the latest message
   // isn't left behind the newly-raised input bar.
+  //
+  // The message list is scrolled directly rather than through
+  // `scrollIntoView()` on a trailing marker. `scrollIntoView` walks EVERY
+  // scrollable ancestor up to the document, and on a phone that included the
+  // document itself — so posting a message scrolled the page behind this fixed
+  // shell, which on iOS collapses the URL bar, resizes the viewport under a
+  // `position: fixed` element and leaves the bottom of the chat (where a
+  // proposal card's buttons sit) somewhere other than where it is drawn.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages, proposals, isLoading, keyboardInset])
 
   const sendMessage = async (text: string) => {
@@ -209,12 +219,12 @@ export default function AIChat() {
       </div>
 
       {/* Messages — the only scrolling region */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-4">
+      <div ref={scrollerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-4">
         {isLoadingHistory ? (
           <div className="flex items-center justify-center h-32">
             <div className="text-dark-400 text-sm">Loading...</div>
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && proposals.length === 0 ? (
           <div className="flex flex-col items-center justify-center
                           min-h-[200px] text-center px-4">
             <div className="text-5xl mb-4">🤖</div>
@@ -232,7 +242,10 @@ export default function AIChat() {
             ))}
             {/* Drafted plans sit after the conversation: they belong to the
                 latest reply, and anchoring them mid-thread would put a live
-                action behind whatever the athlete has since scrolled past. */}
+                action behind whatever the athlete has since scrolled past.
+                Rendered on `proposals` alone, not only alongside messages: a
+                thread whose history came back with a pending card but no
+                messages used to fall into the empty state and drop the card. */}
             {proposals.map(proposal => (
               <ProposalCard
                 key={proposal.id}
@@ -261,7 +274,6 @@ export default function AIChat() {
           </div>
         )}
 
-        <div ref={bottomRef} />
       </div>
 
       {/* Input — rides at the bottom of the shell, so it rises with the keyboard */}

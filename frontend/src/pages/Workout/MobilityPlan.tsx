@@ -23,7 +23,7 @@ export default function MobilityPlan() {
 
   if (selectedExercises.length === 0) {
     return (
-      <div className="min-h-dvh bg-dark-900 flex items-center justify-center px-5">
+      <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
           <p className="text-white text-lg mb-4">No flows selected</p>
           <button onClick={() => navigate('/workout/start')}
@@ -37,7 +37,7 @@ export default function MobilityPlan() {
     (sum, se) => sum + se.sets.reduce((s, set) => s + (set.reps || 0), 0), 0)
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-6 pb-28 overflow-y-auto">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-6 pb-[var(--tray-clear)] overflow-y-auto">
       {/* header */}
       <div className="flex items-center gap-3 mb-5">
         <button onClick={() => navigate(-1)}

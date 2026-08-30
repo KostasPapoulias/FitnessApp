@@ -31,13 +31,13 @@ export default function ExerciseDetail() {
   }
 
   if (isLoading) return (
-    <div className="min-h-dvh bg-dark-900 flex items-center justify-center">
+    <div className="flex-1 bg-dark-900 flex items-center justify-center">
       <div className="text-dark-300">Loading...</div>
     </div>
   )
 
   if (!exercise) return (
-    <div className="min-h-dvh bg-dark-900 flex items-center justify-center">
+    <div className="flex-1 bg-dark-900 flex items-center justify-center">
       <div className="text-dark-300">Exercise not found</div>
     </div>
   )
@@ -49,7 +49,7 @@ export default function ExerciseDetail() {
   }
 
   return (
-    <div className="min-h-dvh bg-dark-900 flex flex-col">
+    <div className="flex-1 bg-dark-900 flex flex-col">
 
       {/* Header */}
       <div className="px-5 pt-4 pb-3 flex items-center gap-3">

@@ -132,13 +132,13 @@ export default function CreateExercise() {
   }
 
   if (isLoading) return (
-    <div className="min-h-853 bg-dark-900 flex items-center justify-center">
+    <div className="flex-1 bg-dark-900 flex items-center justify-center">
       <div className="text-dark-300 text-sm">Loading…</div>
     </div>
   )
 
   return (
-    <div className="min-h-853 bg-dark-900 flex flex-col">
+    <div className="flex-1 bg-dark-900 flex flex-col">
 
       {/* Header */}
       <div className="px-5 pt-2 pb-4 flex items-center gap-3">
@@ -155,7 +155,7 @@ export default function CreateExercise() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-32 flex flex-col gap-5">
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-[var(--tray-clear)] flex flex-col gap-5">
 
         {/* Name */}
         <div>

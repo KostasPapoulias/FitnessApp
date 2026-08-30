@@ -122,7 +122,7 @@ export function EffortPrompt({
   const [rpe, setRpe] = useState(initial)
 
   return (
-    <div className="min-h-dvh bg-dark-900 text-white px-5 pt-10 pb-8 flex flex-col">
+    <div className="flex-1 bg-dark-900 text-white px-5 pt-10 pb-8 flex flex-col">
       <div className="text-center">
         <div className="text-[52px] leading-none">{emoji}</div>
         <div className="flex items-center justify-center gap-1.5 text-brand-teal text-xs
@@ -198,7 +198,7 @@ export function LiveStartGate({
   onBack?: () => void
 }) {
   return (
-    <div className="min-h-dvh bg-dark-900 text-white flex flex-col items-center justify-center px-8 text-center">
+    <div className="flex-1 bg-dark-900 text-white flex flex-col items-center justify-center px-8 text-center">
       <div className="text-[64px] leading-none mb-4">{emoji}</div>
       <div className="flex items-center gap-1.5 text-brand-teal text-xs font-bold tracking-widest mb-2">
         <span className="w-2 h-2 rounded-full bg-brand-teal" /> {label}
