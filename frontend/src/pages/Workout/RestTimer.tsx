@@ -104,6 +104,12 @@ export default function RestTimer({
         ? `Set ${nSet + 1} · ${curEx!.exercise.name}`
         : `Set 1 · ${nextExObj!.exercise.name}`)
     : ''
+  // Calisthenics load is signed — negative is assistance from a band or a
+  // machine, which the backend records as such. Clamping it at zero here (and
+  // labelling it WEIGHT) is why adjusting an assisted set from the rest timer
+  // could never take the load below bodyweight.
+  const nextIsCalisthenics = nextExObj?.exercise.modality === 'Calisthenics'
+  const loadFloor = (v: number) => nextIsCalisthenics ? v : Math.max(0, v)
 
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-6">
@@ -177,10 +183,12 @@ export default function RestTimer({
             </div>
             {/* weight */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
-              <p className="text-[10px] tracking-wide text-dark-400 mb-1">WEIGHT</p>
+              <p className="text-[10px] tracking-wide text-dark-400 mb-1">
+                {nextIsCalisthenics ? 'LOAD' : 'WEIGHT'}
+              </p>
               <p className="text-[17px] font-extrabold tabular-nums mb-1.5">{nextSetObj.weight}</p>
               <div className="flex items-center justify-center gap-1.5">
-                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.max(0, Math.round((nextSetObj.weight - 2.5) * 10) / 10) })}>−</MiniStep>
+                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: loadFloor(Math.round((nextSetObj.weight - 2.5) * 10) / 10) })}>−</MiniStep>
                 <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.round((nextSetObj.weight + 2.5) * 10) / 10 })}>+</MiniStep>
               </div>
             </div>

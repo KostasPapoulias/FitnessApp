@@ -205,7 +205,13 @@ export default function PlanSets() {
                       </div>
                       {/* weight */}
                       <div className="flex items-center justify-center gap-1">
-                        <Step onClick={() => updateSet(ei, si, { weight: Math.max(0, Math.round((s.weight - 2.5) * 10) / 10) })}>−</Step>
+                        {/* Calisthenics load is signed: below zero is assistance
+                            from a band or a machine, which is a planned choice
+                            like any other. Every other modality floors at 0. */}
+                        <Step onClick={() => updateSet(ei, si, {
+                          weight: (v => ex.modality === 'Calisthenics' ? v : Math.max(0, v))(
+                            Math.round((s.weight - 2.5) * 10) / 10),
+                        })}>−</Step>
                         <span className="flex-1 min-w-0 text-center text-[15px] font-bold tabular-nums">{s.weight}</span>
                         <Step onClick={() => updateSet(ei, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</Step>
                       </div>

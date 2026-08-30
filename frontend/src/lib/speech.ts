@@ -76,9 +76,14 @@ export const alert = async (text: string): Promise<void> => {
 // wording can be read in one place without opening four screens.
 
 export const cues = {
+  // A negative load is calisthenics assistance, not a missing weight. Reading
+  // it as bare reps — which is what the `> 0` test alone did — makes an
+  // assisted set and a strict one sound identical.
   setLogged: (setNumber: number, reps: number, weight: number) =>
     weight > 0
       ? `Set ${setNumber} logged. ${reps} reps at ${formatWeight(weight)} kilos.`
+      : weight < 0
+      ? `Set ${setNumber} logged. ${reps} reps with ${formatWeight(-weight)} kilos assistance.`
       : `Set ${setNumber} logged. ${reps} reps.`,
 
   restStarting: (seconds: number) =>
@@ -89,6 +94,8 @@ export const cues = {
   nextSet: (setNumber: number, reps: number, weight: number) =>
     weight > 0
       ? `Set ${setNumber}. ${reps} reps at ${formatWeight(weight)} kilos.`
+      : weight < 0
+      ? `Set ${setNumber}. ${reps} reps with ${formatWeight(-weight)} kilos assistance.`
       : `Set ${setNumber}. ${reps} reps.`,
 
   nextExercise: (name: string, sets: number) =>

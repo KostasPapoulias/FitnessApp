@@ -141,7 +141,9 @@ export default function WorkoutQueue() {
                   <div className="grid grid-cols-[16px_minmax(0,1fr)_minmax(0,1fr)_28px_20px] gap-1 pb-1.5">
                     <div />
                     <p className="text-[9px] tracking-wide text-dark-400 text-center">REPS</p>
-                    <p className="text-[9px] tracking-wide text-dark-400 text-center">WEIGHT</p>
+                    <p className="text-[9px] tracking-wide text-dark-400 text-center">
+                      {e.exercise.modality === 'Calisthenics' ? 'LOAD' : 'WEIGHT'}
+                    </p>
                     <p className="text-[9px] tracking-wide text-dark-400 text-center">RPE</p>
                     <div />
                   </div>
@@ -158,7 +160,12 @@ export default function WorkoutQueue() {
                           <MiniStep onClick={() => updateSet(i, si, { reps: s.reps + 1 })}>+</MiniStep>
                         </div>
                         <div className="flex items-center justify-center gap-0.5">
-                          <MiniStep onClick={() => updateSet(i, si, { weight: Math.max(0, Math.round((s.weight - 2.5) * 10) / 10) })}>−</MiniStep>
+                          {/* Signed for calisthenics — below zero is band or
+                              machine assistance, not an invalid weight. */}
+                          <MiniStep onClick={() => updateSet(i, si, {
+                            weight: (v => e.exercise.modality === 'Calisthenics' ? v : Math.max(0, v))(
+                              Math.round((s.weight - 2.5) * 10) / 10),
+                          })}>−</MiniStep>
                           <span className="flex-1 min-w-0 truncate text-center text-[13px] font-bold tabular-nums">{s.weight}</span>
                           <MiniStep onClick={() => updateSet(i, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</MiniStep>
                         </div>
