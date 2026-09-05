@@ -39,6 +39,7 @@ import {
   systemicFatigueDelta,
   systemicLoad,
   wodHse,
+  wodLoadFactor,
 } from './fatigue-model.service'
 
 /** Floating point: compare to a tolerance, never with ===. */
@@ -222,6 +223,43 @@ describe('wodHse', () => {
 
   test('a metcon minute costs more than a cardio minute', () => {
     assert.ok(wodHse(1800, 8) > cardioHse(1800, 8))
+  })
+})
+
+describe('wodLoadFactor', () => {
+  test('bodyweight movements are unchanged', () => {
+    close(wodLoadFactor(0, 80), 1)
+    close(wodLoadFactor(null, 80), 1)
+    close(wodLoadFactor(undefined, 80), 1)
+  })
+
+  test('a loaded movement costs more than the same movement empty-handed', () => {
+    assert.ok(wodLoadFactor(43, 80) > wodLoadFactor(0, 80))
+  })
+
+  test('load is relative to the athlete, not absolute', () => {
+    // The same bar is a harder metcon for the lighter athlete. Absolute tonnage
+    // would score these identically and tell the heavier one their metcons are
+    // getting easier as they get heavier.
+    assert.ok(wodLoadFactor(43, 60) > wodLoadFactor(43, 95))
+  })
+
+  test('is monotonic in load', () => {
+    const light = wodLoadFactor(20, 80)
+    const middling = wodLoadFactor(40, 80)
+    const heavy = wodLoadFactor(60, 80)
+    assert.ok(light < middling && middling < heavy)
+  })
+
+  test('is capped, so one heavy movement cannot outweigh the clock', () => {
+    // Past the reference the factor stops climbing. A metcon's cost is its
+    // density and duration; load is a modifier and has to stay one.
+    close(wodLoadFactor(100, 80), wodLoadFactor(500, 80))
+    assert.ok(wodLoadFactor(500, 80) <= 1.8)
+  })
+
+  test('a missing bodyweight scores as unloaded rather than dividing by zero', () => {
+    close(wodLoadFactor(43, 0), 1)
   })
 })
 

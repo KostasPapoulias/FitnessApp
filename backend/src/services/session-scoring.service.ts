@@ -7,6 +7,7 @@ import {
   resistanceHse,
   systemicLoad,
   wodHse,
+  wodLoadFactor,
 } from './fatigue-model.service'
 
 /**
@@ -45,7 +46,7 @@ export interface ScorableSession {
       strength: { reps: number; weight: number } | null
       calisthenics: { reps: number; addedWeight: number; time: number | null } | null
       cardio: { distance: number | null; time: number | null } | null
-      wod: { reps: number | null; rounds: number | null; time: number | null; distance: number | null } | null
+      wod: { reps: number | null; rounds: number | null; time: number | null; distance: number | null; weight: number | null } | null
       mobility: { time: number | null } | null
     }[]
   }[]
@@ -106,6 +107,8 @@ export const scoreSession = (
     seconds: number
     rounds: number
     rpe: number | null
+    /** `wodLoadFactor` for this movement — 1 when it was done at bodyweight. */
+    load: number
   }[] = []
 
   // `damageFactor` is the movement's mechanical cost per unit of work, kept
@@ -188,6 +191,8 @@ export const scoreSession = (
           seconds: set.wod.time ?? 0,
           rounds: set.wod.rounds ?? 0,
           rpe: set.rpe,
+          // Relative to the athlete, resolved here where bodyweight is known.
+          load: wodLoadFactor(set.wod.weight, bodyWeight),
         })
 
       } else if (set.mobility) {
@@ -207,14 +212,25 @@ export const scoreSession = (
       ? rated.reduce((sum, w) => sum + (w.rpe ?? 0), 0) / rated.length
       : null
     const totalReps = wodEntries.reduce((sum, w) => sum + w.repsPerRound * rounds, 0)
-    const totalHse = wodHse(seconds, rpe, totalReps)
 
-    // Share out by rep contribution; fall back to an even split when the
-    // movements were logged without rep counts.
-    const repShareBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound, 0)
+    // Load raises the metcon's cost in proportion to how much of its work was
+    // done under a bar, weighted by rep contribution rather than counted per
+    // movement — otherwise adding one loaded movement to a five-movement metcon
+    // would scale the whole thing as if every movement were loaded.
+    const repBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound, 0)
+    const loadMultiplier = repBase > 0
+      ? wodEntries.reduce((sum, w) => sum + w.load * (w.repsPerRound / repBase), 0)
+      : 1
+
+    const totalHse = wodHse(seconds, rpe, totalReps) * loadMultiplier
+
+    // Share out by rep contribution weighted by load, so the movement holding
+    // the bar takes the larger part of what it caused. Falls back to an even
+    // split when the movements were logged without rep counts.
+    const shareBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound * w.load, 0)
     for (const entry of wodEntries) {
-      const share = repShareBase > 0
-        ? entry.repsPerRound / repShareBase
+      const share = shareBase > 0
+        ? (entry.repsPerRound * entry.load) / shareBase
         : 1 / wodEntries.length
       addMuscleDelta(entry.links, totalHse * share, entry.damage)
     }

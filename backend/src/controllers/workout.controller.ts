@@ -251,9 +251,15 @@ export const logSet = async (req: AuthRequest, res: Response) => {
           break
         case 'WOD':
           // reps-per-round and rounds completed are the metcon's score; without
-          // them the elapsed clock is all the fatigue model has to go on.
+          // them the elapsed clock is all the fatigue model has to go on. The
+          // load is what separates a 43 kg thruster from an air squat — the
+          // score says how much work, the weight says how heavy it was.
           await tx.setWOD.create({
-            data: { setId: set.id, distance, time, reps: reps ?? null, rounds: rounds ?? null }
+            data: {
+              setId: set.id, distance, time,
+              reps: reps ?? null, rounds: rounds ?? null,
+              weight: weight ?? null,
+            }
           })
           break
         case 'MOBILITY':
@@ -838,6 +844,7 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
           ...(rounds !== undefined ? { rounds } : {}),
           ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
           ...(distance !== undefined ? { distance } : {}),
+          ...(weight !== undefined ? { weight } : {}),
         },
       }))
     } else if (set.mobility) {

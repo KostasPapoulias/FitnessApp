@@ -609,6 +609,10 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         // only sees a clock, and can't tell 3 rounds from 15.
         payload.reps = data.reps
         payload.rounds = data.rounds
+        // The bar this movement was done at. This case used to drop it, so a
+        // load planned in WodPlan and shown on the live board never left the
+        // phone — and the fatigue model scored every thruster as an air squat.
+        payload.weight = data.weight ?? 0
         break
       case 'STRENGTH':
       default:

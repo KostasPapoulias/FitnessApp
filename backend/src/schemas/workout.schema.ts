@@ -79,6 +79,12 @@ export const logSetSchema = z.discriminatedUnion('setType', [
     /** Reps per round — with `rounds`, this is the metcon's score. */
     reps: reps.nullish(),
     rounds: rounds.nullish(),
+    /**
+     * External load on this movement. `kg`, not `addedKg`: a metcon has no
+     * band-assisted movement, so unlike calisthenics there is no reason to
+     * accept a negative here and every reason not to.
+     */
+    weight: kg.nullish(),
   }),
   z.object({
     ...setBase,

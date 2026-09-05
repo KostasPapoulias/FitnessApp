@@ -41,7 +41,7 @@ export const workoutService = {
     rpe?: number
     restSeconds?: number
     reps?: number          // STRENGTH / CALISTHENICS; WOD reps-per-round
-    weight?: number        // STRENGTH
+    weight?: number        // STRENGTH; WOD external load per movement
     addedWeight?: number   // CALISTHENICS
     distance?: number      // CARDIO / WOD
     time?: number          // CARDIO / WOD

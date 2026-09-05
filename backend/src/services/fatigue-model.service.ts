@@ -255,6 +255,38 @@ export const wodHse = (
 }
 
 /**
+ * How much heavier a loaded metcon movement is than the bodyweight version.
+ *
+ * Relative to the athlete, not absolute, for exactly the reason `loadFactor`
+ * above is relative to e1RM: a 43 kg thruster is a different exercise for a
+ * 60 kg athlete than for a 95 kg one, and absolute tonnage would tell a strong
+ * athlete their metcons are getting harder as they get better at them.
+ *
+ * Bodyweight is the denominator rather than an e1RM because a metcon movement
+ * usually has no meaningful one-rep max on record — nobody works up to a single
+ * on wall balls — and the barbell in a metcon is chosen as a fraction of
+ * bodyweight in the first place, which is the same frame `Exercise.loadFactor`
+ * already uses for suggested starting loads.
+ *
+ * The ceiling is deliberate and low. Metcon loads are submaximal by design: the
+ * cost of a metcon is overwhelmingly its density and duration, which `wodHse`
+ * already scores, and letting load run away here would let one heavy movement
+ * outweigh the clock that the whole modality is built around.
+ */
+const WOD_LOAD_REFERENCE = 0.75
+const WOD_LOAD_CEILING = 0.8
+
+export const wodLoadFactor = (
+  weightKg: number | null | undefined,
+  bodyWeightKg: number
+): number => {
+  if (!weightKg || weightKg <= 0) return 1
+  if (bodyWeightKg <= 0) return 1
+  const relative = weightKg / bodyWeightKg
+  return 1 + WOD_LOAD_CEILING * clamp(relative / WOD_LOAD_REFERENCE, 0, 1)
+}
+
+/**
  * Mobility is restorative, not fatiguing. It scores zero rather than the
  * rounding noise the old model produced (a 30-second hold moved a muscle by
  * 0.07 points), and contributes almost nothing systemically.

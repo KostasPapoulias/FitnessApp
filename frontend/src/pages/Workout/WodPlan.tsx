@@ -103,21 +103,49 @@ export default function WodPlan() {
         </div>
       </div>
 
-      {/* movements */}
+      {/*
+        Movements — reps AND load.
+
+        The load row is the whole point of this block. This screen used to step
+        reps only, so `set.weight` was never written and `WodView` logged the
+        metcon with no weight at all: a 43 kg thruster and an air squat reached
+        the fatigue model as the same movement, on the modality that costs the
+        most systemically of anything in the app.
+
+        Unsigned, unlike calisthenics — nothing in a metcon is band-assisted, so
+        there is no negative half of the axis to model. Zero means bodyweight
+        and is the common case, which is why the row stays quiet until it is
+        stepped rather than showing "0 kg" against every air squat.
+      */}
       <p className="text-[11px] font-bold tracking-[1.4px] text-dark-300 mb-3">EACH ROUND</p>
       <div className="flex flex-col gap-2.5">
         {selectedExercises.map((se, ei) => {
           const reps = se.sets[0]?.reps ?? 10
+          const load = se.sets[0]?.weight ?? 0
+          const setLoad = (next: number) =>
+            updateSet(ei, 0, { weight: Math.max(0, Math.round(next * 10) / 10) })
           return (
             <div key={se.exercise.id}
-              className="flex items-center gap-3 bg-dark-800 border border-dark-600 rounded-card px-4 py-3">
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <Step onClick={() => updateSet(ei, 0, { reps: Math.max(1, reps - 1) })}>−</Step>
-                <span className="w-[30px] text-center text-lg font-extrabold tabular-nums">{reps}</span>
-                <Step onClick={() => updateSet(ei, 0, { reps: reps + 1 })}>+</Step>
+              className="bg-dark-800 border border-dark-600 rounded-card px-4 py-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <Step onClick={() => updateSet(ei, 0, { reps: Math.max(1, reps - 1) })}>−</Step>
+                  <span className="w-[30px] text-center text-lg font-extrabold tabular-nums">{reps}</span>
+                  <Step onClick={() => updateSet(ei, 0, { reps: reps + 1 })}>+</Step>
+                </div>
+                <span className="flex-1 min-w-0 text-[15px] font-semibold truncate">{se.exercise.name}</span>
+                <button onClick={() => removeExerciseAt(ei)} className="text-dark-400 text-lg px-1">×</button>
               </div>
-              <span className="flex-1 min-w-0 text-[15px] font-semibold truncate">{se.exercise.name}</span>
-              <button onClick={() => removeExerciseAt(ei)} className="text-dark-400 text-lg px-1">×</button>
+
+              <div className="flex items-center gap-2.5 mt-2.5 pt-2.5 border-t border-dark-700">
+                <span className="text-[10px] tracking-wide text-dark-400 flex-shrink-0">LOAD</span>
+                <span className="flex-1 text-[13px] font-extrabold tabular-nums"
+                  style={{ color: load > 0 ? '#F97316' : '#888888' }}>
+                  {load > 0 ? `${load} kg` : 'Bodyweight'}
+                </span>
+                <Step onClick={() => setLoad(load - 2.5)} disabled={load <= 0}>−</Step>
+                <Step onClick={() => setLoad(load + 2.5)}>+</Step>
+              </div>
             </div>
           )
         })}

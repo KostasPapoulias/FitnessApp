@@ -1,0 +1,18 @@
+-- External load per metcon movement.
+--
+-- `SetWOD` recorded reps-per-round, rounds and the clock, and nothing about how
+-- heavy the movement was. So a 43 kg thruster and an air squat reached the
+-- fatigue model as the same movement — on the modality that costs the most
+-- systemically of anything in the app, and the one whose loads are most often
+-- the point of the workout.
+--
+-- Nullable with no backfill, and no default of 0. Null here means "this metcon
+-- was logged before the field existed", which is not the same claim as "this
+-- was done at bodyweight" — `wodLoadFactor` reads both as a factor of 1, so
+-- historical sessions score exactly as they did, but the difference stays
+-- legible in the data rather than being invented at migration time.
+--
+-- Unsigned by convention, enforced by the Zod `kg` scalar rather than a check
+-- constraint: nothing in a metcon is band-assisted, so unlike
+-- SetCalisthenics.addedWeight there is no negative half of the axis to model.
+ALTER TABLE "SetWOD" ADD COLUMN "weight" DOUBLE PRECISION;

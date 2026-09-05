@@ -526,6 +526,14 @@ model SetWOD {
   // duration scored identically.
   reps     Int?
   rounds   Float?
+  // External load on THIS movement, in kg. Null/0 is bodyweight, which is the
+  // common case. Without it a 43 kg thruster and an air squat reached the
+  // fatigue model as the same movement — on the modality that costs the most
+  // systemically of anything in the app.
+  //
+  // Unsigned, unlike SetCalisthenics.addedWeight: nothing in a metcon is
+  // band-assisted, so there is no negative half of the axis to model.
+  weight   Float?
 }
 
 model SetMobility {
