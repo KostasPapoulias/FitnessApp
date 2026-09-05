@@ -28,6 +28,13 @@ export type VoiceCommand =
   | { kind: 'pauseRest' }
   | { kind: 'resumeRest' }
   | { kind: 'endWorkout' }
+  /**
+   * Mark the thing this modality counts — a lap on a run, a completed round in
+   * a metcon. Deliberately one command rather than one per modality: the
+   * athlete is saying "that one counted", and which list it lands in is the
+   * screen's business, not theirs.
+   */
+  | { kind: 'mark' }
 
 // ── number words ────────────────────────────────────────────────────────────
 // No homophone correction ("for" → four, "to" → two) on purpose. It reads well
@@ -144,6 +151,13 @@ const ADVANCE_PHRASES = [
 
 const SKIP_PHRASES = [
   'skip rest', 'skip the rest', 'skip break', 'skip', 'ready', "i'm ready", 'im ready',
+]
+
+// Checked BEFORE the log phrases, because "complete round" contains "complete"
+// and would otherwise be swallowed as a strength log on a screen with no sets.
+const MARK_PHRASES = [
+  'lap', 'mark lap', 'new lap', 'split',
+  'round done', 'round complete', 'complete round', 'that round', 'round',
 ]
 
 const END_PHRASES = [
@@ -328,6 +342,7 @@ export const parseVoiceCommand = (raw: string): VoiceCommand | null => {
   if (hasPhrase(text, END_PHRASES)) return { kind: 'endWorkout' }
   if (hasPhrase(text, ['pause', 'hold on', 'wait'])) return { kind: 'pauseRest' }
   if (hasPhrase(text, ['resume', 'continue', 'unpause'])) return { kind: 'resumeRest' }
+  if (hasPhrase(text, MARK_PHRASES)) return { kind: 'mark' }
   if (hasPhrase(text, SKIP_PHRASES)) return { kind: 'skipRest' }
   if (hasPhrase(text, ADVANCE_PHRASES)) return { kind: 'advance' }
 

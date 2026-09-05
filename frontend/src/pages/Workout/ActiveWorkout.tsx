@@ -14,7 +14,7 @@ import CalisthenicsView from './CalisthenicsView'
 import MobilityView from './MobilityView'
 import CardioView from './CardioView'
 import WodView from './WodView'
-import type { LogPayload } from './LiveShared'
+import type { LogPayload, ModalityVoiceHandler } from './LiveShared'
 import {
   rpeColor, rpeTint, rpeLabel, exerciseEmoji, fmtTime, RpeMode,
 } from './helpers'
@@ -48,6 +48,13 @@ export default function ActiveWorkout() {
   // Everything else is a tap away from being undone; this isn't.
   const [endArmed, setEndArmed] = useState(false)
   const endArmedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // The mounted modality view's own command handler, if it registered one.
+  // `useCallback` with no deps so registering never re-runs a view's effect.
+  const modalityVoice = useRef<ModalityVoiceHandler | null>(null)
+  const registerVoice = useCallback((handler: ModalityVoiceHandler | null) => {
+    modalityVoice.current = handler
+  }, [])
 
   const currentExercise = selectedExercises[currentExerciseIndex]
   const currentSetPlan = currentExercise?.sets[currentSetIndex]
@@ -232,24 +239,42 @@ export default function ActiveWorkout() {
     // Calisthenics holds, runs and metcons log fields the strength set card has
     // no idea about — seconds under tension, distance, rounds. Routing a spoken
     // "set done" through the strength path there would write a hold as zero
-    // seconds, so value and log commands stay off until each modality view
-    // exposes its own handler. Navigation and ending still work everywhere.
+    // seconds, so value and log commands stay off outside the strength flow.
     const modality = selectedExercises[currentExerciseIndex]?.exercise.modality
     const strengthFlow = modality !== 'Calisthenics' && modality !== 'Mobility'
       && modality !== 'Cardio' && modality !== 'WOD'
 
+    // "End workout" is handled here and nowhere else, before anything is
+    // offered to the modality view: it is the one command that throws the rest
+    // of the session away, and its two-phase arming has to behave identically
+    // on every screen. A view that could intercept it could also break it.
+    if (command.kind === 'endWorkout') {
+      if (endArmed) {
+        if (endArmedTimer.current) clearTimeout(endArmedTimer.current)
+        setEndArmed(false)
+        handleFinish()
+      } else {
+        setEndArmed(true)
+        if (audio) void speakAlert('Say end workout again to confirm.')
+        if (endArmedTimer.current) clearTimeout(endArmedTimer.current)
+        endArmedTimer.current = setTimeout(() => setEndArmed(false), 8000)
+      }
+      return
+    }
+
+    // Everything else goes to the live modality view first, if one is mounted
+    // and claims it. "Pause" is the run clock on a run and the hold on a
+    // stretch; only the screen showing it can know which — and while the rest
+    // timer is up, the strength path below owns the word instead.
+    if (!resting && modalityVoice.current?.(command)) return
+
+    // `endWorkout` is not in this switch: it returned above, and TypeScript has
+    // narrowed it out of the union by here.
     switch (command.kind) {
-      case 'endWorkout':
-        if (endArmed) {
-          if (endArmedTimer.current) clearTimeout(endArmedTimer.current)
-          setEndArmed(false)
-          handleFinish()
-        } else {
-          setEndArmed(true)
-          if (audio) void speakAlert('Say end workout again to confirm.')
-          if (endArmedTimer.current) clearTimeout(endArmedTimer.current)
-          endArmedTimer.current = setTimeout(() => setEndArmed(false), 8000)
-        }
+      case 'mark':
+        // A lap or a round. Meaningless on a strength set card, and it is not
+        // worth guessing at an intent — the modality views that count
+        // something claim this one before it reaches here.
         return
 
       case 'skipRest':
@@ -478,6 +503,7 @@ export default function ActiveWorkout() {
     onRest: logAndRest,
     onAdvance: logAndAdvance,
     onFinish: handleFinish,
+    registerVoice,
   }
   const modalityView = (() => {
     switch (currentExercise.exercise.modality) {

@@ -62,6 +62,16 @@ export const VOICE_COMMAND_GROUPS: VoiceCommandGroup[] = [
     ],
   },
   {
+    title: 'Runs, metcons and holds',
+    note: 'These reach whichever live screen is up — a run, a WOD or a mobility flow.',
+    commands: [
+      { example: 'lap', effect: 'Marks a lap on a run', expects: 'mark', rotate: true },
+      { example: 'round done', effect: 'Counts a completed round in a metcon', expects: 'mark', rotate: true },
+      { example: 'next', effect: 'Switches side, or moves to the next pose', expects: 'advance' },
+      { example: 'pause', effect: 'Holds the run clock, the metcon clock or the hold', expects: 'pauseRest' },
+    ],
+  },
+  {
     title: 'Finish',
     note: 'Say it twice — once to ask, once to confirm.',
     commands: [

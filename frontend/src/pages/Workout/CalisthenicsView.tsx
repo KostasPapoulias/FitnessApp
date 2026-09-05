@@ -5,6 +5,7 @@ import { rpeColor, rpeWord, exerciseEmoji, fmtTime } from './helpers'
 import {
   ModalityViewProps, LiveHeader, SegmentBar, RpeRow, UpNext,
 } from './LiveShared'
+import { useModalityVoice } from '../../hooks/useModalityVoice'
 
 // Heuristic: does this movement read as an isometric hold?
 function isHold(name: string) {
@@ -62,7 +63,7 @@ function LoadBox({ load, onChange }: { load: number; onChange: (next: number) =>
   )
 }
 
-export default function CalisthenicsView({ elapsed, onRest, onFinish }: ModalityViewProps) {
+export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVoice }: ModalityViewProps) {
   const navigate = useNavigate()
   const { selectedExercises, currentExerciseIndex, currentSetIndex, completedSets, updateSet, setCurrent } =
     useWorkoutStore()
@@ -81,6 +82,26 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish }: Modality
   }, [])
   // reset hold when the set/exercise changes
   useEffect(() => { setHoldSec(0); setHoldRunning(false) }, [currentExerciseIndex, currentSetIndex])
+
+  // Calisthenics logs reps against a signed load, which the strength set card
+  // knows nothing about — so it is excluded from the strength voice path and
+  // answers here instead. A hold is deliberately NOT loggable by voice: its
+  // value is the seconds under tension on the timer, and "set done" shouted
+  // mid-lever would write whatever the clock happened to read.
+  //
+  // Above the early return because it is a hook. `logReps` and `holdRunning`
+  // are declared below and that is fine — the handler runs long after.
+  useModalityVoice(registerVoice, command => {
+    switch (command.kind) {
+      case 'pauseRest':  setHoldRunning(false); return true
+      case 'resumeRest': setHoldRunning(true); return true
+      case 'logSet':
+        if (isHold(ex?.exercise.name ?? '')) return false
+        logReps()
+        return true
+      default: return false
+    }
+  })
 
   if (!ex || !set) return null
 

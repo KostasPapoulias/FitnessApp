@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
+import { useLiveCues } from '../../hooks/useLiveCues'
+import { cues } from '../../lib/speech'
 import { fmtTime } from './helpers'
 import { ModalityViewProps, UpNext, LiveStartGate } from './LiveShared'
+import { useModalityVoice } from '../../hooks/useModalityVoice'
 
 function isPerSide(name: string) {
   return /stretch|hip|lunge|pigeon|couch|90|thoracic|shoulder|side|twist|rotation/i.test(name)
 }
 
-export default function MobilityView({ elapsed, onAdvance, onFinish }: ModalityViewProps) {
+export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoice }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, currentSetIndex } = useWorkoutStore()
   const ex = selectedExercises[currentExerciseIndex]
   const set = ex?.sets[currentSetIndex]
@@ -21,6 +24,11 @@ export default function MobilityView({ elapsed, onAdvance, onFinish }: ModalityV
 
   const perSide = ex ? isPerSide(ex.exercise.name) : false
 
+  // A hold is the one part of the app where the athlete is deliberately still
+  // with their eyes shut, so the countdown and the side change have to be
+  // audible — reading the ring is exactly what they cannot do.
+  const cue = useLiveCues()
+
   // refs for the interval closure
   const st = useRef({ paused, side, leftDone, perSide, target, secs, started })
   st.current = { paused, side, leftDone, perSide, target, secs, started }
@@ -30,28 +38,83 @@ export default function MobilityView({ elapsed, onAdvance, onFinish }: ModalityV
   useEffect(() => {
     setSecs(target); setPaused(false); setSide('left'); setLeftDone(false)
     doneRef.current = false
+    cue.resetCountdown()
   }, [currentExerciseIndex, currentSetIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** What comes after this pose, for the spoken hand-off. */
+  const nextPoseName = () => {
+    const nx = selectedExercises[currentExerciseIndex + 1]
+    return nx ? nx.exercise.name : null
+  }
 
   const complete = () => {
     if (doneRef.current) return
     doneRef.current = true
-    onAdvance({ reps: st.current.target, weight: 0, rpe: set?.rpe ?? 6, restSeconds: 0 })
+    cue.buzz('complete')
+    cue.interrupt(cues.poseComplete(nextPoseName()))
+    // Both sides count. `isPerSide` means the athlete held `target` seconds on
+    // the left AND `target` on the right, and logging one of them threw half
+    // the time under tension away before it reached the fatigue model.
+    const held = st.current.perSide ? st.current.target * 2 : st.current.target
+    onAdvance({ reps: held, weight: 0, rpe: set?.rpe ?? 6, restSeconds: 0 })
   }
   const completeRef = useRef(complete)
   completeRef.current = complete
+
+  /** Half-way through a per-side hold: say it, buzz it, restart the clock. */
+  const switchSide = () => {
+    setSide('right'); setLeftDone(true); setSecs(st.current.target)
+    cue.resetCountdown()
+    cue.buzz('switch')
+    cue.interrupt(cues.switchSide('right'))
+  }
+  const switchRef = useRef(switchSide)
+  switchRef.current = switchSide
+
+  const cueRef = useRef(cue)
+  cueRef.current = cue
+
+  // Announce the pose as it opens, so the first thing heard is what to get into
+  // rather than a number with no movement attached to it.
+  useEffect(() => {
+    if (!started || !ex) return
+    cue.say(cues.holdStart(ex.exercise.name, target, perSide ? 'left' : undefined))
+  }, [started, currentExerciseIndex, currentSetIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 1s tick
   useEffect(() => {
     const id = setInterval(() => {
       const c = st.current
       if (!c.started || c.paused || doneRef.current) return
+      // Counted off the value about to be displayed, not the one on screen —
+      // otherwise "one" is spoken while the ring still reads 2 and the hold
+      // ends a second after the voice says it has.
+      cueRef.current.countdown(c.secs - 1)
       if (c.secs > 1) { setSecs(s => s - 1); return }
       // boundary
-      if (c.perSide && !c.leftDone) { setSide('right'); setLeftDone(true); setSecs(c.target) }
+      if (c.perSide && !c.leftDone) switchRef.current()
       else { completeRef.current() }
     }, 1000)
     return () => clearInterval(id)
   }, [])
+
+  // Hands are on the floor in most of these positions, so the screen is the
+  // one control the athlete cannot reach. Everything the buttons below do is
+  // reachable by voice.
+  //
+  // Above the early returns, because it is a hook and the two below it are
+  // conditional. `onNext` is declared further down and that is fine — the
+  // handler only ever runs long after this function has finished.
+  useModalityVoice(registerVoice, command => {
+    switch (command.kind) {
+      case 'pauseRest':  setPaused(true); return true
+      case 'resumeRest': setPaused(false); return true
+      case 'mark':
+      case 'skipRest':
+      case 'advance':    onNext(); return true
+      default:           return false
+    }
+  })
 
   if (!ex || !set) return null
 
@@ -77,12 +140,14 @@ export default function MobilityView({ elapsed, onAdvance, onFinish }: ModalityV
   if (perSide) poseCounter += ` · ${side === 'left' ? 'Left side' : 'Right side'}`
 
   const nextLabel = perSide && !leftDone ? 'Switch Side →' : 'Next Pose →'
+  // Tapping through has to go via the same two functions as the clock running
+  // out, or a manual switch is silent while an automatic one speaks.
   const onNext = () => {
-    if (perSide && !leftDone) { setSide('right'); setLeftDone(true); setSecs(target) }
+    if (perSide && !leftDone) switchSide()
     else complete()
   }
 
-  const cue = ex.exercise.description
+  const coaching = ex.exercise.description
     || 'Ease into end-range and let the breath do the work — never force a stretch. Aim for a 6–7/10 tension, not pain.'
 
   return (
@@ -144,7 +209,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish }: ModalityV
       {/* cue */}
       <div className="mt-2 flex gap-2 bg-dark-800 border border-dark-600 rounded-card px-4 py-3.5">
         <span className="text-base">🧘</span>
-        <div className="text-[13px] text-dark-200 leading-relaxed">{cue}</div>
+        <div className="text-[13px] text-dark-200 leading-relaxed">{coaching}</div>
       </div>
 
       {/* adjust */}

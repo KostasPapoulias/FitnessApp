@@ -2,9 +2,12 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { fmtTime } from './helpers'
 import { ModalityViewProps, LiveStartGate, EffortPrompt } from './LiveShared'
+import { useModalityVoice } from '../../hooks/useModalityVoice'
 import { useRunTracker, RunSummary } from '../../hooks/useRunTracker'
 import { useWakeLock } from '../../hooks/useWakeLock'
 import { Split, averagePace, paceFromSpeed, splitPace } from '../../lib/geo'
+import { useLiveCues } from '../../hooks/useLiveCues'
+import { cues } from '../../lib/speech'
 import RunLock from './RunLock'
 
 // MapLibre is the heaviest thing the app can load. Split out so it is fetched
@@ -26,7 +29,7 @@ const KCAL_PER_METRE = 0.058
  */
 const MAP_BOX = 'w-full h-[190px]'
 
-export default function CardioView({ onFinish }: ModalityViewProps) {
+export default function CardioView({ onFinish, registerVoice }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, cardioTarget, completeSet } = useWorkoutStore()
   const activity = selectedExercises[currentExerciseIndex]?.exercise.name ?? 'Outdoor Run'
 
@@ -46,6 +49,44 @@ export default function CardioView({ onFinish }: ModalityViewProps) {
   const km = meters / 1000
   const cals = meters * KCAL_PER_METRE
 
+  // A run is the longest stretch in the app with the phone in a pocket or on an
+  // armband, so a split that only exists on screen is a split nobody sees.
+  const cue = useLiveCues()
+
+  // Announce each kilometre as it lands.
+  //
+  // Keyed off the split COUNT, not the distance: `meters` updates several times
+  // a second and any threshold test on it either fires repeatedly or misses the
+  // crossing entirely. `advanceSplits` already decides where a kilometre ends,
+  // so the list growing is the event — and it is the same event the on-screen
+  // list renders, which means the two can never disagree.
+  const announcedSplits = useRef(0)
+  useEffect(() => {
+    if (splits.length <= announcedSplits.current) {
+      // A resumed run rehydrates its splits from IndexedDB; those already
+      // happened, so adopt the count rather than reading four kilometres out.
+      announcedSplits.current = splits.length
+      return
+    }
+    const latest = splits[splits.length - 1]
+    announcedSplits.current = splits.length
+    if (!latest) return
+    cue.buzz('milestone')
+    cue.say(cues.kmSplit(latest.index, splitPace(latest)))
+  }, [splits]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Same shape for hand-marked laps, which are a separate list on a separate
+  // origin — merged only for display, so they need their own watcher.
+  const announcedLaps = useRef(0)
+  useEffect(() => {
+    if (laps.length <= announcedLaps.current) { announcedLaps.current = laps.length; return }
+    const latest = laps[laps.length - 1]
+    announcedLaps.current = laps.length
+    if (!latest) return
+    cue.buzz('milestone')
+    cue.say(cues.lapMarked(latest.index))
+  }, [laps]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // The effort dial only feeds distance when there is no GPS to feed it.
   // Destructured so this tracks the dial, not every render of the screen.
   const { setManualSpeed } = run
@@ -56,12 +97,15 @@ export default function CardioView({ onFinish }: ModalityViewProps) {
     // user gesture, and an effect runs after paint, outside that window.
     wakeLock.request()
     run.start()
+    cue.buzz('logged')
+    cue.say(cues.runStarted(activity))
   }
 
   const endRun = () => {
     // Stop the GPS and freeze the numbers before the RPE prompt, so a slow
     // rating does not keep adding metres to a run that finished.
     setSummary(run.stop())
+    cue.buzz('complete')
     wakeLock.release()
     setLocked(false)
     setRating(true)
@@ -78,15 +122,22 @@ export default function CardioView({ onFinish }: ModalityViewProps) {
     setEnding(true)
     // A failed summary set must not strand the user in the tracker — the
     // Finish screen surfaces the error either way.
+    const loggedKm = Math.round(((summary?.meters ?? meters) / 1000) * 100) / 100
+    const loggedSec = summary?.elapsedSec ?? elapsedSec
     await completeSet({
-      distance: Math.round(((summary?.meters ?? meters) / 1000) * 100) / 100,
-      time: summary?.elapsedSec ?? elapsedSec,
+      distance: loggedKm,
+      time: loggedSec,
       rpe,
       restSeconds: 0,
       // The route, the splits and the pace the run was actually done at. Without
       // this the calendar has a distance and nothing else to show for the hour.
       run: summary ?? undefined,
     })
+    // Confirmation that it persisted, on the same two channels a logged set
+    // uses — a run is one write at the very end, so this is the only signal
+    // that an hour of work actually landed.
+    cue.buzz('logged')
+    cue.say(cues.runLogged(loggedKm, Math.max(1, Math.round(loggedSec / 60))))
     onFinish()
   }
 
@@ -139,6 +190,31 @@ export default function CardioView({ onFinish }: ModalityViewProps) {
     : 0
 
   // ── start gate ──
+  // The phone is in a pocket or on an armband for the whole of this, which is
+  // the strongest case for voice anywhere in the app. Above the early returns
+  // because it is a hook and those are conditional.
+  useModalityVoice(registerVoice, command => {
+    switch (command.kind) {
+      case 'pauseRest':
+        run.pause()
+        return true
+      case 'resumeRest':
+        // Resuming re-requests the wake lock for the same reason the button
+        // does: iOS only grants one from a gesture, and a long pause has
+        // usually outlived the last grant. A refusal is not fatal — the run
+        // keeps going, the screen may just sleep.
+        wakeLock.request()
+        run.resume()
+        return true
+      case 'mark':
+      case 'advance':
+        run.lap()
+        return true
+      default:
+        return false
+    }
+  })
+
   if (!started) {
     return (
       <LiveStartGate

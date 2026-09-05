@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { rpeColor, rpeTint, rpeLabel } from './helpers'
 
 // Payload logged to the store when a set/hold completes
@@ -13,12 +14,28 @@ export interface LogPayload {
   rounds?: number     // wod rounds completed
 }
 
+/**
+ * A modality view's own answer to a spoken command. Return true if it acted.
+ *
+ * The alternative was to keep teaching `ActiveWorkout` what every modality
+ * screen can do, which is how it ended up gating voice behind `strengthFlow` in
+ * the first place — the strength path was the only one it knew about, so it was
+ * the only one that could be spoken to. "Pause" means the run clock on a run
+ * and the hold on a stretch, and only the screen showing it knows which.
+ */
+export type ModalityVoiceHandler = (command: VoiceCommand) => boolean
+
 // Callbacks ActiveWorkout hands to every modality view
 export interface ModalityViewProps {
   elapsed: number                       // whole-session seconds
   onRest: (p: LogPayload) => void       // log set → show rest timer
   onAdvance: (p: LogPayload) => void    // log set → next set/exercise, no rest
   onFinish: () => void                  // end the session → Finish screen
+  /**
+   * Claim spoken commands while this view is mounted. Pass null to release.
+   * Views wire this through `useModalityVoice` rather than calling it directly.
+   */
+  registerVoice: (handler: ModalityVoiceHandler | null) => void
 }
 
 // ── LIVE header (pulse badge + workout time + exercise counter) ──

@@ -107,7 +107,72 @@ export const cues = {
     `Workout complete. ${sets} set${sets === 1 ? '' : 's'} in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
 
   heard: (what: string) => what,
+
+  // ── mobility ──────────────────────────────────────────────────────────────
+  // A hold is the one part of a session where the athlete is deliberately still
+  // and looking at nothing, so these carry the whole screen.
+
+  holdStart: (name: string, seconds: number, side?: 'left' | 'right') =>
+    side
+      ? `${name}. ${side} side. ${seconds} seconds.`
+      : `${name}. ${seconds} seconds.`,
+
+  switchSide: (to: 'left' | 'right') => `Switch. ${to} side.`,
+
+  poseComplete: (next: string | null) =>
+    next ? `Hold complete. Next, ${next}.` : 'Hold complete. Last pose done.',
+
+  // ── WOD ───────────────────────────────────────────────────────────────────
+
+  roundComplete: (round: number) => `Round ${round} complete.`,
+
+  // Spoken at a round number rather than a rep count: mid-metcon nobody is
+  // counting along with the phone, they just want to know where they are.
+  capWarning: (seconds: number) => `${seconds} seconds left.`,
+
+  capReached: (rounds: number) =>
+    `Time. ${formatRounds(rounds)} round${rounds === 1 ? '' : 's'}.`,
+
+  metconLogged: (rounds: number, minutes: number) =>
+    `Metcon logged. ${formatRounds(rounds)} round${rounds === 1 ? '' : 's'} in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+
+  // ── cardio ────────────────────────────────────────────────────────────────
+
+  runStarted: (activity: string) => `${activity} started.`,
+
+  // Distance first, then pace: the number that changes is the one worth
+  // leading with, and pace read first makes every split sound the same.
+  kmSplit: (km: number, paceSeconds: number) =>
+    `${km} kilometre${km === 1 ? '' : 's'}. ${formatPace(paceSeconds)}`.trim(),
+
+  lapMarked: (lap: number) => `Lap ${lap}.`,
+
+  runLogged: (km: number, minutes: number) =>
+    `Run logged. ${formatWeight(km)} kilometre${km === 1 ? '' : 's'} in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+
+  /** "three", "two", "one" — spoken, because digits read as a phone number. */
+  count: (n: number) => (['zero', 'one', 'two', 'three'][n] ?? String(n)),
 }
+
+/**
+ * Pace, spoken the way a runner says it.
+ *
+ * "05:12" handed to a speech engine comes out as "five colon twelve" or "five
+ * hundred and twelve" depending on the voice — never as a pace. Seconds are
+ * always two digits out loud ("five oh eight", not "five eight") because a
+ * dropped zero changes the number being reported by nearly a minute.
+ */
+const formatPace = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return ''
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  const spokenSeconds = s === 0 ? 'flat' : s < 10 ? `oh ${s}` : String(s)
+  return `${m} ${spokenSeconds} per kilometre.`
+}
+
+/** Partial rounds are real work but "four point three three rounds" is noise. */
+const formatRounds = (rounds: number) =>
+  Number.isInteger(rounds) ? String(rounds) : String(Math.round(rounds * 10) / 10)
 
 /** 62.5 reads as "62.5"; 60.0 must read as "60", not "60 point 0". */
 const formatWeight = (kg: number) =>

@@ -56,3 +56,34 @@ export const hapticCountdownTick = async () => {
     vibrate(25)
   }
 }
+
+/**
+ * A milestone inside a continuous effort — a kilometre split, a completed
+ * round, a marked lap.
+ *
+ * Deliberately not `hapticSetLogged`. Both say "that counted", but a split
+ * arrives while you are still running and a logged set arrives while you are
+ * standing still, so they are felt in completely different states. A heavier,
+ * two-part buzz reads through footfall in a way a single medium tap does not.
+ */
+export const hapticMilestone = async () => {
+  try {
+    await Haptics.impact({ style: ImpactStyle.Heavy })
+  } catch {
+    vibrate([90, 60, 90])
+  }
+}
+
+/**
+ * Switch sides / change position mid-hold.
+ *
+ * The one pattern the athlete has to act on with their eyes shut, so it is
+ * distinct from every other: two long pulses, nothing else in the app uses it.
+ */
+export const hapticSwitchSide = async () => {
+  try {
+    await Haptics.notification({ type: NotificationType.Warning })
+  } catch {
+    vibrate([160, 90, 160])
+  }
+}
