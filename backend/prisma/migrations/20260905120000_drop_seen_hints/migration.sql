@@ -1,0 +1,19 @@
+-- Drop the coach-mark dismissal table.
+--
+-- `SeenHint` held one row per tooltip a user had tapped away. The coach-marks
+-- themselves are gone: a scripted tooltip delivered in the coach's voice spends
+-- exactly the credibility the real model needs, and the app's claim is that it
+-- reads your recovery, not that it can point at a button.
+--
+-- Nothing else read this table. The explanatory copy that tells a user what the
+-- app does — empty states, the hint under a form field, the Home setup prompt —
+-- is static text on the screen it belongs to and never touched this. The
+-- onboarding gate is `UserProfile.onboardingCompletedAt` and the optional-stage
+-- prompt is `UserProfile.optionalStageDoneAt`; both are untouched here.
+--
+-- Dropping rather than leaving it orphaned: the rows are dismissal records for
+-- tooltips that no longer exist, so there is nothing in them to migrate and
+-- nothing that a future feature could honestly reuse. If a tour ever returns it
+-- will have its own keys, and inheriting a stale "already seen" from a deleted
+-- one would silently suppress it.
+DROP TABLE IF EXISTS "SeenHint";

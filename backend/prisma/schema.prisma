@@ -42,7 +42,6 @@ model User {
   workoutTemplates      WorkoutTemplate[]
   scheduledWorkouts     ScheduledWorkout[]
   aiProposals           AiProposal[]
-  seenHints             SeenHint[]
   passwordResets        PasswordResetToken[]
 }
 
@@ -225,18 +224,6 @@ model UserInjury {
   resolvedAt DateTime?
 
   @@index([userId, resolvedAt])
-}
-
-// One row per coach-mark the user has dismissed. A row means "seen"; absence
-// means "show it". Storing dismissals server-side rather than in localStorage
-// keeps the tour from replaying on every new device.
-model SeenHint {
-  userId  String
-  hintKey String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seenAt  DateTime @default(now())
-
-  @@id([userId, hintKey])
 }
 
 model Settings {

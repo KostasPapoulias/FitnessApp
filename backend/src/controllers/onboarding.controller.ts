@@ -314,22 +314,26 @@ export const setUserInjuries = async (req: AuthRequest, res: Response) => {
 /**
  * GET /api/profile/onboarding/state
  *
- * Everything the client needs to decide what to show: gate status, the optional
- * stage's answers, and which coach-marks have already been dismissed.
+ * Everything the client needs to decide what to show: gate status and the
+ * optional stage's answers.
+ *
+ * This used to carry a fourth field, `seenHints`, listing the coach-mark
+ * tooltips already dismissed. The coach-marks are gone — a scripted tooltip in
+ * the coach's voice spends the credibility the real model needs — so the field
+ * and the query behind it went with them. The explanatory copy that tells a
+ * user what the app does — empty states, the hint under a form field, the
+ * Home setup prompt `optionalStageDoneAt` still drives — is static text on the
+ * screen it belongs to and was never part of this.
  */
 export const getOnboardingState = async (req: AuthRequest, res: Response) => {
   try {
-    const [profile, equipment, injuries, hints] = await Promise.all([
+    const [profile, equipment, injuries] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId: req.userId! } }),
       prisma.userEquipment.findMany({
         where: { userId: req.userId! },
         select: { equipmentId: true },
       }),
       prisma.userInjury.findMany({ where: { userId: req.userId!, resolvedAt: null } }),
-      prisma.seenHint.findMany({
-        where: { userId: req.userId! },
-        select: { hintKey: true },
-      }),
     ])
 
     res.json({
@@ -339,7 +343,6 @@ export const getOnboardingState = async (req: AuthRequest, res: Response) => {
         optionalStageDoneAt: profile?.optionalStageDoneAt ?? null,
         equipmentIds: equipment.map(e => e.equipmentId),
         injuries,
-        seenHints: hints.map(h => h.hintKey),
       },
     })
   } catch (error) {
@@ -348,46 +351,3 @@ export const getOnboardingState = async (req: AuthRequest, res: Response) => {
   }
 }
 
-/**
- * POST /api/profile/hints/:hintKey
- *
- * Marks a coach-mark dismissed. Idempotent — a double-tap or a retry must not
- * 500, so a repeat write is a no-op rather than a unique-constraint violation.
- */
-export const dismissHint = async (req: AuthRequest, res: Response) => {
-  try {
-    const { hintKey } = req.params
-
-    if (!hintKey || hintKey.length > 64) {
-      res.status(400).json({ success: false, error: 'Invalid hint key' })
-      return
-    }
-
-    await prisma.seenHint.upsert({
-      where: { userId_hintKey: { userId: req.userId!, hintKey } },
-      update: {},
-      create: { userId: req.userId!, hintKey },
-    })
-
-    res.json({ success: true, data: { hintKey } })
-  } catch (error) {
-    log.error('dismissHint failed', error)
-    res.status(500).json({ success: false, error: 'Server error' })
-  }
-}
-
-/**
- * DELETE /api/profile/hints
- *
- * Replays the tour. Exposed so "show tips again" in Profile is possible without
- * the user having to reinstall.
- */
-export const resetHints = async (req: AuthRequest, res: Response) => {
-  try {
-    await prisma.seenHint.deleteMany({ where: { userId: req.userId! } })
-    res.json({ success: true, data: { reset: true } })
-  } catch (error) {
-    log.error('resetHints failed', error)
-    res.status(500).json({ success: false, error: 'Server error' })
-  }
-}

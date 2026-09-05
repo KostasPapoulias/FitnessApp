@@ -8,8 +8,6 @@ import {
   completeOnboarding,
   setUserEquipment,
   setUserInjuries,
-  dismissHint,
-  resetHints,
 } from '../controllers/onboarding.controller';
 import { verifyToken } from '../middleware/auth.middleware';
 
@@ -51,20 +49,6 @@ router.put('/equipment', setUserEquipment);
  * @returns active injuries
  */
 router.put('/injuries', setUserInjuries);
-
-/**
- * @route POST /api/profile/hints/:hintKey
- * @protected
- * @returns the dismissed hint key
- */
-router.post('/hints/:hintKey', dismissHint);
-
-/**
- * @route DELETE /api/profile/hints
- * @protected
- * @returns confirmation the tour will replay
- */
-router.delete('/hints', resetHints);
 
 /**
  * @route GET /api/profile
