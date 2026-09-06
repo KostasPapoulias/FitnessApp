@@ -69,9 +69,23 @@ input, textarea {
   -webkit-user-select: text;
 }
 
-/* html, body {
-  height: 100%;
-} */
+/*
+  The canvas colour, set on `html` rather than only on `body`.
+
+  `body`'s background propagates to the canvas ONLY while `html` has none of its
+  own — which was the case, so in a browser tab this was already #111111 and
+  looked finished. It is not the same everywhere: an installed PWA paints the
+  area outside the document with the window's own background, and on iOS that
+  is black. That is the shape of the reported strip — pure #000, which is not a
+  colour this app paints anywhere (grep: there is no black in the palette), and
+  visible only where there is no browser chrome at the bottom to cover it.
+
+  Declaring it here means the ground under the document is the app's ground on
+  every surface: tab, standalone, and the desktop installed icon.
+*/
+html {
+  background-color: #111111;
+}
 
 body {
   background-color: #111111;
@@ -89,7 +103,22 @@ body {
   width: 100%;
   min-height: 100dvh;
   position: relative;
-  overflow-x: hidden;
+  /*
+    `clip`, NOT `hidden`, and the difference is not cosmetic.
+
+    Per CSS overflow, a non-`visible` value on one axis computes the other axis
+    to `auto`. So `overflow-x: hidden` here silently made `#root` a scroll
+    container on the Y axis too — a second one, wrapping the single scroller
+    `<main>` is designed to be, which is the shape AppLayout's own comment
+    describes fighting.
+
+    `clip` clips without establishing a scroll container, so the horizontal
+    guard this rule exists for is kept and the accidental vertical scroller
+    goes. Screens that render outside AppLayout (Login, Register, Onboarding,
+    PinLock) still get the clipping; the ones inside it were already bounded by
+    AppLayout's own `overflow-hidden`.
+  */
+  overflow-x: clip;
 }
 
 /* Hide scrollbar on scrollable containers (e.g. the activity heatmap)
