@@ -75,3 +75,24 @@ TODO.md
 /ios/Pods
 
 exercises-dataset/
+
+# Design references and screenshots dropped at the repo root — mockups, UI shots
+# and the requirements PDFs. Kept locally, not carried in the repo.
+#
+# Every pattern is anchored with a leading "/" so it matches the ROOT ONLY.
+# Unanchored (`*.png`) would also ignore frontend/src/assets — the traced body
+# maps and every app icon — which is exactly the kind of thing that goes
+# unnoticed until a build is missing its images.
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.webp
+/*.bmp
+/*.tif
+/*.tiff
+/*.ico
+/*.avif
+/*.heic
+/*.svg
+/*.pdf
