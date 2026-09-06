@@ -11,7 +11,8 @@ import {
   updateSet,
   deleteSet,
   getPlanSuggestions,
-  getRunTrack
+  getRunTrack,
+  updateExerciseNotes
 } from '../controllers/workout.controller'
 
 const router = Router()
@@ -64,6 +65,15 @@ router.delete('/sessions/:id', deleteSession)
  * @returns added exercise to session
  */
 router.post('/sessions/:id/exercises', addExercise)
+/**
+ * @route PATCH /api/workout/sessions/:id/exercises/:workoutExerciseId
+ * @protected
+ * @returns the exercise id and its stored notes
+ *
+ * Unlike every other write under a session, this one does NOT re-score or
+ * rebuild fatigue — notes are not a model input. See the controller.
+ */
+router.patch('/sessions/:id/exercises/:workoutExerciseId', updateExerciseNotes)
 /**
  * @route POST /api/workout/sessions/:id/sets
  * @protected

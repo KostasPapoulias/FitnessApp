@@ -21,6 +21,14 @@ interface SelectedExercise {
   workoutExerciseId?: string // set after session starts
   skipped?: boolean
   /**
+   * What the athlete wrote about this exercise, this session.
+   *
+   * Held here as well as on the server so the field keeps its text while the
+   * PATCH is in flight and across a navigation inside the live workout — the
+   * live screens read the store, not the session endpoint.
+   */
+  notes?: string
+  /**
    * False until the athlete changes a number themselves. Server suggestions
    * only overwrite untouched sets — arriving mid-edit and resetting someone's
    * typing would be worse than showing no suggestion at all.
@@ -121,6 +129,15 @@ interface WorkoutStore {
   addSet: (exIdx: number) => void
   removeSet: (exIdx: number, setIdx: number) => void
   setExerciseRest: (exIdx: number, restSeconds: number) => void
+  /**
+   * Write a note against one exercise in the live session.
+   *
+   * Local state first, server second, and the local write is never rolled
+   * back: this is the athlete's own prose, and dropping what somebody typed
+   * because a gym connection failed is worse than a note that is briefly only
+   * on the phone. A failed PATCH resolves false so the caller can say so.
+   */
+  setExerciseNotes: (exIdx: number, notes: string) => Promise<boolean>
   /** Replace untouched defaults with numbers built from the athlete's history. */
   loadSuggestions: () => Promise<void>
   suggestionsLoading: boolean
@@ -401,6 +418,32 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
   },
 
+  setExerciseNotes: async (exIdx, notes) => {
+    // Store first, unconditionally. The text stays on screen whatever the
+    // network does — see the interface comment.
+    set(state => ({
+      selectedExercises: state.selectedExercises.map((e, i) =>
+        i !== exIdx ? e : { ...e, notes }
+      )
+    }))
+
+    const { sessionId, selectedExercises } = get()
+    const workoutExerciseId = selectedExercises[exIdx]?.workoutExerciseId
+
+    // Nothing to PATCH against yet. An exercise gets its server id when the
+    // session starts (or when it is registered mid-workout), so a note typed
+    // on the planning screen has no row to land in — it is carried in the
+    // store and written when the exercise is registered.
+    if (!sessionId || !workoutExerciseId) return true
+
+    try {
+      await workoutService.updateExerciseNotes(sessionId, workoutExerciseId, notes)
+      return true
+    } catch {
+      return false
+    }
+  },
+
   setExerciseRest: (exIdx, restSeconds) => set(state => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
       i !== exIdx ? e : {
@@ -483,6 +526,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           const we = await workoutService.addExercise(session.id, {
             exerciseId: se.exercise.id,
             orderIndex: i + 1,
+            // Carries any note written on the planning screen, before this
+            // exercise had a server row to PATCH. Without it, a note typed
+            // before Start is silently dropped at the moment the workout
+            // begins — which is exactly when the athlete stops looking.
+            notes: se.notes?.trim() || undefined,
           })
           return [se.exercise.id, we.id] as const
         }))
@@ -531,6 +579,9 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const we = await workoutService.addExercise(sessionId, {
       exerciseId: se.exercise.id,
       orderIndex: exIdx + 1,
+      // Same reason as in startSession: this is the exercise's first server
+      // row, so anything already typed against it has to travel with it.
+      notes: se.notes?.trim() || undefined,
     })
     set(state => ({
       selectedExercises: state.selectedExercises.map(e =>

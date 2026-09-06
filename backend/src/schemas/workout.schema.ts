@@ -134,6 +134,25 @@ export const addExerciseSchema = z.object({
   notes: notes.nullish(),
 })
 
+/**
+ * Notes written against one exercise in a session.
+ *
+ * Nullable rather than optional-only, and the distinction is the whole point:
+ * `undefined` never reaches here (the field is the only thing in the body), so
+ * `null` is how the client says "I cleared this", which has to be storable.
+ * Were it optional-only, deleting a note would be unexpressible and the last
+ * text written would be permanent.
+ *
+ * Unbounded except by the shared `notes` scalar (2000 chars). This is prose a
+ * human types about their own training — there is no physical bound to set,
+ * and the only failure it can cause is a large-ish string.
+ */
+export const updateExerciseNotesSchema = z.object({
+  notes: notes.nullable(),
+})
+
+export type UpdateExerciseNotesBody = z.infer<typeof updateExerciseNotesSchema>
+
 export const finishSessionSchema = z.object({
   /**
    * Elapsed seconds, from the client's own clock.

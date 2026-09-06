@@ -29,8 +29,28 @@ export const workoutService = {
   addExercise: async (sessionId: string, data: {
     exerciseId: string
     orderIndex: number
+    notes?: string
   }) => {
     const res = await api.post(`/workout/sessions/${sessionId}/exercises`, data)
+    return res.data.data
+  },
+
+  /**
+   * Write (or clear) the note on one exercise in a session.
+   *
+   * An empty string is a real value here, meaning "cleared" — the server
+   * collapses it to null. Sending `undefined` instead would leave the old text
+   * in place, which is the opposite of what an emptied field means.
+   */
+  updateExerciseNotes: async (
+    sessionId: string,
+    workoutExerciseId: string,
+    notes: string,
+  ) => {
+    const res = await api.patch(
+      `/workout/sessions/${sessionId}/exercises/${workoutExerciseId}`,
+      { notes },
+    )
     return res.data.data
   },
 

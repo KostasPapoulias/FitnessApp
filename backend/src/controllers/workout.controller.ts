@@ -20,7 +20,7 @@ import { log } from '../lib/logger'
 import { parseBody } from '../lib/validate'
 import {
   addExerciseSchema, finishSessionSchema, logSetSchema, startSessionSchema,
-  updateSetSchema,
+  updateExerciseNotesSchema, updateSetSchema,
 } from '../schemas/workout.schema'
 
 // Fallback bodyweight (kg) when the user has no profile weight recorded
@@ -906,6 +906,53 @@ export const deleteSet = async (req: AuthRequest, res: Response) => {
 
   } catch (error) {
     log.error('deleteSet failed', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+//   UPDATE EXERCISE NOTES
+// PATCH /api/workout/sessions/:id/exercises/:workoutExerciseId
+//
+// Notes are the one thing an athlete writes in their own words, and they are
+// deliberately inert: nothing here calls `applySessionEdit`. Every other write
+// on a recorded session changes what was lifted, so it has to re-score the
+// session and replay fatigue — a note changes none of the model's inputs, and
+// running a full fatigue recompute because somebody typed "felt heavy" would
+// be several seconds of round trips for no change in the numbers.
+export const updateExerciseNotes = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: sessionId, workoutExerciseId } = req.params
+
+    const body = parseBody(updateExerciseNotesSchema, req.body, res)
+    if (!body) return
+
+    // Ownership runs through the session, like every other write in this
+    // controller. Both ids are checked rather than just the WorkoutExercise:
+    // the route states which session it belongs to, and a mismatch is a client
+    // bug worth failing on rather than quietly honouring.
+    const workoutExercise = await prisma.workoutExercise.findFirst({
+      where: { id: workoutExerciseId, sessionId, session: { userId: req.userId! } },
+      select: { id: true },
+    })
+
+    if (!workoutExercise) {
+      res.status(404).json({ success: false, error: 'Exercise not found in this session' })
+      return
+    }
+
+    // Empty string collapses to null so "cleared" is one state in the database
+    // rather than two that every reader would have to test for separately.
+    const trimmed = body.notes?.trim()
+    const updated = await prisma.workoutExercise.update({
+      where: { id: workoutExerciseId },
+      data: { notes: trimmed ? trimmed : null },
+      select: { id: true, notes: true },
+    })
+
+    res.json({ success: true, data: updated })
+
+  } catch (error) {
+    log.error('updateExerciseNotes failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

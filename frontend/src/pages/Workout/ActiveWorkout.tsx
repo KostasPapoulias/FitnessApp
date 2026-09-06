@@ -9,6 +9,7 @@ import { announce, alert as speakAlert, cues } from '../../lib/speech'
 import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { ROTATING_EXAMPLES } from '../../constants/voiceCommands'
 import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
+import ExerciseNotes from '../../components/workout/ExerciseNotes'
 import RestTimer from './RestTimer'
 import CalisthenicsView from './CalisthenicsView'
 import MobilityView from './MobilityView'
@@ -24,7 +25,7 @@ export default function ActiveWorkout() {
   const {
     selectedExercises, sessionId, sessionStartTime,
     currentExerciseIndex, currentSetIndex, completedSets,
-    startSession, completeSet, updateSet, setCurrent,
+    startSession, completeSet, updateSet, setCurrent, setExerciseNotes,
     startError, logError, clearErrors, queuedSetCount,
   } = useWorkoutStore()
 
@@ -583,6 +584,17 @@ export default function ActiveWorkout() {
           ☰ All exercises
         </button>
       </div>
+
+      {/* Under the name, above the set progress: the note is about the exercise
+          as a whole, not the set in front of you, and putting it below the
+          current-set card would put it off-screen on a short phone. */}
+      <ExerciseNotes
+        // Remounts when the exercise changes, so a draft can never be carried
+        // from one movement onto the next.
+        key={currentExercise.workoutExerciseId ?? ex.id}
+        value={currentExercise.notes ?? ''}
+        onSave={notes => setExerciseNotes(currentExerciseIndex, notes)}
+      />
 
       {/* Segment bar */}
       <div className="flex gap-2 mt-4">
