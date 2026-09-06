@@ -126,6 +126,12 @@ export interface Exercise {
   injuryCaution?: boolean
   /** Needs kit not ticked in Training Setup. Still listed, sorted last. */
   needsMissingEquipment?: boolean
+  /**
+   * Starred by this athlete. Optional for the same reason as the fatigue flags
+   * above — an exercise reached through a saved plan or a template arrives
+   * without it, and `undefined` there means "not known", not "not starred".
+   */
+  isFavorite?: boolean
 }
 
 export interface ExerciseCategory {

@@ -27,6 +27,19 @@ export const exerciseService = {
   },
 
   /**
+   * Star / unstar an exercise.
+   *
+   * Two calls rather than one toggle, mirroring the API. The caller already
+   * renders the current state, so it can say what it wants rather than asking
+   * the server to flip whatever is there — which is what makes a retry on a
+   * flaky gym connection safe instead of a coin toss.
+   */
+  setFavorite: async (id: string, on: boolean): Promise<void> => {
+    if (on) await api.post(`/exercises/${id}/favorite`)
+    else await api.delete(`/exercises/${id}/favorite`)
+  },
+
+  /**
    * Create a movement the catalogue does not have.
    *
    * Deliberately carries no calibration fields. damageFactor, loadFactor and

@@ -19,21 +19,37 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
   try {
     const { category, modality, search } = req.query
 
-    // Four independent reads, issued together rather than one after another.
+    // Five independent reads, issued together rather than one after another.
     // Measured against the real database, the sequential version cost ~1.5 s
     // more per request at a ~515 ms round trip — see TODO item 18.
     //
-    // In practice only three of these reach Postgres: the shared catalogue is
+    // In practice only four of these reach Postgres: the shared catalogue is
     // served from memory (see exercise-catalogue.service), which is where most
     // of this endpoint's time used to go.
-    const [shared, custom, fatigueCurrent, constraints] = await Promise.all([
+    const [shared, custom, fatigueCurrent, constraints, favorites] = await Promise.all([
       sharedCatalogue(),
       customExercisesFor(req.userId!),
       prisma.muscleFatigueCurrent.findMany({ where: { userId: req.userId! } }),
       // Equipment the athlete has, and anything they are training around. Both
       // are no-ops until the optional onboarding stage has been answered.
       getTrainingConstraints(req.userId!),
+      // Joined into the same batch rather than issued after it: this endpoint
+      // is already the one the picker hits on every open, and on the remote
+      // database a fifth sequential round trip costs more than the query does.
+      //
+      // Guarded rather than asserted, unlike its neighbours — this router is
+      // `optionalAuth`, and `where: { userId: undefined }` is not "no rows",
+      // it is EVERY row, which would star the whole catalogue for a signed-out
+      // caller.
+      req.userId
+        ? prisma.favoriteExercise.findMany({
+            where: { userId: req.userId },
+            select: { exerciseId: true },
+          })
+        : Promise.resolve([]),
     ])
+
+    const favoriteIds = new Set(favorites.map(f => f.exerciseId))
 
     // Filtering moved out of SQL and into memory. Over ~172 rows it is
     // microseconds, and it is what lets one cached read serve every
@@ -80,7 +96,13 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
         injuryCaution: exercise.caution,
         // Needs kit they did not tick. Still listed — sorted to the bottom —
         // so the catalogue never looks like it is missing exercises.
-        needsMissingEquipment: exercise.needsMissingEquipment
+        needsMissingEquipment: exercise.needsMissingEquipment,
+        // Sent on every row so the list can offer a Favourites filter without
+        // a second request. Deliberately does NOT affect `rankByConstraints`:
+        // a star says "I like this movement", not "I can do it today", and
+        // letting it reorder the list would bury the equipment and injury
+        // signals that exist to keep someone from getting hurt.
+        isFavorite: favoriteIds.has(exercise.id),
       }
     })
 
@@ -139,26 +161,41 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Get personal best for this exercise for this user
-    const personalBest = await prisma.workoutSet.findFirst({
-      where: {
-        setType: 'STRENGTH',
-        workoutExercise: {
+    // Three independent per-user reads, issued together. They were sequential,
+    // which on the remote database is ~3 round trips stacked behind the lookup
+    // above for no reason — none of them depends on the others.
+    const [personalBest, timesLogged, favorite] = await Promise.all([
+      // Get personal best for this exercise for this user
+      prisma.workoutSet.findFirst({
+        where: {
+          setType: 'STRENGTH',
+          workoutExercise: {
+            exerciseId: id,
+            session: { userId: req.userId! }
+          }
+        },
+        include: { strength: true },
+        orderBy: { strength: { weight: 'desc' } }
+      }),
+
+      // Count how many times user has logged this exercise
+      prisma.workoutExercise.count({
+        where: {
           exerciseId: id,
           session: { userId: req.userId! }
         }
-      },
-      include: { strength: true },
-      orderBy: { strength: { weight: 'desc' } }
-    })
+      }),
 
-    // Count how many times user has logged this exercise
-    const timesLogged = await prisma.workoutExercise.count({
-      where: {
-        exerciseId: id,
-        session: { userId: req.userId! }
-      }
-    })
+      // Guarded, not asserted — see getExercises. On this route an unguarded
+      // `userId: undefined` would find the first star by anyone and light the
+      // icon for a signed-out reader.
+      req.userId
+        ? prisma.favoriteExercise.findUnique({
+            where: { userId_exerciseId: { userId: req.userId, exerciseId: id } },
+            select: { exerciseId: true },
+          })
+        : Promise.resolve(null),
+    ])
 
     res.json({
       success: true,
@@ -183,7 +220,8 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
               reps: personalBest.strength.reps
             }
           : null,
-        timesLogged
+        timesLogged,
+        isFavorite: favorite !== null,
       }
     })
 
@@ -324,6 +362,75 @@ export const getModalities = async (_req: AuthRequest, res: Response) => {
     })
     res.json({ success: true, data: modalities })
   } catch (error) {
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+//   Star an exercise
+// POST /api/exercises/:id/favorite
+//
+// Idempotent: starring something already starred is a success, not a 409. The
+// star is a toggle in the UI and toggles get double-tapped, so the endpoint
+// that backs one has to be safe to call twice — `upsert` against the composite
+// primary key makes the second call a no-op instead of a unique violation the
+// client would have to interpret.
+export const addFavorite = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    // Scoped exactly like getExerciseById. Without this, a starred uuid is an
+    // existence oracle for other athletes' custom exercises — and worse, the
+    // foreign key would happily accept the row, so their movement would then
+    // appear by name in this user's favourites list.
+    const exercise = await prisma.exercise.findFirst({
+      where: {
+        id,
+        OR: [{ createdByUserId: null }, { createdByUserId: req.userId! }],
+      },
+      select: { id: true },
+    })
+
+    if (!exercise) {
+      res.status(404).json({ success: false, error: 'Exercise not found' })
+      return
+    }
+
+    await prisma.favoriteExercise.upsert({
+      where: { userId_exerciseId: { userId: req.userId!, exerciseId: id } },
+      update: {},
+      create: { userId: req.userId!, exerciseId: id },
+    })
+
+    res.status(201).json({ success: true, data: { exerciseId: id, isFavorite: true } })
+
+  } catch (error) {
+    log.error('addFavorite failed', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
+//   Unstar an exercise
+// DELETE /api/exercises/:id/favorite
+//
+// Also idempotent, and for a sharper reason than the POST: unstarring twice is
+// what happens every time a tap is retried on a bad connection. `deleteMany`
+// rather than `delete` because `delete` throws P2025 when the row is already
+// gone — which is the exact state the caller was asking for.
+export const removeFavorite = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params
+
+    // No ownership lookup here, unlike the POST. The delete is already scoped
+    // to this user's own rows, so the worst a bad id can do is delete nothing,
+    // and a 404 would leak the same existence signal the POST is careful about.
+    await prisma.favoriteExercise.deleteMany({
+      where: { userId: req.userId!, exerciseId: id },
+    })
+
+    res.json({ success: true, data: { exerciseId: id, isFavorite: false } })
+
+  } catch (error) {
+    log.error('removeFavorite failed', error)
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import ExerciseHistoryCard from '../../components/progress/ExerciseHistoryCard'
+import StarIcon from '../../components/workout/StarIcon'
 
 export default function ExerciseDetail() {
   const navigate = useNavigate()
@@ -12,13 +13,36 @@ export default function ExerciseDetail() {
   const { addExercise, removeExercise, selectedExercises } = useWorkoutStore()
   const [exercise, setExercise] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isFavorite, setIsFavorite] = useState(false)
 
   useEffect(() => {
     if (!exerciseId) return
     exerciseService.getById(exerciseId)
-      .then(setExercise)
+      .then(ex => {
+        setExercise(ex)
+        setIsFavorite(ex.isFavorite === true)
+      })
       .finally(() => setIsLoading(false))
   }, [exerciseId])
+
+  /**
+   * Optimistic, and rolled back if the write fails.
+   *
+   * The star has to answer the tap on the frame it happens — a gym connection
+   * can take a second to round-trip, and a control that waits for the server
+   * before moving reads as broken. Reverting on failure is what keeps that
+   * honest: the alternative is a star that says "saved" when nothing was.
+   */
+  const toggleFavorite = async () => {
+    if (!exerciseId) return
+    const next = !isFavorite
+    setIsFavorite(next)
+    try {
+      await exerciseService.setFavorite(exerciseId, next)
+    } catch {
+      setIsFavorite(!next)
+    }
+  }
 
   const isSelected = selectedExercises.some(
     se => se.exercise.id === exerciseId
@@ -59,7 +83,18 @@ export default function ExerciseDetail() {
           ←
         </button>
         <h1 className="text-white text-xl font-bold flex-1">Exercise Detail</h1>
-        <button className="text-brand-yellow text-2xl">⭐</button>
+        {/* Filled vs outline rather than lit vs dim: a yellow star at reduced
+            opacity still reads as "on" at a glance, which is how this button
+            managed to look functional for as long as it did. */}
+        <button
+          onClick={toggleFavorite}
+          aria-pressed={isFavorite}
+          aria-label={isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+          className={`w-9 h-9 rounded-full flex items-center justify-center
+                      active:scale-90 transition-transform
+                      ${isFavorite ? 'text-brand-yellow' : 'text-dark-400'}`}>
+          <StarIcon filled={isFavorite} />
+        </button>
       </div>
 
       <div className="flex-1 pb-12">

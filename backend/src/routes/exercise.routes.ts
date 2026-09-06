@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
-  createExercise, getCategories, getModalities, getExerciseById, getExercises,
+  addFavorite, createExercise, getCategories, getModalities, getExerciseById,
+  getExercises, removeFavorite,
 } from '../controllers/exercise.controller';
 import { optionalAuth, verifyToken } from '../middleware/auth.middleware';
 
@@ -46,5 +47,24 @@ router.get('/modalities', getModalities);
  * @returns single exercise detail
  */
 router.get('/:id', getExerciseById);
+
+/**
+ * @route POST /api/exercises/:id/favorite
+ * @route DELETE /api/exercises/:id/favorite
+ * @protected
+ * @returns { exerciseId, isFavorite }
+ *
+ * `verifyToken` rather than the router's `optionalAuth`, for the same reason
+ * the POST above carries it: a favourite belongs to somebody by definition,
+ * and an anonymous caller has no `userId` to own one. Without this the writes
+ * would land with `userId: undefined` and fail at the foreign key — a 500 for
+ * what is really "sign in first".
+ *
+ * Two verbs on one path instead of a single toggle: the client already knows
+ * which state the star is in, and an explicit verb means a retried request
+ * lands on the state the user asked for rather than flipping it back.
+ */
+router.post('/:id/favorite', verifyToken, addFavorite);
+router.delete('/:id/favorite', verifyToken, removeFavorite);
 
 export default router;

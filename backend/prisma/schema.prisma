@@ -43,6 +43,7 @@ model User {
   scheduledWorkouts     ScheduledWorkout[]
   aiProposals           AiProposal[]
   passwordResets        PasswordResetToken[]
+  favoriteExercises     FavoriteExercise[]
 }
 
 // Notification opt-in. EVERY flag defaults false, and there is no backfill:
@@ -336,7 +337,29 @@ model Exercise {
   workoutExercises WorkoutExercise[]
   strengthEstimates ExerciseStrengthEstimate[]
   templateExercises TemplateExercise[]
+  favoritedBy      FavoriteExercise[]
   @@unique([name])
+}
+
+// A starred exercise. Carries no data of its own beyond the pairing and when it
+// was made — the star is a shortcut into the catalogue, not training history,
+// so nothing here feeds the fatigue model.
+//
+// The pair IS the primary key rather than a uuid with a unique index on top:
+// starring is idempotent by nature, and a composite PK makes a double-tap
+// physically unable to write a second row instead of relying on the client to
+// not send one.
+model FavoriteExercise {
+  userId     String
+  exerciseId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([userId, exerciseId])
+  // Every read is "this athlete's stars", either to list them or to mark up a
+  // catalogue page. None of them start from the exercise.
+  @@index([userId])
 }
 
 model MuscleExercise {
