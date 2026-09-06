@@ -402,7 +402,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
         </div>
 
         {/* Outside the scroll area so Save is always reachable. */}
-        <div className="px-5 pt-3 pb-[calc(1.25rem+var(--safe-bottom))]
+        <div className="px-5 pt-3 pb-[calc(1.25rem+1rem+var(--safe-bottom))]
                         border-t border-dark-700 flex-shrink-0">
           <button onClick={save} disabled={!valid}
             className="w-full bg-brand-teal text-black font-bold py-3.5

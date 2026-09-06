@@ -141,6 +141,7 @@ export default function AppLayout() {
     endGesture()
   }
   return (
+    <>
     <div className={`h-dvh overflow-hidden bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
       {/* The sidebar renders on !isPhone, so the offset keys off the same flag —
           `lg:pl-72` left a 768–1024px gap where the sidebar covered content. */}
@@ -194,7 +195,14 @@ export default function AppLayout() {
           <Outlet />
         </ErrorBoundary>
       </main>
-      <BottomNav />
     </div>
+    {/*
+      Outside the shell, so its containing block is the viewport and nothing
+      else. It loses nothing by moving: the nav sets its own
+      `left-1/2 -translate-x-1/2 w-full max-w-[430px]`, so the phone-width
+      centring the shell provides was never what positioned it.
+    */}
+    <BottomNav />
+    </>
   )
 }
