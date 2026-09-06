@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { Exercise } from '../../types'
 import { exerciseEmoji } from './helpers'
+import StarIcon from '../../components/workout/StarIcon'
 
 // Muscle sub-filters, as label → the muscle names the API actually returns.
 //
@@ -49,6 +50,11 @@ export default function ExerciseList() {
   const location = useLocation()
   const category: string | undefined = location.state?.category
   const modality: string = location.state?.modality ?? 'Strength'
+  // Set when the caller came here to search rather than to browse a category
+  // (the magnifier on BrowseCategories). Read once into a ref below, because
+  // route state survives a re-render and re-focusing on every one of them
+  // would fight the user for the caret.
+  const autoFocusSearch: boolean = location.state?.autoFocusSearch === true
   const singleSelect = modality === 'Cardio'
 
   const { selectedExercises, addExercise, removeExercise, setSingleExercise } = useWorkoutStore()
@@ -57,7 +63,19 @@ export default function ExerciseList() {
   const [search, setSearch] = useState('')
   const [subFilter, setSubFilter] = useState('All')
   const [equipmentFilter, setEquipmentFilter] = useState('All')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Focus once, on arrival, and never again — the deps are empty on purpose.
+  //
+  // Not `autofocus`: iOS ignores it outside a user gesture, and this navigation
+  // *is* one (the magnifier tap), so an explicit focus() in an effect is what
+  // actually raises the keyboard on a phone.
+  useEffect(() => {
+    if (autoFocusSearch) searchRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const muscleFilters = category ? (MUSCLE_FILTERS[category] ?? []) : []
   const meta = MODALITY_META[modality] ?? MODALITY_META.Strength
@@ -95,7 +113,8 @@ export default function ExerciseList() {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase())
     const matchesSub = !activeMuscles || ex.muscles.some(m => activeMuscles.includes(m.name))
     const matchesEquipment = equipmentFilter === 'All' || ex.equipment.includes(equipmentFilter)
-    return matchesSearch && matchesSub && matchesEquipment
+    const matchesFavorite = !favoritesOnly || ex.isFavorite === true
+    return matchesSearch && matchesSub && matchesEquipment && matchesFavorite
   })
 
   const isSelected = (id: string) => selectedExercises.some(se => se.exercise.id === id)
@@ -141,11 +160,26 @@ export default function ExerciseList() {
         <div className="bg-dark-800 border border-dark-600 rounded-btn flex items-center gap-3 px-4 py-3">
           <span className="text-dark-400">🔍</span>
           <input
+            ref={searchRef}
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={`Search ${headerTitle.toLowerCase()}...`}
             className="flex-1 bg-transparent text-white text-sm placeholder-dark-400 outline-none"
           />
+          {/* In the search bar rather than in the chip rows below it: those two
+              rows are conditional (muscle groups are Strength-only, equipment
+              needs more than one option), so a filter placed there would
+              vanish on exactly the modalities that have the fewest other ways
+              to narrow a long list. */}
+          <button
+            onClick={() => setFavoritesOnly(v => !v)}
+            aria-pressed={favoritesOnly}
+            aria-label={favoritesOnly ? 'Show all exercises' : 'Show favourites only'}
+            className={`flex-shrink-0 -mr-1 w-7 h-7 rounded-full flex items-center justify-center
+                        active:scale-90 transition-transform
+                        ${favoritesOnly ? 'text-brand-yellow' : 'text-dark-400'}`}>
+            <StarIcon filled={favoritesOnly} size={18} />
+          </button>
         </div>
       </div>
 
@@ -198,6 +232,24 @@ export default function ExerciseList() {
         {isLoading ? (
           <div className="flex flex-col gap-3">
             {[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-dark-800 rounded-card animate-pulse" />)}
+          </div>
+        ) : filtered.length === 0 && favoritesOnly ? (
+          // Nothing is missing from the catalogue here — the filter is simply
+          // on, and offering "create an exercise" would answer a question
+          // nobody asked. The way out is to turn the star off, so that is the
+          // button.
+          <div className="bg-dark-800 border border-dark-600 rounded-card p-5 text-center">
+            <p className="text-white text-sm font-semibold">No favourites here</p>
+            <p className="text-dark-400 text-xs mt-1 mb-4">
+              Star an exercise from its detail screen and it shows up in this list.
+            </p>
+            <button
+              onClick={() => setFavoritesOnly(false)}
+              className="bg-dark-700 text-white text-sm font-bold px-4 py-2.5
+                         rounded-btn active:scale-95 transition-transform"
+            >
+              Show all exercises
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           // The moment the feature exists for. Someone searched for a movement

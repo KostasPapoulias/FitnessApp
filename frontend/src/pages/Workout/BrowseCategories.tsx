@@ -44,19 +44,12 @@ export default function BrowseCategories() {
 
   const [categories, setCategories] = useState<ExerciseCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [toast, setToast] = useState('')
 
   useEffect(() => {
     exerciseService.getCategories()
       .then(setCategories)
       .finally(() => setIsLoading(false))
   }, [])
-
-  const ping = (msg: string) => {
-    setToast(msg)
-    window.clearTimeout((ping as any)._t)
-    ;(ping as any)._t = window.setTimeout(() => setToast(''), 1600)
-  }
 
   const openCategory = (category: ExerciseCategory) =>
     navigate('/workout/exercises', { state: { category: category.name, modality } })
@@ -85,7 +78,15 @@ export default function BrowseCategories() {
           <p className="text-[21px] font-extrabold tracking-tight">{modality}</p>
           <p className="text-xs text-dark-300">Select a muscle group</p>
         </div>
-        <button onClick={() => ping('Search coming soon')}
+        {/* Searching is the way past the category grid, not a feature of it:
+            "Bulgarian split squat" is a Legs exercise, but nobody who knows the
+            name wants to guess which tile it is filed under first. ExerciseList
+            already searches, and already lists the whole modality when it is
+            given no category — so this hands off rather than duplicating it. */}
+        <button onClick={() => navigate('/workout/exercises', {
+            state: { modality, autoFocusSearch: true },
+          })}
+          aria-label={`Search all ${modality.toLowerCase()} exercises`}
           className="w-[38px] h-[38px] rounded-full bg-dark-800 border border-dark-600
                      text-dark-300 flex items-center justify-center active:scale-90 transition-transform">
           <SearchIcon />
@@ -178,14 +179,6 @@ export default function BrowseCategories() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-1/2 -translate-x-1/2 bg-dark-700 border border-dark-500
-                        text-white text-[13px] font-semibold px-4 py-2.5 rounded-full shadow-2xl z-50
-                        whitespace-nowrap">
-          {toast}
-        </div>
-      )}
     </div>
   )
 }
