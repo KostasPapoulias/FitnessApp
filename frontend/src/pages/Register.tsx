@@ -11,7 +11,7 @@ export default function Register() {
   const [error, setError] = useState('')
 
   // Must match the server (credentials.service.ts). It used to say 6, so a
-  // 6–9 character password passed here and was rejected by the API — and the
+  // 6–9 character password passed here and was rejected by tphe API — and the
   // catch below reported that as "email may already be in use", which sent
   // people off changing the one thing that was fine.
   const MIN_PASSWORD_LENGTH = 10
@@ -58,7 +58,7 @@ export default function Register() {
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Kostas"
+              placeholder="Name"
               className="w-full bg-dark-800 border border-dark-600 rounded-btn
                          px-4 py-3 text-white placeholder-dark-400
                          focus:outline-none focus:border-brand-teal"
