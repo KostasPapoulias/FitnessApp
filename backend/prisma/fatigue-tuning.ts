@@ -144,6 +144,7 @@ export const DAMAGE_OVERRIDES: Record<string, number> = {
   'Sprints': 1.5,              // near-maximal speed, and where hamstrings tear
   'Jump Rope': 1.1,
   'Running': 1.0,
+  'Jumping Jacks': 0.7,
   'Hiking': 0.9,
   'Stair Climber': 0.7,
   'Walking': 0.55,
@@ -191,6 +192,63 @@ export const REFERENCE_SPEED_KMH: Record<string, number> = {
   Rowing: 12,
   Elliptical: 10,
   Swimming: 3,
+}
+
+// What measures a cardio movement's work, which decides the whole shape of the
+// run screen and not merely whether a coach is offered.
+//
+//   'gps'     distance, and the phone can measure it — a map, a route, a live pace
+//   'machine' distance, but nothing measures it for you — the athlete sets the speed
+//   'reps'    no distance exists; the work is counted instead
+//
+// Kept apart from REFERENCE_SPEED_KMH deliberately. The two disagree in both
+// directions and that is not an error: the elliptical has a reference speed and
+// no GPS, the stair climber has neither and is still a pace-able machine to the
+// athlete standing on it. Deriving one from the other means a calibration
+// change silently removes a map.
+export const CARDIO_TRACKING: Record<string, 'gps' | 'machine' | 'reps'> = {
+  Running: 'gps',
+  Sprints: 'gps',
+  Walking: 'gps',
+  Hiking: 'gps',
+  Cycling: 'gps',
+
+  // Indoor, fixed, or in water. All have a pace; none can be followed.
+  Rowing: 'machine',
+  Elliptical: 'machine',
+  'Air Bike': 'machine',
+  Swimming: 'machine',
+
+  // No kilometre exists at any effort, which is why neither appears in
+  // REFERENCE_SPEED_KMH either.
+  'Jump Rope': 'reps',
+  'Stair Climber': 'reps',
+  'Jumping Jacks': 'reps',
+}
+
+// Counts per minute at a typical continuous effort — the counting twin of
+// REFERENCE_SPEED_KMH, and calibrated the same way: a movement performed at
+// exactly this cadence scores precisely what its duration alone would have
+// scored, so adding a count can only ever refine the estimate, never inflate
+// it. Faster than the reference costs more, slower costs less, and that
+// difference is the density the clock could never see.
+export const REFERENCE_CADENCE_RPM: Record<string, number> = {
+  // Single unders, turned by the wrists. Doubles roughly halve the count for
+  // the same minute, which is exactly the discount the density term should
+  // apply — they are not twice the work.
+  'Jump Rope': 110,
+  'Jumping Jacks': 50,
+  // Floors, as the console reports them. Nobody counts steps, and the number
+  // on the machine is the one an athlete can actually enter.
+  'Stair Climber': 6,
+}
+
+// What the count is called out loud and on screen. Wording only — the model
+// never reads it.
+export const REP_UNITS: Record<string, string> = {
+  'Jump Rope': 'skips',
+  'Stair Climber': 'floors',
+  'Jumping Jacks': 'reps',
 }
 
 // Working load for a set of ~10 reps, as a FRACTION OF BODYWEIGHT, for a
@@ -316,6 +374,17 @@ export const damageFor = (exerciseName: string, modalityName: string): number =>
 
 export const referenceSpeedFor = (exerciseName: string): number | null =>
   REFERENCE_SPEED_KMH[exerciseName] ?? null
+
+// 'gps' for anything unlisted, which is what every cardio session did before
+// this table existed. A custom exercise must not lose its map to an omission.
+export const cardioTrackingFor = (exerciseName: string): string =>
+  CARDIO_TRACKING[exerciseName] ?? 'gps'
+
+export const referenceCadenceFor = (exerciseName: string): number | null =>
+  REFERENCE_CADENCE_RPM[exerciseName] ?? null
+
+export const repUnitFor = (exerciseName: string): string | null =>
+  REP_UNITS[exerciseName] ?? null
 
 // Null rather than 0 for anything unlisted: 0 would read as "this movement is
 // unloaded", which is a claim, whereas null is the absence of one and lets the

@@ -319,6 +319,23 @@ model Exercise {
   // run). Null when distance is meaningless for the movement — jump rope,
   // or anything logged on a clock alone — which falls back to duration.
   referenceSpeedKmh Float?
+  // What measures this movement's work, and therefore what shape the cardio
+  // screen takes: 'gps' draws a map and follows the athlete, 'machine' has a
+  // pace but nothing to measure it (erg, treadmill, pool), 'reps' has no
+  // distance at all and is counted instead.
+  //
+  // Deliberately NOT derived from referenceSpeedKmh. That is a calibration
+  // constant — retuning a number must never silently change what the UI
+  // offers. Defaults to 'gps' so a custom cardio exercise behaves exactly as
+  // it did before this column existed.
+  cardioTracking   String               @default("gps")
+  // Typical continuous cadence for a 'reps' movement, in counts per minute.
+  // The counting equivalent of referenceSpeedKmh, and used the same way: it is
+  // what turns 900 skips into "work minutes" comparable with a 5 km run.
+  referenceCadenceRpm Float?
+  // What the count is called — 'skips', 'floors', 'reps'. Null for anything
+  // that is not counted. Only ever used for wording.
+  repUnit          String?
   // Working load for a set of ~10, as a FRACTION OF BODYWEIGHT, for a trained
   // adult male reference athlete. This is what makes a first-time suggestion
   // sane: without it every strength movement opened at the same 60 kg, so a
@@ -501,6 +518,11 @@ model SetCardio {
   set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   distance Float?
   time     Int?
+  /// Counted work for a movement with no distance — skips, floors, jacks.
+  /// Nullable because it is the third of three ways a cardio set can be
+  /// measured, not a required one: an untracked ten minutes on a rope is still
+  /// a legitimate set, it is just scored on the clock alone.
+  reps     Int?
 }
 
 /// Everything a GPS session recorded beyond its distance and its clock.

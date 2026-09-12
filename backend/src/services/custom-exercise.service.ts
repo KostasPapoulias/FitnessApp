@@ -158,6 +158,14 @@ export class CustomExerciseError extends Error {
  */
 export type LookupRef = string
 
+/**
+ * The three ways a cardio movement's work can be measured. A custom one gets
+ * no reference cadence — there is no way to guess one — so a 'reps' movement
+ * is scored on its duration, exactly as it would have been anyway. The value
+ * still earns its place by deciding what the run screen offers.
+ */
+const CARDIO_TRACKING_VALUES = ['gps', 'machine', 'reps']
+
 export interface CustomExerciseInput {
   name: unknown
   /** Modality id or name. */
@@ -168,6 +176,16 @@ export interface CustomExerciseInput {
   categories?: unknown
   /** Equipment ids or names. */
   equipment?: unknown
+  /**
+   * 'gps' | 'machine' | 'reps'. Cardio only; ignored for every other modality.
+   *
+   * This one IS asked, unlike damageFactor and loadFactor above, because it is
+   * not a calibration number — it is a statement about the movement that the
+   * athlete plainly knows and can see the effect of. Getting it wrong shows up
+   * immediately as a map that should not be there, not as silently wrong
+   * fatigue three months later.
+   */
+  cardioTracking?: unknown
 }
 
 export interface PreparedCustomExercise {
@@ -180,6 +198,7 @@ export interface PreparedCustomExercise {
   equipmentIds: string[]
   damageFactor: number
   loadFactor: number | null
+  cardioTracking: string
 }
 
 /** Match a ref against a lookup row by exact id or case-insensitive name. */
@@ -351,6 +370,15 @@ export const prepareCustomExercise = async (
     .filter(link => link.role === 'primary')
     .map(link => link.muscleName)
 
+  // 'gps' for anything unanswered, which is what every cardio movement did
+  // before the field existed — an omission must not take the map away.
+  // Non-cardio modalities carry the same default and never read it.
+  const requested = typeof input.cardioTracking === 'string' ? input.cardioTracking : null
+  const cardioTracking =
+    modality.name.toLowerCase() === 'cardio' && requested && CARDIO_TRACKING_VALUES.includes(requested)
+      ? requested
+      : 'gps'
+
   return {
     name,
     description,
@@ -361,6 +389,7 @@ export const prepareCustomExercise = async (
     equipmentIds,
     damageFactor: damageForCustom(modality.name),
     loadFactor: loadFactorForCustom(modality.name, primaryMuscleNames),
+    cardioTracking,
   }
 }
 
@@ -385,8 +414,13 @@ export const createCustomExercise = async (
       damageFactor: prepared.damageFactor,
       loadFactor: prepared.loadFactor,
       // Distance-based scoring needs a per-movement reference speed that cannot
-      // be guessed, so a custom cardio movement is scored on duration.
+      // be guessed, so a custom cardio movement is scored on duration. Same for
+      // the cadence — which is why only the capability is asked for, not the
+      // calibration behind it.
       referenceSpeedKmh: null,
+      referenceCadenceRpm: null,
+      repUnit: null,
+      cardioTracking: prepared.cardioTracking,
       muscleLinks: {
         create: prepared.muscleLinks.map(link => ({
           muscleId: link.muscleId,

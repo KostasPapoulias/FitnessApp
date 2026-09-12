@@ -6,9 +6,15 @@ import {
   DAMAGE_OVERRIDES,
   LOAD_FACTORS,
   REFERENCE_SPEED_KMH,
+  CARDIO_TRACKING,
+  REFERENCE_CADENCE_RPM,
+  REP_UNITS,
   damageFor,
   referenceSpeedFor,
   loadFactorFor,
+  cardioTrackingFor,
+  referenceCadenceFor,
+  repUnitFor,
 } from './fatigue-tuning';
 // The catalogue itself — content, edited far more often than this file.
 import {
@@ -92,6 +98,9 @@ const validateCatalogue = (): void => {
     ...Object.keys(DAMAGE_OVERRIDES).map(name => ['damage', name] as const),
     ...Object.keys(LOAD_FACTORS).map(name => ['loadFactor', name] as const),
     ...Object.keys(REFERENCE_SPEED_KMH).map(name => ['referenceSpeed', name] as const),
+    ...Object.keys(CARDIO_TRACKING).map(name => ['cardioTracking', name] as const),
+    ...Object.keys(REFERENCE_CADENCE_RPM).map(name => ['referenceCadence', name] as const),
+    ...Object.keys(REP_UNITS).map(name => ['repUnit', name] as const),
   ].filter(([, name]) => !seen.has(name));
 
   for (const [table, name] of strays) {
@@ -171,6 +180,7 @@ const seedExercises = async (modalities: Map<string, string>) => {
     select: {
       id: true, name: true, modalityId: true, description: true,
       damageFactor: true, referenceSpeedKmh: true, loadFactor: true,
+      cardioTracking: true, referenceCadenceRpm: true, repUnit: true,
     },
   });
   const byName = new Map(existing.map(e => [e.name, e]));
@@ -182,6 +192,9 @@ const seedExercises = async (modalities: Map<string, string>) => {
     damageFactor: damageFor(ex.name, ex.modality),
     referenceSpeedKmh: referenceSpeedFor(ex.name),
     loadFactor: loadFactorFor(ex.name),
+    cardioTracking: cardioTrackingFor(ex.name),
+    referenceCadenceRpm: referenceCadenceFor(ex.name),
+    repUnit: repUnitFor(ex.name),
   }));
 
   const missing = desired.filter(d => !byName.has(d.name));
@@ -196,7 +209,10 @@ const seedExercises = async (modalities: Map<string, string>) => {
       || row.description !== d.description
       || row.damageFactor !== d.damageFactor
       || row.referenceSpeedKmh !== d.referenceSpeedKmh
-      || row.loadFactor !== d.loadFactor;
+      || row.loadFactor !== d.loadFactor
+      || row.cardioTracking !== d.cardioTracking
+      || row.referenceCadenceRpm !== d.referenceCadenceRpm
+      || row.repUnit !== d.repUnit;
   });
 
   await runBatched(changed.map(d => prisma.exercise.update({
@@ -207,6 +223,9 @@ const seedExercises = async (modalities: Map<string, string>) => {
       damageFactor: d.damageFactor,
       referenceSpeedKmh: d.referenceSpeedKmh,
       loadFactor: d.loadFactor,
+      cardioTracking: d.cardioTracking,
+      referenceCadenceRpm: d.referenceCadenceRpm,
+      repUnit: d.repUnit,
     },
   })));
 

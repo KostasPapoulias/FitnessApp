@@ -178,6 +178,10 @@ const serializeExercise = (exercise: {
   description: string | null
   createdByUserId: string | null
   modality: { name: string }
+  referenceSpeedKmh: number | null
+  cardioTracking: string
+  referenceCadenceRpm: number | null
+  repUnit: string | null
   muscleLinks: { muscleId: string; impactFactor: number; muscle: { name: string } }[]
   categoryLinks: { category: { name: string } }[]
   equipmentLinks: { equipment: { name: string } }[]
@@ -186,6 +190,13 @@ const serializeExercise = (exercise: {
   name: exercise.name,
   description: exercise.description,
   modality: exercise.modality.name,
+  // Carried through templates too: an exercise reached from a saved plan must
+  // answer "how is this measured?" the same way one reached from the catalogue
+  // does, or the run screen changes shape depending on the route in.
+  referenceSpeedKmh: exercise.referenceSpeedKmh,
+  cardioTracking: exercise.cardioTracking,
+  referenceCadenceRpm: exercise.referenceCadenceRpm,
+  repUnit: exercise.repUnit,
   muscles: exercise.muscleLinks.map(ml => ({
     id: ml.muscleId,
     name: ml.muscle.name,

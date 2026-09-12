@@ -52,6 +52,14 @@ const CATALOGUE_SELECT = {
   createdByUserId: true,
   modalityId: true,
   modality: { select: { name: true } },
+  // Calibration, for turning distance into comparable work.
+  referenceSpeedKmh: true,
+  // Capability, which is a different question and must not be inferred from
+  // the line above: what measures this movement, and therefore whether the run
+  // screen draws a map, offers a dial, or counts.
+  cardioTracking: true,
+  referenceCadenceRpm: true,
+  repUnit: true,
   muscleLinks: {
     select: { muscleId: true, impactFactor: true, muscle: { select: { name: true } } },
   },

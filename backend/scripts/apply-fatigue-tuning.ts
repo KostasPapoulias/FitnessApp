@@ -20,6 +20,9 @@ import {
   MUSCLE_HALF_LIVES,
   DAMAGE_OVERRIDES,
   REFERENCE_SPEED_KMH,
+  CARDIO_TRACKING,
+  REFERENCE_CADENCE_RPM,
+  REP_UNITS,
   LOAD_FACTORS,
 } from '../prisma/fatigue-tuning'
 
@@ -118,6 +121,30 @@ async function main() {
     WHERE e.name = v.name AND e."createdByUserId" IS NULL
   `)
   console.log(`  load factors: ${loads} of ${loadRows.length} matched`)
+
+  // ── cardio tracking ───────────────────────────────────────────────────
+  // Reset to 'gps' rather than to NULL: the column is NOT NULL and 'gps' is
+  // what every cardio movement did before the column existed, so a movement
+  // dropped from the table falls back to the old behaviour instead of losing
+  // its map.
+  await withRetry('clear tracking', () => prisma.$executeRaw`
+    UPDATE "Exercise"
+    SET "cardioTracking" = 'gps', "referenceCadenceRpm" = NULL, "repUnit" = NULL
+    WHERE "createdByUserId" IS NULL
+      AND ("cardioTracking" <> 'gps' OR "referenceCadenceRpm" IS NOT NULL OR "repUnit" IS NOT NULL)
+  `)
+  const trackingRows = Object.entries(CARDIO_TRACKING).map(
+    ([name, mode]) => Prisma.sql`(${name}, ${mode}::text, ${REFERENCE_CADENCE_RPM[name] ?? null}::double precision, ${REP_UNITS[name] ?? null}::text)`
+  )
+  const tracking = await withRetry('tracking', () => prisma.$executeRaw`
+    UPDATE "Exercise" AS e
+    SET "cardioTracking" = v.mode,
+        "referenceCadenceRpm" = v.rpm,
+        "repUnit" = v.unit
+    FROM (VALUES ${Prisma.join(trackingRows)}) AS v(name, mode, rpm, unit)
+    WHERE e.name = v.name AND e."createdByUserId" IS NULL
+  `)
+  console.log(`  cardio tracking: ${tracking} of ${trackingRows.length} matched`)
 
   // ── report ────────────────────────────────────────────────────────────
   const sample = await withRetry('verify', () => prisma.exercise.findMany({

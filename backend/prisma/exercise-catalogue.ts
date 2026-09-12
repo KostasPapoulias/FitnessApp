@@ -908,6 +908,12 @@ export const EXERCISES: Ex[] = [
     description: 'Small jumps off the balls of the feet, elbows in, the rope turned by the wrists rather than the arms. Calves take almost all of it, so the first few sessions leave them sore out of proportion to the effort.',
     muscles: [['Calves', 0.7], ['Shoulders', 0.3], ['Forearms', 0.3]],
   },
+  {
+    name: 'Jumping Jacks', modality: 'Cardio',
+    equipment: ['Bodyweight'],
+    description: 'Land softly through the midfoot rather than slapping down flat — the calves take every repetition and the count runs into the hundreds long before the effort feels like anything. Warm-up or conditioning filler; no equipment and no space needed.',
+    muscles: [['Calves', 0.5], ['Shoulders', 0.4], ['Quadriceps', 0.3], ['Glutes', 0.2]],
+  },
 
   // ══════════════ MOBILITY ══════════════
   {

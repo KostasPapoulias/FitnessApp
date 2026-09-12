@@ -81,6 +81,13 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
         name: exercise.name,
         description: exercise.description,
         modality: exercise.modality.name,
+        referenceSpeedKmh: exercise.referenceSpeedKmh,
+        // What the run screen is allowed to offer. 'gps' gets a map and a
+        // follow; 'machine' a dial and a pace but no route; 'reps' a counter
+        // and no pace at all, because none exists at any effort.
+        cardioTracking: exercise.cardioTracking,
+        referenceCadenceRpm: exercise.referenceCadenceRpm,
+        repUnit: exercise.repUnit,
         muscles: exercise.muscleLinks.map(ml => ({
           id: ml.muscleId,
           name: ml.muscle.name,
@@ -204,6 +211,10 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
         name: exercise.name,
         description: exercise.description,
         modality: exercise.modality.name,
+        referenceSpeedKmh: exercise.referenceSpeedKmh,
+        cardioTracking: exercise.cardioTracking,
+        referenceCadenceRpm: exercise.referenceCadenceRpm,
+        repUnit: exercise.repUnit,
         muscles: exercise.muscleLinks.map(ml => ({
           name: ml.muscle.name,
           impactFactor: ml.impactFactor,
@@ -244,8 +255,10 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
 // from that in custom-exercise.service.ts and never typed directly.
 export const createExercise = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { name, modalityId, modality, description, muscles, categoryIds, equipmentIds } =
-      req.body as Record<string, unknown>
+    const {
+      name, modalityId, modality, description, muscles, categoryIds, equipmentIds,
+      cardioTracking,
+    } = req.body as Record<string, unknown>
 
     const prepared = await prepareCustomExercise(req.userId!, {
       name,
@@ -257,6 +270,7 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
         : muscles,
       categories: categoryIds,
       equipment: equipmentIds,
+      cardioTracking,
     })
 
     const created = await createCustomExercise(req.userId!, prepared)
