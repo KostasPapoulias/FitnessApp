@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   GAP_MS, MAX_ACCURACY_M, RouteSegment, Split, SplitState, TrackPoint,
-  advanceSplits, averagePace, elevationGain, ema, emptySplitState, encodeRoute,
-  evaluateFix, finalSplit, isGap, routeBounds, simplify, smoothPosition,
+  advanceSplits, averagePace, elevationGain, ema, emptySplitState, encodeSegments,
+  evaluateFix, finalSplit, isGap, routeBounds, segmentTrack, smoothPosition,
 } from '../lib/geo'
 import { SavedRun, TrackGap, clearRun, loadRun, saveRun } from '../lib/runStorage'
 
@@ -474,8 +474,12 @@ export const useRunTracker = (activityKey: string) => {
       0,
       Math.floor((reference - clock.current.startedAt - clock.current.pausedMs) / 1000)
     )
-    const track = simplify(points.current, 5)
-    const route = encodeRoute(track)
+    // Gap-split first, thin second. Thinning the whole track and segmenting the
+    // result made every long straight look like a recording gap — see
+    // segmentTrack.
+    const segments = segmentTrack(points.current, 5)
+    const track = segments.flat()
+    const route = encodeSegments(segments)
 
     // The stretch since the last whole kilometre, which no boundary will ever
     // close now that the run is over.

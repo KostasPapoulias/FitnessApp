@@ -503,17 +503,42 @@ export type RouteSegment = Array<[number, number]>
 const round5 = (n: number) => Math.round(n * 1e5) / 1e5
 
 /**
+ * Gap-segment a track, then thin each stretch on its own.
+ *
+ * The order is the whole point, and getting it backwards drew a 7km run as
+ * fifteen disconnected stubs totalling 800m. Simplifying first deletes every
+ * point along a straight — that is what it is for — and the two survivors at
+ * either end of a 500m avenue are three minutes apart, so the gap detector then
+ * read the simplification as a recording gap, cut the route there, and threw
+ * away whatever was left alone between two cuts. What survived was the corners,
+ * where points cluster close enough in time to look continuous. Distance, pace
+ * and splits were untouched, because they are measured from the raw fixes — so
+ * the run read as perfectly logged and the map showed a scatter of fragments.
+ *
+ * Splitting first means the gaps are decided by the fixes that actually
+ * arrived, and thinning inside a segment can no longer invent one.
+ */
+export const segmentTrack = (points: TrackPoint[], toleranceM = 5): TrackPoint[][] =>
+  splitOnGaps(points).map(segment => simplify(segment, toleranceM))
+
+/** Rounded [lng, lat] pairs from segments already split and thinned. */
+export const encodeSegments = (segments: TrackPoint[][]): RouteSegment[] =>
+  segments.map(segment =>
+    segment.map(p => [round5(p.lng), round5(p.lat)] as [number, number])
+  )
+
+/**
  * A track, ready to store and to draw.
  *
  * Segmented on gaps at encode time rather than at render time so the stored
  * shape already carries the one thing a bare list of coordinates cannot: that
  * the app was not recording between two of them. Nothing downstream can then
  * accidentally join a straight line across four minutes of locked phone.
+ *
+ * Takes the RAW track, not a simplified one — see segmentTrack.
  */
-export const encodeRoute = (points: TrackPoint[]): RouteSegment[] =>
-  splitOnGaps(points).map(segment =>
-    segment.map(p => [round5(p.lng), round5(p.lat)] as [number, number])
-  )
+export const encodeRoute = (points: TrackPoint[], toleranceM = 5): RouteSegment[] =>
+  encodeSegments(segmentTrack(points, toleranceM))
 
 /** [[west, south], [east, north]], or null for a route with nothing in it. */
 export const routeBounds = (
