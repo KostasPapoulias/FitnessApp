@@ -11,7 +11,24 @@ export default function CardioPlan() {
   const { selectedExercises, setCardioTarget } = useWorkoutStore()
   const activity = selectedExercises[0]
 
-  const [targetType, setTargetType] = useState<TargetType>('distance')
+  /**
+   * Whether a distance target is even expressible.
+   *
+   * A jump rope covers no ground at any effort, so "5 km" there is a target
+   * that can never be met — the progress bar sits at 0% for the whole session
+   * and the set is logged against a distance of zero. Time is the only honest
+   * axis for a counted movement.
+   */
+  const distanceIsMeaningful = (activity?.exercise.cardioTracking ?? 'gps') !== 'reps'
+
+  const [targetType, setTargetType] = useState<TargetType>(
+    distanceIsMeaningful ? 'distance' : 'time'
+  )
+  // The exercise can change under a mounted screen (back, pick another), and a
+  // stale 'distance' here would be a target nothing can satisfy.
+  useEffect(() => {
+    if (!distanceIsMeaningful) setTargetType('time')
+  }, [distanceIsMeaningful])
   const [distanceKm, setDistanceKm] = useState(5)   // km
   const [timeMin, setTimeMin] = useState(30)        // minutes
   const [recent, setRecent] = useState<{ distance: number; time: number } | null>(null)
@@ -100,8 +117,11 @@ export default function CardioPlan() {
 
       {/* toggle */}
       <p className="text-[11px] font-bold tracking-[1.4px] text-dark-300 mb-3">TARGET</p>
-      <div className="grid grid-cols-2 gap-2 mb-6 p-1 bg-dark-800 border border-dark-600 rounded-btn">
-        {(['distance', 'time'] as TargetType[]).map(t => (
+      {/* One column when distance is not on offer, rather than two with one
+          dead. `grid-cols-${n}` would not survive Tailwind's scanner. */}
+      <div className={`grid ${distanceIsMeaningful ? 'grid-cols-2' : 'grid-cols-1'}
+                      gap-2 mb-6 p-1 bg-dark-800 border border-dark-600 rounded-btn`}>
+        {(distanceIsMeaningful ? ['distance', 'time'] as TargetType[] : ['time'] as TargetType[]).map(t => (
           <button key={t} onClick={() => setTargetType(t)}
             className={`py-2.5 rounded-[9px] text-sm font-bold transition-all
                        ${targetType === t ? 'bg-brand-teal text-black' : 'text-dark-200'}`}>

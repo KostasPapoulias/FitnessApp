@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { onboardingService, MuscleOption, EquipmentOption } from '../../services/onboarding.service'
 import { INPUT_BASE } from '../../components/forms/Fields'
-import { ExerciseCategory } from '../../types'
+import { CardioTracking, ExerciseCategory } from '../../types'
 
 /**
  * Add a movement the catalogue does not have.
@@ -21,6 +21,24 @@ import { ExerciseCategory } from '../../types'
  */
 
 type Role = 'primary' | 'secondary'
+
+const TRACKING_OPTIONS: { value: CardioTracking; label: string; sub: string }[] = [
+  {
+    value: 'gps',
+    label: 'GPS can follow it',
+    sub: 'Outdoors, covering ground — running, cycling, walking. You get a map and a route.',
+  },
+  {
+    value: 'machine',
+    label: 'It has a pace, but nothing measures it',
+    sub: 'A treadmill, an erg, a pool. You set the speed by hand and no route is drawn.',
+  },
+  {
+    value: 'reps',
+    label: 'It is counted, not measured',
+    sub: 'No distance at any effort — skips, floors, jacks. You get a counter instead of a map.',
+  },
+]
 
 const MODALITY_HINT: Record<string, string> = {
   Strength: 'Loaded with weight — barbell, dumbbell, machine or cable.',
@@ -47,6 +65,16 @@ export default function CreateExercise() {
 
   const [name, setName] = useState(presetName)
   const [modalityId, setModalityId] = useState('')
+  /**
+   * How this movement's work is measured. Cardio only.
+   *
+   * Asked, unlike the calibration numbers the backend derives and deliberately
+   * hides — damageFactor and the rest are invisible when wrong, and a bad one
+   * quietly poisons readiness for good. This is the opposite: the athlete knows
+   * the answer without being taught anything, and a wrong answer shows up
+   * immediately as a map on a rope session.
+   */
+  const [cardioTracking, setCardioTracking] = useState<CardioTracking>('gps')
   const [description, setDescription] = useState('')
   const [roleByMuscle, setRoleByMuscle] = useState<Record<string, Role>>({})
   const [categoryIds, setCategoryIds] = useState<string[]>([])
@@ -121,6 +149,9 @@ export default function CreateExercise() {
         muscles: Object.entries(roleByMuscle).map(([muscleId, role]) => ({ muscleId, role })),
         categoryIds,
         equipmentIds,
+        // Ignored by the backend for every other modality, so it is sent
+        // unconditionally rather than guarded here as well.
+        cardioTracking,
       })
       // Straight to the detail screen: it is the proof the exercise exists and
       // the place they can add it to the session they were building.
@@ -190,6 +221,37 @@ export default function CreateExercise() {
             <p className="text-dark-400 text-xs mt-2">{MODALITY_HINT[modalityName]}</p>
           )}
         </div>
+
+        {/* How it is measured — cardio only, because it is the only modality
+            where the answer changes the screen. */}
+        {modalityName === 'Cardio' && (
+          <div>
+            <label className="text-dark-300 text-xs uppercase tracking-wider">
+              How is it measured?
+            </label>
+            <div className="flex flex-col gap-2 mt-2">
+              {TRACKING_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setCardioTracking(option.value)}
+                  className={`rounded-card border px-4 py-3 text-left transition-colors
+                             ${cardioTracking === option.value
+                               ? 'border-brand-teal bg-[#0a2a22]'
+                               : 'border-dark-600 bg-dark-800'}`}
+                >
+                  <span className={`block text-sm font-bold ${
+                    cardioTracking === option.value ? 'text-brand-teal' : 'text-white'}`}>
+                    {option.label}
+                  </span>
+                  <span className="block text-dark-400 text-xs mt-0.5 leading-snug">
+                    {option.sub}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Muscles */}
         <div>
