@@ -189,7 +189,7 @@ export function EffortPrompt({
 
 // ── pre-live "get ready, press Start" gate ──
 export function LiveStartGate({
-  emoji, label, title, detail, onStart, onBack,
+  emoji, label, title, detail, onStart, onBack, children,
 }: {
   emoji: string
   label: string
@@ -197,6 +197,13 @@ export function LiveStartGate({
   detail: string
   onStart: () => void
   onBack?: () => void
+  /**
+   * Anything that has to be decided BEFORE the clock starts, between the
+   * description and the Start button. A pace target is the case this exists
+   * for: it is worthless once the run is underway, because the point of it is
+   * the kilometre you are about to run.
+   */
+  children?: React.ReactNode
 }) {
   return (
     <div className="flex-1 bg-dark-900 text-white flex flex-col items-center justify-center px-8 text-center">
@@ -207,8 +214,10 @@ export function LiveStartGate({
       <h1 className="text-[26px] font-extrabold leading-tight">{title}</h1>
       <p className="text-dark-300 text-sm mt-2 max-w-[280px]">{detail}</p>
 
+      {children && <div className="w-full max-w-[320px] mt-6">{children}</div>}
+
       <button onClick={onStart}
-        className="mt-9 w-full max-w-[320px] py-5 rounded-card bg-brand-teal text-black
+        className="mt-7 w-full max-w-[320px] py-5 rounded-card bg-brand-teal text-black
                    text-[19px] font-extrabold active:scale-95 transition-transform"
         style={{ boxShadow: '0 10px 30px -8px rgba(0,212,170,0.5)' }}>
         ▶ Start

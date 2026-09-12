@@ -34,6 +34,18 @@ interface Props {
   statusOk: boolean
   /** Whether a screen wake lock is actually held right now. */
   screenAwake: boolean
+  /**
+   * The pace target, already formatted, or null when no coach is running.
+   *
+   * Read-only here, deliberately. Every touch on this screen is spent
+   * re-taking the wake lock, and a mute button that a pocket can press would
+   * silence the coach without anyone knowing it happened — the unlocked screen
+   * is two seconds away and cannot be pressed by accident.
+   */
+  coachTarget?: string | null
+  /** Its verdict, in the same words the unlocked strip uses. */
+  coachLabel?: string | null
+  coachColor?: string
   /** Re-request it. Must be called from a gesture — see the root handler. */
   onKeepAwake: () => void
   onUnlock: () => void
@@ -41,7 +53,7 @@ interface Props {
 
 export default function RunLock({
   elapsed, distanceKm, pace, avgPace, running, statusLabel, statusOk,
-  screenAwake, onKeepAwake, onUnlock,
+  screenAwake, coachTarget, coachLabel, coachColor, onKeepAwake, onUnlock,
 }: Props) {
   const [holding, setHolding] = useState(false)
   const timer = useRef<number | null>(null)
@@ -128,6 +140,17 @@ export default function RunLock({
         <div className="mt-7 text-[11px] tracking-[0.18em] text-dark-500 tabular-nums">
           NOW {pace} / KM
         </div>
+
+        {coachTarget && (
+          <div className="mt-4 flex items-center gap-2 text-[11px] tracking-[0.14em] tabular-nums">
+            <span className="text-dark-500">TARGET {coachTarget} / KM</span>
+            {coachLabel && (
+              <span className="font-bold" style={{ color: coachColor ?? '#00D4AA' }}>
+                · {coachLabel.toUpperCase()}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col items-center">

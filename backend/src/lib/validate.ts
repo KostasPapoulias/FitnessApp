@@ -111,6 +111,18 @@ export const addedKg = z.number().min(-500).max(500)
 
 export const reps = z.number().int().min(0).max(1000)
 
+/**
+ * A cardio count — skips, floors, jacks. Not `reps`, because the physical
+ * ceiling is nowhere near the same: 1000 is already an absurd set of squats and
+ * barely nine minutes of skipping. Sharing the bound would have rejected an
+ * ordinary rope session, and rejecting real training data is the worse failure
+ * of the two.
+ *
+ * An hour of double-unders at 250 rope passes a minute is 15,000, so this is
+ * set past the longest plausible effort rather than at the typical one.
+ */
+export const count = z.number().int().min(0).max(20_000)
+
 /** 1–10. Not optional-with-a-default anywhere: an absent RPE is information. */
 export const rpe = z.number().min(1).max(10)
 

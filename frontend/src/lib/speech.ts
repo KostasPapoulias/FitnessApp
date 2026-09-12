@@ -147,6 +147,52 @@ export const cues = {
 
   lapMarked: (lap: number) => `Lap ${lap}.`,
 
+  // ── pace coach ────────────────────────────────────────────────────────────
+  // Short, and each one says the target, because a correction without the
+  // number it is correcting towards is just criticism. The wording is
+  // deliberately about the action ("pick it up") rather than the state ("you
+  // are slow") — it is heard mid-effort, once, and has to be acted on.
+
+  paceTarget: (step: number, unit: 'km' | 'min', paceSeconds: number) =>
+    step > 1
+      ? `${unit === 'km' ? 'Kilometre' : 'Minute'} ${step}. Target ${formatPace(paceSeconds)}`.trim()
+      : `Target ${formatPace(paceSeconds)}`.trim(),
+
+  // ── the dial coach ────────────────────────────────────────────────────────
+  // An instruction, not a correction. "Pick it up" is meaningless to someone
+  // standing on a treadmill — the only thing they can do is change a number, so
+  // the cue names the number and the direction to move it.
+
+  paceSet: (step: number, unit: 'km' | 'min', paceSeconds: number) =>
+    step > 1
+      ? `${unit === 'km' ? 'Kilometre' : 'Minute'} ${step}. Set ${formatPace(paceSeconds)}`.trim()
+      : `Set ${formatPace(paceSeconds)}`.trim(),
+
+  /** Said in pace, not in speed: it is the number on the app, not on the belt. */
+  paceDialFaster: (paceSeconds: number) => `Speed up to ${formatPace(paceSeconds)}`.trim(),
+
+  paceDialEasier: (paceSeconds: number) => `Ease back to ${formatPace(paceSeconds)}`.trim(),
+
+  /** Confirmation that the dial landed. The whole point of the short dwell. */
+  paceHolding: (paceSeconds: number) => `Holding ${formatPace(paceSeconds)}`.trim(),
+
+  paceFaster: (paceSeconds: number) => `Pick it up. Target ${formatPace(paceSeconds)}`.trim(),
+
+  paceEasier: (paceSeconds: number) => `Ease off. Target ${formatPace(paceSeconds)}`.trim(),
+
+  /** The whole point of the dwell rules: being told when you fixed it. */
+  paceGood: () => 'Good pace.',
+
+  /**
+   * For a movement with no distance. The distance version would have read
+   * "zero kilometres", which sounds exactly like a session that failed to
+   * record — and this cue is the only confirmation an hour of work landed.
+   */
+  countLogged: (count: number, unit: string, minutes: number) =>
+    count > 0
+      ? `Logged. ${count} ${unit} in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+      : `Logged. ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+
   runLogged: (km: number, minutes: number) =>
     `Run logged. ${formatWeight(km)} kilometre${km === 1 ? '' : 's'} in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
 

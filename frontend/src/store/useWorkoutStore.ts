@@ -161,7 +161,8 @@ interface WorkoutStore {
       rpe?: number
       restSeconds?: number
       reps?: number       // strength / calisthenics reps; also carries mobility
-                          // hold-seconds and WOD reps-per-round
+                          // hold-seconds, WOD reps-per-round, and the count for
+                          // a cardio movement with no distance (skips, floors)
       weight?: number     // strength weight; also carries calisthenics added load
       addedWeight?: number
       duration?: number   // mobility hold seconds / calisthenics isometric hold seconds
@@ -649,6 +650,12 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       case 'CARDIO':
         payload.distance = data.distance
         payload.time = data.time
+        // The count, for a movement with no distance. Sent only when there is
+        // one: an explicit 0 would be stored, and a stored 0 is a claim that
+        // nothing was done rather than that nothing was counted — the fatigue
+        // model reads it as "no count" either way, but history should not
+        // record a rope session as zero skips.
+        if (data.reps != null && data.reps > 0) payload.reps = data.reps
         // Only GPS sessions have a route, but a treadmill run still has splits
         // and an average pace worth keeping, so the payload goes either way.
         if (data.run) payload.run = toRunPayload(data.run)

@@ -1,5 +1,5 @@
 import api from './api'
-import { Exercise, ExerciseCategory } from '../types'
+import { CardioTracking, Exercise, ExerciseCategory } from '../types'
 
 export const exerciseService = {
   getCategories: async (): Promise<ExerciseCategory[]> => {
@@ -54,6 +54,8 @@ export const exerciseService = {
     muscles: { muscleId: string; role: 'primary' | 'secondary' }[]
     categoryIds?: string[]
     equipmentIds?: string[]
+    /** Cardio only; the backend ignores it for every other modality. */
+    cardioTracking?: CardioTracking
   }): Promise<Exercise> => {
     const res = await api.post('/exercises', input)
     return res.data.data

@@ -67,8 +67,8 @@ export default function StartWorkout() {
   // unmounted by the time the workout they govern starts, so they cannot live
   // in local state and still reach the live session.
   const {
-    voice, haptic, audio, voiceSupported,
-    setVoice, setHaptic, setAudio, probeVoiceSupport,
+    voice, haptic, audio, voiceSupported, paceCoach,
+    setVoice, setHaptic, setAudio, setPaceCoach, probeVoiceSupport,
   } = useSessionPrefsStore()
 
   const [showVoiceHelp, setShowVoiceHelp] = useState(false)
@@ -173,9 +173,13 @@ export default function StartWorkout() {
             sub: 'Announce the next set out loud',
             on: audio, set: setAudio,
           },
-        ].map((item, i) => (
+          // Pace coaching is NOT in this list on purpose. It only means
+          // anything on a run, and a switch that does nothing for four of the
+          // five session types teaches people to ignore the whole card. It is
+          // its own block below, shown when Cardio is the chosen modality.
+        ].map((item, i, rows) => (
           <div key={item.label}
-            className={`flex items-center gap-3 py-3.5 ${i < 2 ? 'border-b border-dark-700' : ''}`}>
+            className={`flex items-center gap-3 py-3.5 ${i < rows.length - 1 ? 'border-b border-dark-700' : ''}`}>
             <span className={item.off ? 'text-dark-500' : 'text-brand-teal'}>{item.icon}</span>
             <span className="flex-1">
               <span className={`block text-sm font-semibold ${item.off ? 'text-dark-400' : ''}`}>
@@ -209,6 +213,44 @@ export default function StartWorkout() {
           </span>
           <span className="text-dark-400 text-sm">→</span>
         </button>
+      )}
+
+      {/* Pace coach — cardio only, because it is the only modality with a pace.
+          On/off and nothing else: the pace itself is chosen on the run screen,
+          where the activity is actually known. Choosing "5:00 per kilometre"
+          here, before picking between an outdoor run and a jump rope, was
+          asking for a number that might turn out to mean nothing. */}
+      {modality === 'cardio' && (
+        <>
+          <Eyebrow>PACE COACH</Eyebrow>
+          <button
+            onClick={() => {
+              const next = !paceCoach
+              setPaceCoach(next)
+              // It has no channel but speech, so switching it on switches cues
+              // on with it rather than leaving a switch that does nothing.
+              if (next && !audio) setAudio(true)
+            }}
+            className="w-full mb-6 flex items-center gap-3 bg-dark-800 border border-dark-600
+                       rounded-card px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
+          >
+            <span className="text-[17px]">🎯</span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold">Spoken pace coaching</span>
+              <span className="block text-xs text-dark-300 mt-0.5">
+                {paceCoach
+                  ? 'Set the pace and the progression on the run screen'
+                  : 'Calls a pace, then calls you up or down against it'}
+              </span>
+            </span>
+            <span
+              className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-all duration-200
+                          ${paceCoach ? 'bg-brand-teal justify-end' : 'bg-dark-600 justify-start'}`}
+            >
+              <span className="w-5 h-5 bg-white rounded-full shadow" />
+            </span>
+          </button>
+        </>
       )}
 
       {/* CTA */}

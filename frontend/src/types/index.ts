@@ -108,11 +108,36 @@ export interface TrainingLoad {
 }
 
 // Exercise
+export type CardioTracking = 'gps' | 'machine' | 'reps'
+
 export interface Exercise {
   id: string
   name: string
   description?: string
   modality: string
+  /**
+   * Typical speed for this movement, km/h. Calibration only — it is what turns
+   * distance covered into work comparable across activities. Do NOT read it as
+   * "does this have a pace?": the stair climber has no reference speed and is
+   * still something you set a pace on. `cardioTracking` answers that.
+   */
+  referenceSpeedKmh?: number | null
+  /**
+   * How this movement's work is measured, which decides the shape of the whole
+   * cardio screen rather than merely whether a coach is offered:
+   *
+   *   'gps'     distance, and the phone can measure it — map, route, live pace
+   *   'machine' distance, but nothing measures it — a dial, and no route
+   *   'reps'    no distance at any effort — a counter, and no pace
+   *
+   * Optional because an exercise cached before the field existed has none;
+   * absent is treated as 'gps', which is what every cardio session did then.
+   */
+  cardioTracking?: CardioTracking
+  /** Counts per minute at a typical effort. Only for 'reps' movements. */
+  referenceCadenceRpm?: number | null
+  /** What the count is called — 'skips', 'floors', 'reps'. Wording only. */
+  repUnit?: string | null
   muscles: { name: string; impactFactor: number; role: string }[]
   categories: string[]
   equipment: string[]
@@ -167,7 +192,7 @@ export interface WorkoutSet {
   rpe?: number
   restSeconds?: number
   strength?: { reps: number; weight: number }
-  cardio?: { distance?: number; time?: number }
+  cardio?: { distance?: number; time?: number; reps?: number }
   // `time` is seconds under tension for isometric holds (reps is 0 then)
   calisthenics?: { reps: number; addedWeight: number; time?: number }
   wod?: { distance?: number; time?: number }
