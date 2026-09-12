@@ -245,8 +245,12 @@ export const logSet = async (req: AuthRequest, res: Response) => {
           })
           break
         case 'CARDIO':
+          // `reps` is the count for a movement with no distance — skips,
+          // floors, jacks. It shares the field with strength and WOD reps
+          // rather than getting one of its own because it means the same
+          // thing: work the athlete performed that the clock cannot see.
           await tx.setCardio.create({
-            data: { setId: set.id, distance, time }
+            data: { setId: set.id, distance, time, reps: reps ?? null }
           })
           break
         case 'WOD':
@@ -834,6 +838,7 @@ export const updateSet = async (req: AuthRequest, res: Response) => {
         data: {
           ...(distance !== undefined ? { distance } : {}),
           ...(time !== undefined ? { time: time == null ? null : Math.round(time) } : {}),
+          ...(reps !== undefined ? { reps: reps == null ? null : Math.round(reps) } : {}),
         },
       }))
     } else if (set.wod) {

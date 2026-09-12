@@ -10,7 +10,7 @@
  */
 
 import {
-  z, id, kg, addedKg, reps, rpe, seconds, distanceKm, rounds, restSeconds, notes,
+  z, id, kg, addedKg, reps, count, rpe, seconds, distanceKm, rounds, restSeconds, notes,
 } from '../lib/validate'
 
 /** Sets per exercise. High enough for a long EMOM, low enough to bound a loop. */
@@ -64,6 +64,14 @@ export const logSetSchema = z.discriminatedUnion('setType', [
     distance: distanceKm.nullish(),
     time: seconds.nullish(),
     /**
+     * Counted work for a movement with no distance — skips, floors, jacks.
+     *
+     * Carried in `reps` because that is the column it lands in, but bounded by
+     * `count`: 1000 is a ceiling for a set of squats and nine minutes of
+     * skipping, and the rope is the one that would have been rejected.
+     */
+    reps: count.nullish(),
+    /**
      * The recorded route. Left unchecked here on purpose — `validateRun` in the
      * controller already owns it, and it is the only thing that knows the point
      * budget and the coordinate rules. Duplicating those here would give two
@@ -111,7 +119,15 @@ export type LogSetBody = z.infer<typeof logSetSchema>
 export const updateSetSchema = z.object({
   rpe: rpe.nullish(),
   restSeconds: restSeconds.nullish(),
-  reps: reps.nullish(),
+  /**
+   * `count`, not `reps`, because this one shape edits every set type and has no
+   * way to know which it is looking at. The tight rep bound would make a rope
+   * count above 1000 uneditable — a certain failure on an ordinary session,
+   * traded against a hypothetical mistyped strength edit. The logging path,
+   * which is where essentially all data actually enters, still applies the
+   * tight bound per set type.
+   */
+  reps: count.nullish(),
   weight: kg.nullish(),
   addedWeight: addedKg.nullish(),
   distance: distanceKm.nullish(),

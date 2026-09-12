@@ -41,6 +41,16 @@ const WOD_MINUTES_PER_HSE = 4.5
 // intensity dominates.
 const CARDIO_VOLUME_SHARE = 0.6
 
+// Ceiling on how much work a count may claim per minute of clock, as a multiple
+// of the movement's reference cadence.
+//
+// Physical, not defensive, like every other bound here. Double-unders pass the
+// rope roughly twice per jump and land near 1.8× a single-under count, which
+// must go through untouched — it is exactly the density the term exists to
+// capture. Nobody sustains two and a half times a reference cadence for a set,
+// so past that the number is a typed digit, not an effort.
+const MAX_CARDIO_DENSITY = 2.5
+
 // Seconds of isometric hold treated as one rep.
 export const HOLD_SECONDS_PER_REP = 3
 
@@ -199,11 +209,15 @@ export const resistanceHse = (set: ResistanceSet): number => {
 /**
  * Local muscular cost of cardio — what the legs actually absorb.
  *
- * Volume comes from distance where the activity has a meaningful speed, so 15 km
- * on a bike and 15 km on foot are not counted as equal work; otherwise it falls
- * back to duration (treadmill without GPS, jump rope, anything logged on a
- * clock). Intensity still matters, but only as a modifier — see
- * CARDIO_VOLUME_SHARE.
+ * Three ways to measure the same thing, in descending order of how much they
+ * know, and all three resolve to "minutes of typical work" so they stay
+ * comparable with each other and with every other modality:
+ *
+ *   distance  15 km on a bike is not 15 km on foot — see referenceSpeedKmh
+ *   count     900 skips is not ten minutes of standing on a rope — referenceCadenceRpm
+ *   duration  the clock alone, which is all a treadmill without a console gives
+ *
+ * Intensity still matters, but only as a modifier — see CARDIO_VOLUME_SHARE.
  *
  * The whole-body cost of the same session is scored separately by
  * `systemicLoad`, where intensity leads instead.
@@ -212,17 +226,37 @@ export const cardioHse = (
   seconds: number,
   rpe?: number | null,
   distanceKm?: number | null,
-  referenceSpeedKmh?: number | null
+  referenceSpeedKmh?: number | null,
+  reps?: number | null,
+  referenceCadenceRpm?: number | null
 ): number => {
   if (seconds <= 0) return 0
 
   const minutes = seconds / 60
+
   // Distance expressed as "minutes of typical work", which is comparable across
   // activities in a way that raw kilometres never are.
-  const workMinutes =
+  const byDistance =
     distanceKm && distanceKm > 0 && referenceSpeedKmh && referenceSpeedKmh > 0
       ? (distanceKm / referenceSpeedKmh) * 60
-      : minutes
+      : null
+
+  // The same trick for a movement that has no distance at any effort. A count
+  // against a reference cadence is the only thing that separates ten minutes of
+  // continuous rope from ten minutes of tripping every twenty seconds — the
+  // clock reads identically for both, and used to score them identically too.
+  //
+  // Calibrated so that working at exactly the reference cadence returns the
+  // duration unchanged: adding a count refines the estimate, it never inflates
+  // it, so nobody is penalised for logging one.
+  const byCount =
+    reps && reps > 0 && referenceCadenceRpm && referenceCadenceRpm > 0
+      ? Math.min(reps / referenceCadenceRpm, minutes * MAX_CARDIO_DENSITY)
+      : null
+
+  // Duration last, and it is not a failure mode — an untracked twenty minutes
+  // on a rope is a real set. It is simply the least informative of the three.
+  const workMinutes = byDistance ?? byCount ?? minutes
 
   const intensity =
     CARDIO_VOLUME_SHARE + (1 - CARDIO_VOLUME_SHARE) * rpeFactor(rpe)

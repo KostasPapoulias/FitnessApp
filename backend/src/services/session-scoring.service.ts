@@ -34,6 +34,7 @@ export interface ScorableSession {
       id: string
       damageFactor: number
       referenceSpeedKmh: number | null
+      referenceCadenceRpm: number | null
       muscleLinks: {
         muscleId: string
         impactFactor: number
@@ -45,7 +46,7 @@ export interface ScorableSession {
       rpe: number | null
       strength: { reps: number; weight: number } | null
       calisthenics: { reps: number; addedWeight: number; time: number | null } | null
-      cardio: { distance: number | null; time: number | null } | null
+      cardio: { distance: number | null; time: number | null; reps: number | null } | null
       wod: { reps: number | null; rounds: number | null; time: number | null; distance: number | null; weight: number | null } | null
       mobility: { time: number | null } | null
     }[]
@@ -175,12 +176,16 @@ export const scoreSession = (
       } else if (set.cardio) {
         // distance/time are not kilograms — no volume, but a real load.
         // Distance drives the local cost where the activity has a reference
-        // speed, so ground actually covered counts rather than time on foot.
+        // speed, so ground actually covered counts rather than time on foot;
+        // a count does the same job for the movements that have no distance at
+        // any effort, and the clock is the fallback for both.
         addMuscleDelta(muscleLinks, cardioHse(
           set.cardio.time ?? 0,
           set.rpe,
           set.cardio.distance,
-          exercise.referenceSpeedKmh
+          exercise.referenceSpeedKmh,
+          set.cardio.reps,
+          exercise.referenceCadenceRpm
         ), damage)
 
       } else if (set.wod) {

@@ -194,6 +194,48 @@ describe('cardioHse', () => {
     close(cardioHse(3600, 7, null, 12), cardioHse(3600, 7))
     close(cardioHse(3600, 7, 15, null), cardioHse(3600, 7))
   })
+
+  test('a count at exactly the reference cadence scores as its duration', () => {
+    // The calibration that makes the count safe to log: 1100 skips in ten
+    // minutes at a 110/min reference is ten minutes of typical work. Logging a
+    // count can refine the estimate, never inflate it, so nobody is penalised
+    // for counting.
+    close(cardioHse(600, 7, null, null, 1100, 110), cardioHse(600, 7))
+  })
+
+  test('density separates two sessions the clock cannot tell apart', () => {
+    // Same ten minutes, same RPE. The only difference is how much rope actually
+    // turned, which is exactly what duration alone could never see.
+    const continuous = cardioHse(600, 7, null, null, 1400, 110)
+    const stopStart = cardioHse(600, 7, null, null, 700, 110)
+    assert.ok(continuous > stopStart)
+    close(continuous / stopStart, 2)
+  })
+
+  test('a count cannot claim more than a human sustains', () => {
+    // A mistyped 11000 in a ten-minute set would otherwise score as 100 minutes
+    // of work. Capped at 2.5x the clock, which still lets double-unders through
+    // at roughly 1.8x.
+    const typo = cardioHse(600, 7, null, null, 11_000, 110)
+    close(typo, cardioHse(25 * 60, 7))
+
+    const doubleUnders = cardioHse(600, 7, null, null, 2000, 110)
+    assert.ok(doubleUnders < typo)
+  })
+
+  test('distance wins over a count when both are present', () => {
+    // Nothing logs both today, but the precedence must be stated rather than
+    // emergent: distance is the more informative of the two.
+    close(
+      cardioHse(1800, 7, 15, 12, 9999, 110),
+      cardioHse(1800, 7, 15, 12)
+    )
+  })
+
+  test('falls back to the clock with a count but no reference cadence', () => {
+    close(cardioHse(600, 7, null, null, 900, null), cardioHse(600, 7))
+    close(cardioHse(600, 7, null, null, 0, 110), cardioHse(600, 7))
+  })
 })
 
 describe('wodHse', () => {
