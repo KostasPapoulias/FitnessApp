@@ -1,7 +1,9 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Split, splitPace } from '../lib/geo'
 import { RunPayload } from '../lib/runPayload'
 import { workoutService } from '../services/workout.service'
+import ChunkBoundary from './ChunkBoundary'
+import { lazyRetry } from '../lib/lazyRetry'
 import { fmtTime } from '../pages/Workout/helpers'
 
 /**
@@ -13,7 +15,7 @@ import { fmtTime } from '../pages/Workout/helpers'
  * would otherwise carry a route for each one it never draws.
  */
 
-const RouteMap = lazy(() => import('./RouteMap'))
+const RouteMap = lazyRetry(() => import('./RouteMap'))
 
 interface Props {
   setId: string
@@ -132,9 +134,18 @@ export default function RunDetail({ setId, title, onClose }: Props) {
           <>
             <div className="w-full mt-4">
               {run.route && run.route.length > 0 ? (
-                <Suspense fallback={<MapPlaceholder label="Loading map…" />}>
-                  <RouteMap route={run.route} interactive className={MAP_BOX} />
-                </Suspense>
+                <ChunkBoundary
+                  label="route-map"
+                  fallback={retry => (
+                    <button onClick={retry} className="w-full">
+                      <MapPlaceholder label="Map didn't load — tap to retry" />
+                    </button>
+                  )}
+                >
+                  <Suspense fallback={<MapPlaceholder label="Loading map…" />}>
+                    <RouteMap route={run.route} interactive className={MAP_BOX} />
+                  </Suspense>
+                </ChunkBoundary>
               ) : (
                 <MapPlaceholder
                   label={run.source === 'manual'

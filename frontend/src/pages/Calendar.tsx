@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
@@ -7,10 +7,12 @@ import SwipeActions from '../components/SwipeActions'
 import SetEditSheet from '../components/workout/SetEditSheet'
 import ExerciseSetsSheet from '../components/workout/ExerciseSetsSheet'
 import { workoutService } from '../services/workout.service'
+import ChunkBoundary from '../components/ChunkBoundary'
+import { lazyRetry } from '../lib/lazyRetry'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
 // the calendar itself must not cost a map.
-const RunDetail = lazy(() => import('../components/RunDetail'))
+const RunDetail = lazyRetry(() => import('../components/RunDetail'))
 //import { useFatigueStore } from '../store/useFatigueStore'
 
 const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -840,13 +842,35 @@ export default function Calendar() {
           same place, with the same exercise sheet still open. It is z-[70] so
           it covers that sheet rather than opening behind it. */}
       {openRun && (
-        <Suspense fallback={null}>
-          <RunDetail
-            setId={openRun.setId}
-            title={openRun.title}
-            onClose={() => setOpenRun(null)}
-          />
-        </Suspense>
+        // A failed chunk here used to take the whole calendar down with it.
+        // Closing the sheet is always the right escape, so the fallback is one.
+        <ChunkBoundary
+          label="run-detail"
+          fallback={retry => (
+            <div className="fixed inset-0 z-[70] bg-dark-900 flex flex-col items-center justify-center gap-3 px-8 text-center">
+              <p className="text-[15px] font-bold text-white">This run wouldn't open</p>
+              <p className="text-[12.5px] text-dark-300">The map failed to download. Nothing is lost.</p>
+              <div className="flex gap-2 mt-1">
+                <button onClick={retry}
+                  className="px-4 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold">
+                  Try again
+                </button>
+                <button onClick={() => setOpenRun(null)}
+                  className="px-4 py-2.5 rounded-btn border border-dark-600 bg-dark-800 text-dark-200 text-[13px] font-bold">
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+        >
+          <Suspense fallback={null}>
+            <RunDetail
+              setId={openRun.setId}
+              title={openRun.title}
+              onClose={() => setOpenRun(null)}
+            />
+          </Suspense>
+        </ChunkBoundary>
       )}
 
       {/* Rendered before SetEditSheet on purpose: both are z-[60], so DOM
