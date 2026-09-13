@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import BottomSheet from '../../components/BottomSheet'
 import PaceWheel from '../../components/PaceWheel'
 import { PacePlan, PaceUnit, clampTarget, targetForStep } from '../../lib/paceCoach'
 import { fmtTime } from './helpers'
@@ -101,25 +102,27 @@ export default function PaceSheet({
   const flattens = deltaSec !== 0 && preview[3] === preview[2]
 
   return (
-    // z-[60]: BottomNav is fixed at z-50 and would cover the Done button.
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-
-      <div
-        className="relative bg-dark-900 border-t border-dark-600 rounded-t-[22px] px-5 pt-4
-                   max-h-[88vh] overflow-y-auto"
-        style={{ paddingBottom: 'max(20px, var(--safe-bottom))' }}
-      >
-        <div className="w-10 h-1 rounded-full bg-dark-600 mx-auto mb-4" />
-
-        <div className="flex items-baseline justify-between mb-4">
-          <h2 className="text-[19px] font-extrabold">Pace plan</h2>
-          {currentPaceSec !== null && currentPaceSec > 0 && (
-            <span className="text-[12px] text-dark-300 tabular-nums">
-              now {fmtTime(currentPaceSec)} / km
-            </span>
-          )}
-        </div>
+    // The shared sheet, so the pace plan rises, drags shut from its grabber and
+    // sits over the nav exactly like every other sheet. It used to draw its own
+    // grabber and do nothing with it.
+    <BottomSheet
+      title="Pace plan"
+      subtitle={
+        currentPaceSec !== null && currentPaceSec > 0
+          ? `Now ${fmtTime(currentPaceSec)} / km`
+          : undefined
+      }
+      onClose={onClose}
+      footer={
+        <button
+          onClick={() => { onApply(draft); onClose() }}
+          className="w-full py-4 rounded-btn bg-brand-teal text-black text-[16px] font-extrabold
+                     active:scale-95 transition-transform"
+        >
+          Done
+        </button>
+      }
+    >
 
         {/* ── the unit ── */}
         <p className="text-[10.5px] tracking-wide text-dark-400 mb-1.5">CHANGE THE PACE EVERY</p>
@@ -164,7 +167,7 @@ export default function PaceSheet({
         />
 
         {/* ── what that actually means ── */}
-        <div className="mt-5 rounded-card border border-dark-600 bg-dark-800 px-4 py-3">
+        <div className="mt-5 rounded-card border border-dark-600 bg-dark-700 px-4 py-3">
           <div className="text-[10px] tracking-wide text-dark-400 mb-2">
             {deltaSec === 0 ? 'THE WHOLE SESSION' : `FIRST FOUR ${words.short.toUpperCase()}`}
           </div>
@@ -195,14 +198,6 @@ export default function PaceSheet({
           </p>
         </div>
 
-        <button
-          onClick={() => { onApply(draft); onClose() }}
-          className="w-full mt-5 py-4 rounded-btn bg-brand-teal text-black text-[16px] font-extrabold
-                     active:scale-95 transition-transform"
-        >
-          Done
-        </button>
-      </div>
-    </div>
+    </BottomSheet>
   )
 }

@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from 'react'
+import ModalPortal from './ModalPortal'
 
 /**
  * An iOS-style sheet that rises from the bottom edge.
@@ -10,11 +11,10 @@ import { ReactNode, useEffect, useRef, useState } from 'react'
  * animation and calls `onClose` when that finishes, so the parent must not
  * unmount it itself; clearing the state in `onClose` is the whole contract.
  *
- * `z-[60]`, per the rule in CLAUDE.md: `BottomNav` is `fixed z-50` and renders
- * after `<main>`, so at equal z-index it paints over a sheet that rises from
- * the same edge it is pinned to — which once ate a Save button whole. The scrim
- * covers the nav deliberately; a sheet is modal and leaving the nav lit and
- * tappable underneath is wrong regardless of the clipping.
+ * `z-[60]` over BottomNav's `z-50`, per the rule in CLAUDE.md, and through
+ * `ModalPortal` so that z-index is compared against the nav at all — see there.
+ * The scrim covers the nav deliberately; a sheet is modal and leaving the nav
+ * lit and tappable underneath is wrong regardless of the clipping.
  */
 
 /** Must match the `duration-*` classes below. */
@@ -29,10 +29,20 @@ interface Props {
   /** Small line under the title — a count, a date, a total. */
   subtitle?: ReactNode
   onClose: () => void
+  /**
+   * A pinned action row below the scroll area — a Save, a Done.
+   *
+   * Outside the scroller on purpose: a sheet whose only commit button is the
+   * last thing in a long form makes the athlete scroll to find out whether
+   * there is one, and the taller the form the worse it reads. The safe-area
+   * padding moves here when it is present, so the scroller does not also pad
+   * for a home indicator this now covers.
+   */
+  footer?: ReactNode
   children: ReactNode
 }
 
-export default function BottomSheet({ title, subtitle, onClose, children }: Props) {
+export default function BottomSheet({ title, subtitle, onClose, footer, children }: Props) {
   // `entered` drives the rise; `leaving` drives the fall. Starting at false and
   // flipping on the next frame is what gives the browser a "from" to animate
   // out of — set in the same paint and it simply appears.
@@ -161,9 +171,10 @@ export default function BottomSheet({ title, subtitle, onClose, children }: Prop
   const translate = hidden ? '100%' : `${Math.max(0, dragY)}px`
 
   return (
-    // `data-no-page-swipe`: the scrim sits inside `<main>`, so without this a
-    // sideways drag across it would slide the whole app to another tab behind
-    // an open sheet.
+    <ModalPortal>
+    {/* `data-no-page-swipe`: React events still bubble to AppLayout through the
+        React tree, so without this a sideways drag across the scrim would slide
+        the whole app to another tab behind an open sheet. */}
     <div className="fixed inset-0 z-[60] flex items-end" data-no-page-swipe>
       <div
         onClick={close}
@@ -227,12 +238,21 @@ export default function BottomSheet({ title, subtitle, onClose, children }: Prop
           onPointerMove={onDragMove}
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
-          className="overflow-y-auto px-5 pt-4 pb-[calc(1.25rem+var(--safe-bottom))]"
+          className={`overflow-y-auto px-5 pt-4
+                      ${footer ? 'pb-5' : 'pb-[calc(1.25rem+var(--safe-bottom))]'}`}
           style={{ overscrollBehavior: 'contain' }}
         >
           {children}
         </div>
+
+        {footer && (
+          <div className="flex-shrink-0 border-t border-dark-700 px-5 pt-3
+                          pb-[calc(1.25rem+var(--safe-bottom))]">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
+    </ModalPortal>
   )
 }

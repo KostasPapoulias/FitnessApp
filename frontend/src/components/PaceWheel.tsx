@@ -70,7 +70,11 @@ export default function PaceWheel<T extends string | number>({
   useEffect(() => () => { if (settle.current !== null) window.clearTimeout(settle.current) }, [])
 
   return (
-    <div className="relative" style={{ height: HEIGHT }} role="listbox" aria-label={ariaLabel}>
+    // `data-no-page-swipe`: this is a vertical scroller inside a sheet that
+    // dismisses on a downward drag of its own content, so without the opt-out
+    // every spin of the wheel also pulls the sheet shut.
+    <div className="relative" style={{ height: HEIGHT }} role="listbox" aria-label={ariaLabel}
+         data-no-page-swipe>
       {/* The selection band, behind the numbers and ignoring taps so it can
           never eat a scroll that was meant for the list. */}
       <div

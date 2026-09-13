@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import BottomSheet from '../components/BottomSheet'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
@@ -306,27 +307,21 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
   }
 
   return (
-    // Above BottomNav's z-50, not level with it. A sheet rises from the bottom
-    // of the screen and the nav is fixed to that same edge, so at equal z the
-    // nav — rendered after <main> — painted over the footer and swallowed the
-    // Save button whole. A modal belongs over the nav in any case: the scrim
-    // covers it, so it should not stay lit and tappable underneath.
-    <div className="fixed inset-0 z-[60] flex items-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
-                      rounded-t-2xl border-t border-dark-600
-                      max-h-[92dvh] flex flex-col">
-
-        {/* Sticky so the title and close stay reachable on a long scroll. */}
-        <div className="flex justify-between items-center px-5 pt-4 pb-3
-                        border-b border-dark-700 flex-shrink-0">
-          <h2 className="text-white text-lg font-bold">Edit Profile</h2>
-          <button onClick={onClose}
-                  className="text-dark-400 text-2xl leading-none w-8 h-8
-                             flex items-center justify-center -mr-2">×</button>
-        </div>
-
-        <div className="overflow-y-auto px-5 py-5 flex flex-col gap-5">
+    // The shared sheet, so this rises, drags shut and sits over the nav the
+    // same way every other sheet in the app does.
+    <BottomSheet
+      title="Edit Profile"
+      onClose={onClose}
+      footer={
+        <button onClick={save} disabled={!valid}
+          className="w-full bg-brand-teal text-black font-bold py-3.5
+                     rounded-btn active:scale-95 transition-transform
+                     disabled:opacity-40">
+          Save Changes
+        </button>
+      }
+    >
+        <div className="flex flex-col gap-5">
 
           <div>
             <label className="text-dark-300 text-xs mb-1.5 block">Name</label>
@@ -401,18 +396,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
                        unit="yrs" placeholder="2.5" limits={LIMITS.years} decimal />
         </div>
 
-        {/* Outside the scroll area so Save is always reachable. */}
-        <div className="px-5 pt-3 pb-[calc(1.25rem+1rem+var(--safe-bottom))]
-                        border-t border-dark-700 flex-shrink-0">
-          <button onClick={save} disabled={!valid}
-            className="w-full bg-brand-teal text-black font-bold py-3.5
-                       rounded-btn active:scale-95 transition-transform
-                       disabled:opacity-40">
-            Save Changes
-          </button>
-        </div>
-      </div>
-    </div>
+    </BottomSheet>
   )
 }
 
@@ -424,15 +408,22 @@ function LogSleepModal({ onSave, onClose }: {
   const [score, setScore]   = useState(75)
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
-                      rounded-t-2xl border-t border-dark-600 p-5 pb-20">
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-white text-lg font-bold">Log Sleep</h2>
-          <button onClick={onClose} className="text-dark-400 text-2xl leading-none">×</button>
-        </div>
-
+    <BottomSheet
+      title="Log Sleep"
+      onClose={onClose}
+      footer={
+        <button
+          onClick={() => onSave({
+            sleepDate:   new Date().toISOString().split('T')[0],
+            durationMin: hours * 60,
+            sleepScore:  score
+          })}
+          className="w-full bg-brand-teal text-black font-bold py-4
+                     rounded-btn active:scale-95 transition-transform">
+          Save Sleep Log
+        </button>
+      }
+    >
         <div className="flex flex-col gap-5">
           {/* Hours */}
           <div>
@@ -440,7 +431,7 @@ function LogSleepModal({ onSave, onClose }: {
               <label className="text-dark-300 text-sm">Duration</label>
               <span className="text-white font-bold">{hours}h</span>
             </div>
-            <input type="range" min="1" max="12" value={hours}
+            <input type="range" data-no-page-swipe min="1" max="12" value={hours}
               onChange={e => setHours(Number(e.target.value))}
               className="w-full accent-brand-teal" />
             <div className="flex justify-between text-dark-500 text-xs mt-1">
@@ -454,27 +445,15 @@ function LogSleepModal({ onSave, onClose }: {
               <label className="text-dark-300 text-sm">Sleep Quality</label>
               <span className="text-white font-bold">{score}%</span>
             </div>
-            <input type="range" min="0" max="100" value={score}
+            <input type="range" data-no-page-swipe min="0" max="100" value={score}
               onChange={e => setScore(Number(e.target.value))}
               className="w-full accent-brand-teal" />
             <div className="flex justify-between text-dark-500 text-xs mt-1">
               <span>Poor</span><span>Excellent</span>
             </div>
           </div>
-
-          <button
-            onClick={() => onSave({
-              sleepDate:   new Date().toISOString().split('T')[0],
-              durationMin: hours * 60,
-              sleepScore:  score
-            })}
-            className="w-full bg-brand-teal text-black font-bold py-4
-                       rounded-btn active:scale-95 transition-transform">
-            Save Sleep Log
-          </button>
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   )
 }
 
@@ -486,22 +465,29 @@ function LogNutritionModal({ onSave, onClose }: {
   const [calories, setCalories] = useState(2500)
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-[430px] mx-auto bg-dark-800
-                      rounded-t-2xl border-t border-dark-600 p-5 pb-20">
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-white text-lg font-bold">Log Nutrition</h2>
-          <button onClick={onClose} className="text-dark-400 text-2xl leading-none">×</button>
-        </div>
-
+    <BottomSheet
+      title="Log Nutrition"
+      onClose={onClose}
+      footer={
+        <button
+          onClick={() => onSave({
+            logDate:  new Date().toISOString().split('T')[0],
+            proteinG: protein,
+            calories
+          })}
+          className="w-full bg-brand-teal text-black font-bold py-4
+                     rounded-btn active:scale-95 transition-transform">
+          Save Nutrition Log
+        </button>
+      }
+    >
         <div className="flex flex-col gap-5">
           <div>
             <div className="flex justify-between mb-2">
               <label className="text-dark-300 text-sm">Protein</label>
               <span className="text-white font-bold">{protein}g</span>
             </div>
-            <input type="range" min="0" max="300" value={protein}
+            <input type="range" data-no-page-swipe min="0" max="300" value={protein}
               onChange={e => setProtein(Number(e.target.value))}
               className="w-full accent-brand-teal" />
           </div>
@@ -511,25 +497,14 @@ function LogNutritionModal({ onSave, onClose }: {
               <label className="text-dark-300 text-sm">Calories</label>
               <span className="text-white font-bold">{calories} kcal</span>
             </div>
-            <input type="range" min="500" max="5000" step="50"
+            <input type="range" data-no-page-swipe min="500" max="5000" step="50"
               value={calories}
               onChange={e => setCalories(Number(e.target.value))}
               className="w-full accent-brand-teal" />
           </div>
 
-          <button
-            onClick={() => onSave({
-              logDate:  new Date().toISOString().split('T')[0],
-              proteinG: protein,
-              calories
-            })}
-            className="w-full bg-brand-teal text-black font-bold py-4
-                       rounded-btn active:scale-95 transition-transform">
-            Save Nutrition Log
-          </button>
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   )
 }
 

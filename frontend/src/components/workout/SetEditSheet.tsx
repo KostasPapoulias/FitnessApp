@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ModalPortal from '../ModalPortal'
 import { INPUT_BASE } from '../forms/Fields'
 import { workoutService } from '../../services/workout.service'
 
@@ -86,7 +87,8 @@ export default function SetEditSheet({ set, exerciseName, onSaved, onClose }: Pr
   }
 
   return (
-    <div className={`fixed inset-0 ${SHEET_Z} flex items-end`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${SHEET_Z} flex items-end`} data-no-page-swipe>
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
 
       <div className="relative w-full max-w-[430px] mx-auto bg-dark-800 border-t border-dark-600
@@ -191,5 +193,6 @@ export default function SetEditSheet({ set, exerciseName, onSaved, onClose }: Pr
         </div>
       </div>
     </div>
+    </ModalPortal>
   )
 }
