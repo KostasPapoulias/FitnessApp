@@ -26,6 +26,14 @@ export default defineConfig({
       changeOrigin: true,
       secure: true,
     },
+    // Exercise animations live on the backend; the thumbnails are in this
+    // app's own public/ and need no proxy. Mirrors the Netlify rewrite in
+    // netlify.toml so the same relative URL works in dev and in production.
+    '/exercise-media': {
+      target: 'https://fitnessapp-production-29e7.up.railway.app',
+      changeOrigin: true,
+      secure: true,
+    },
   },
 },
   // MapLibre parses vector tiles in a worker and creates it as a module worker.

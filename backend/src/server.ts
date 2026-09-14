@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import path from 'path';
 import cors from 'cors';
 import 'dotenv/config';
 import dotenv from 'dotenv';
@@ -69,6 +70,40 @@ app.use(cors({
 }));
 app.use(express.json());
 //app.use(express.urlencoded({ extended: true }));
+
+// Exercise ANIMATIONS — `public/exercises/<stem>.gif`, where the stem is the
+// id the catalogue stores. 215 files, ~20 MB, ~95 KB each.
+//
+// The thumbnails are NOT here: they live in the frontend's own `public/` and
+// are served from its origin. They are 6.5 KB each and the exercise list asks
+// for one per row, so they have to be instant and available offline; the
+// animations are ~15× larger and are fetched only when someone actually opens
+// an exercise, so paying a round trip for one is fine.
+//
+// `/exercise-media` rather than `/exercises`, because the frontend now owns
+// that path for the thumbnails — same path on two origins would mean the
+// Netlify proxy rule that fronts this one could not be written without
+// shadowing the local files.
+//
+// Mounted BEFORE the /api rate limiter and outside /api entirely, and both
+// matter: sw.js refuses to cache /api/* on purpose — a stale readiness score
+// is a lie — so media served from under /api could never be cached either,
+// when it is the one thing in the app that should be. These bytes are
+// immutable: the filename contains the content id, so a different animation
+// is a different stem and a cached one can never be wrong.
+app.use(
+  '/exercise-media',
+  express.static(path.join(__dirname, '..', 'public', 'exercises'), {
+    maxAge: '365d',
+    immutable: true,
+    // Fallthrough stays ON (the default). `fallthrough: false` looks tidier —
+    // nothing under /exercises is ever an API route — but it hands the miss to
+    // `next(err)` with an ENOENT, and the error handler at the bottom of this
+    // file answers 500 and reports to Sentry. One stale client asking for one
+    // deleted stem would then alert, repeatedly, on a missing picture. A miss
+    // falls through to the ordinary 404 instead.
+  })
+);
 
 // Health check
 app.get('/health', (_req: Request, res: Response) => {

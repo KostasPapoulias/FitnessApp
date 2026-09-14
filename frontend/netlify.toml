@@ -2,6 +2,21 @@
   command = "npm run build"
   publish = "dist"
 
+# Exercise animations, proxied to the backend rather than fetched from it.
+#
+# Status 200 rather than 301: it rewrites, so the browser never sees the Railway
+# origin and the GIFs count as same-origin. That is the whole point — sw.js only
+# caches same-origin requests, and a gym is a basement.
+#
+# MUST stay above the SPA catch-all below. Netlify applies the first matching
+# rule, so under it every .gif would be answered with index.html and every
+# animation would render as a broken image with a 200 status.
+[[redirects]]
+  from = "/exercise-media/*"
+  to = "https://fitnessapp-production-29e7.up.railway.app/exercise-media/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

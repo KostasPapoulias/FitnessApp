@@ -97,8 +97,27 @@ const CACHEABLE_ROOT_FILES = [
   '/icon-maskable-512.png',
 ]
 
+/**
+ * Exercise artwork, cached like a built asset and for the same reason.
+ *
+ * `/exercises/` is this app's own public/ — one 6.5 KB thumbnail per row of the
+ * exercise list. `/exercise-media/` is proxied to the backend by netlify.toml,
+ * which is what makes the animations same-origin and therefore cacheable at
+ * all; fetched straight from Railway they would fail the origin check above and
+ * this worker would never see them.
+ *
+ * Both are safe to cache forever because the filename contains the content id:
+ * a different image is a different name, so a cached one can never be stale.
+ * That is also why they are not in the shell cache's version bump — evicting
+ * them on every deploy would re-download artwork that cannot have changed.
+ */
+const isExerciseMedia = (url) =>
+  url.pathname.startsWith('/exercises/') || url.pathname.startsWith('/exercise-media/')
+
 const isBuiltAsset = (url) =>
-  url.pathname.startsWith('/assets/') || CACHEABLE_ROOT_FILES.includes(url.pathname)
+  url.pathname.startsWith('/assets/') ||
+  CACHEABLE_ROOT_FILES.includes(url.pathname) ||
+  isExerciseMedia(url)
 
 self.addEventListener('fetch', (event) => {
   const { request } = event
