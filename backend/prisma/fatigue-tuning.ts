@@ -53,129 +53,200 @@ export const MODALITY_DAMAGE: Record<string, number> = {
 //     anything, and would otherwise be scored like a set of squats.
 export const DAMAGE_OVERRIDES: Record<string, number> = {
   // ── Strength: hinges and heavy eccentrics ──────────────────────────────
-  'Good Morning': 1.4,
-  'Romanian Deadlift': 1.4,
+  'Barbell Good Morning': 1.4,
+  'Barbell Romanian Deadlift': 1.4,
   'Dumbbell Romanian Deadlift': 1.35,
-  'Single-Leg Romanian Deadlift': 1.3,
-  'Deadlift': 1.3,
-  'Sumo Deadlift': 1.25,
+  'Dumbbell Single Leg Deadlift': 1.3,
+  'Barbell Deadlift': 1.3,
+  'Barbell Sumo Deadlift': 1.25,
   'Trap Bar Deadlift': 1.2,
-  'Rack Pull': 1.1,
-  'Ab Wheel Rollout': 1.3,
-  'Bulgarian Split Squat': 1.25,
-  'Dumbbell Walking Lunge': 1.25,
-  'Barbell Reverse Lunge': 1.2,
-  'Dumbbell Step-up': 1.15,
-  'Barbell Back Squat': 1.2,
-  'Front Squat': 1.2,
+  'Barbell Rack Pull': 1.1,
+  'Wheel Rollerout': 1.3,
+  'Split Squats': 1.25,
+  'Dumbbell Lunge': 1.25,
+  'Barbell Lunge': 1.2,
+  'Dumbbell Step-Up': 1.15,
+  'Barbell Full Squat': 1.2,
+  'Barbell Front Squat': 1.2,
   'Dumbbell Fly': 1.2,
-  'Incline Dumbbell Curl': 1.2,          // biceps at full stretch
-  'Dumbbell Overhead Tricep Extension': 1.2,
-  'Cable Overhead Tricep Extension': 1.15,
-  'Skull Crusher': 1.15,
-  'Preacher Curl': 1.15,
-  'Seated Leg Curl': 1.2,                // hamstrings at a longer length
-  'Lying Leg Curl': 1.15,
-  'Standing Calf Raise': 1.15,
-  'Smith Machine Calf Raise': 1.15,
-  'Seated Calf Raise': 1.1,
-  'Back Extension': 1.15,
-  'Weighted Dip': 1.15,
+  'Dumbbell Incline Curl': 1.2,          // biceps at full stretch
+  'Dumbbell Decline Triceps Extension': 1.2,
+  'Cable Overhead Triceps Extension (Rope Attachment)': 1.15,
+  'Barbell Lying Triceps Extension Skull Crusher': 1.15,
+  'Barbell Preacher Curl': 1.15,
+  'Lever Seated Leg Curl': 1.2,                // hamstrings at a longer length
+  'Lever Lying Leg Curl': 1.15,
+  'Lever Standing Calf Raise': 1.15,
+  'Smith Reverse Calf Raises': 1.15,
+  'Lever Seated Calf Raise': 1.1,
+  'Lever Back Extension': 1.15,
+  'Weighted Bench Dip': 1.15,
   'Dumbbell Pullover': 1.15,
-  'Incline Dumbbell Press': 1.1,
+  'Dumbbell Incline Bench Press': 1.1,
 
   // ── Strength: supported, machine-guided or short-range ─────────────────
-  'Leg Press': 0.85,
-  'Hip Abduction Machine': 0.85,
-  'Face Pull': 0.85,
-  'Dumbbell Tricep Kickback': 0.85,
-  'Hack Squat': 0.9,
-  'Machine Chest Press': 0.9,
-  'Machine Chest Fly': 0.9,
-  'Smith Machine Bench Press': 0.9,
-  'Cable Crossover': 0.9,
-  'Cable Chest Press': 0.9,
-  'Lat Pulldown': 0.9,
-  'Straight-Arm Pulldown': 0.9,
-  'Seated Cable Row': 0.9,
-  'Machine Row': 0.9,
-  'Chest-Supported Dumbbell Row': 0.9,
-  'Machine Shoulder Press': 0.9,
-  'Smith Machine Shoulder Press': 0.9,
-  'Machine Lateral Raise': 0.9,
-  'Reverse Pec Deck': 0.9,
-  'Machine Tricep Extension': 0.9,
-  'Machine Ab Crunch': 0.9,
-  'Cable Glute Kickback': 0.9,
-  'Wrist Curl': 0.9,
-  'Smith Machine Squat': 0.95,
-  'Machine Preacher Curl': 0.95,
-  'Decline Bench Press': 0.95,
+  'Sled 45в° Leg Press': 0.85,
+  'Lever Seated Hip Abduction': 0.85,
+  'Cable Rear Delt Row (Stirrups)': 0.85,
+  'Dumbbell Kickback': 0.85,
+  'Sled Hack Squat': 0.9,
+  'Machine Inner Chest Press': 0.9,
+  'Lever Seated Fly': 0.9,
+  'Smith Bench Press': 0.9,
+  'Cable Low Fly': 0.9,
+  'Cable Seated Chest Press': 0.9,
+  'Cable Pulldown': 0.9,
+  'Cable Straight Arm Pulldown': 0.9,
+  'Cable Seated Row': 0.9,
+  'Lever Seated Row': 0.9,
+  'Dumbbell Incline Row': 0.9,
+  'Lever Shoulder Press': 0.9,
+  'Smith Shoulder Press': 0.9,
+  'Lever Lateral Raise': 0.9,
+  'Lever Seated Reverse Fly': 0.9,
+  'Lever Triceps Extension': 0.9,
+  'Lever Seated Crunch': 0.9,
+  'Cable Kickback': 0.9,
+  'Dumbbell Reverse Wrist Curl': 0.9,
+  'Smith Squat': 0.95,
+  'Lever Preacher Curl': 0.95,
+  'Barbell Decline Bench Press': 0.95,
 
   // ── Strength: braced, not moved ────────────────────────────────────────
-  'Pallof Press': 0.7,
-  "Farmer's Carry": 0.8,
+  'Band Horizontal Pallof Press': 0.7,
+  'Farmers Walk': 0.8,
 
   // ── Calisthenics ───────────────────────────────────────────────────────
-  'Nordic Curl': 1.5,          // almost pure eccentric
+  'Inverse Leg Curl (Bench Support)': 1.5,          // almost pure eccentric
   'Jump Squat': 1.35,
-  'Pistol Squat': 1.2,
+  'Kettlebell Pistol Squat': 1.2,
   'Walking Lunge': 1.2,
-  'Muscle-up': 1.15,
-  'Ring Dip': 1.15,
-  'Archer Push-up': 1.1,
-  'Decline Push-up': 1.05,
-  'Bench Dip': 1.05,
-  'Ring Row': 0.95,
-  'Hanging Knee Raise': 0.9,
-  'Glute Bridge': 0.8,
-  'Bicycle Crunch': 0.8,
+  'Muscle Up': 1.15,
+  'Ring Dips': 1.15,
+  'Archer Push Up': 1.1,
+  'Decline Push-Up': 1.05,
+  'Bench Dip (Knees Bent)': 1.05,
+  'Inverted Row': 0.95,
+  'Hanging Oblique Knee Raise': 0.9,
+  'Glute Bridge March': 0.8,
+  'Air Bike': 0.8,
   'Dead Bug': 0.6,
   // Isometric holds fatigue without much mechanical damage
-  'Plank': 0.7,
-  'Side Plank': 0.7,
-  'Hollow Body Hold': 0.7,
-  'L-Sit Hold': 0.7,
-  'Wall Sit': 0.7,
+  'Weighted Front Plank': 0.7,
+  'Bodyweight Incline Side Plank': 0.7,
+  'L-Sit On Floor': 0.7,
 
   // ── Cardio ─────────────────────────────────────────────────────────────
   // The headline fix. Weight-bearing, impact-heavy work damages legs far more
   // per minute than smooth, supported work.
-  'Sprints': 1.5,              // near-maximal speed, and where hamstrings tear
+  'Wind Sprints': 1.5,              // near-maximal speed, and where hamstrings tear
   'Jump Rope': 1.1,
-  'Running': 1.0,
-  'Jumping Jacks': 0.7,
-  'Hiking': 0.9,
-  'Stair Climber': 0.7,
-  'Walking': 0.55,
-  'Rowing': 0.5,
-  'Elliptical': 0.5,
-  'Air Bike': 0.5,
+  'Run': 1.0,
+  'Walking On Stepmill': 0.7,
+  'Walking': 0.5,                   // flat ground, no incline to push against
+  'Walking On Incline Treadmill': 0.55,
+  'Walk Elliptical Cross Trainer': 0.5,
   'Cycling': 0.45,
-  'Swimming': 0.3,
+  'Cycle Cross Trainer': 0.45,
 
   // ── WOD ────────────────────────────────────────────────────────────────
   // Landings and explosive triple extension are hard on tissue.
   'Box Jump': 1.5,
   'Power Clean': 1.25,
-  'Snatch': 1.25,
+  'Snatch Pull': 1.25,
   'Devil Press': 1.25,
   'Burpee': 1.2,
   'Clean and Jerk': 1.2,
-  'Overhead Squat': 1.2,
-  'Thruster': 1.15,
+  'Barbell Overhead Squat': 1.2,
+  'Barbell Thruster': 1.15,
   'Wall Ball': 1.15,
-  'Dumbbell Snatch': 1.15,
-  'Kettlebell Snatch': 1.15,
-  'Handstand Push-up': 1.15,
+  'Dumbbell One Arm Snatch': 1.15,
+  'Kettlebell Double Snatch': 1.15,
+  'Handstand Push-Up': 1.15,
   'Kettlebell Swing': 1.1,
-  'Kettlebell Clean': 1.1,
+  'Kettlebell Hang Clean': 1.1,
   'Double Under': 1.1,
   'Wall Walk': 1.1,
   // Concentric-only: the sled has no lowering phase and the ropes never
   // resist you, so both cost far less tissue than the effort suggests.
   'Battle Rope Waves': 0.8,
   'Sled Push': 0.8,
+
+  // ── Imported: hinges, lunges and stretched positions ──
+  'Barbell Straight Leg Deadlift': 1.4,   // stiff-legged, so the hamstrings take the whole range
+  'Barbell Seated Good Morning': 1.3,   // no hip hinge to share the load — it is all spinal
+  'Barbell Single Leg Deadlift': 1.3,
+  'Dumbbell Deadlift': 1.25,
+  'Barbell Lateral Lunge': 1.2,   // adductors under load at length
+  'Barbell Rear Lunge': 1.2,
+  'Dumbbell Decline Fly': 1.2,
+  'Dumbbell Incline Fly': 1.2,
+  'Dumbbell Incline Biceps Curl': 1.2,
+  'Dumbbell Incline Hammer Curl': 1.2,
+  'Dumbbell Incline Triceps Extension': 1.2,
+  'Barbell Wide Squat': 1.15,
+  'Barbell Step-Up': 1.15,
+  'Barbell Lying Triceps Extension': 1.15,
+  'Barbell Decline Close Grip To Skull Press': 1.15,
+  'Barbell Lying Preacher Curl': 1.15,
+  'Barbell Reverse Preacher Curl': 1.15,
+  'Dumbbell Alternate Preacher Curl': 1.15,
+  'Dumbbell Alternate Hammer Preacher Curl': 1.15,
+  'Dumbbell Lying Single Extension': 1.15,
+  'Dumbbell Standing Calf Raise': 1.15,
+  'Barbell Seated Calf Raise': 1.1,
+  'Barbell Jm Bench Press': 1.1,
+  'Barbell Bench Front Squat': 1.1,
+  'Dumbbell Incline Alternate Press': 1.1,
+  'Dumbbell Incline Hammer Press': 1.1,
+  'Dumbbell Incline Raise': 1.1,
+  'Barbell Wide Bench Press': 1.05,
+  'Dumbbell Incline Rear Lateral Raise': 1.05,
+
+  // ── Imported: supported, guided or short-range ──
+  'Barbell Rear Delt Row': 0.95,
+  'Barbell Reverse Grip Bent Over Row': 0.95,
+  'Cable Incline Fly': 0.95,
+  'Barbell Glute Bridge': 0.9,   // short range and the floor stops it
+  'Barbell Incline Row': 0.9,   // chest-supported
+  'Barbell Reverse Wrist Curl': 0.9,
+  'Cable Bench Press': 0.9,
+  'Cable Incline Bench Press': 0.9,
+  'Cable Reverse Crunch': 0.9,
+  'Cable Underhand Pulldown': 0.9,
+  'Dumbbell Decline Shrug': 0.9,
+  'Dumbbell Incline Shrug': 0.9,
+  'Dumbbell Incline Shoulder Raise': 0.9,
+  'Lever Chest Press': 0.9,
+  'Smith Shrug': 0.9,
+  'Dumbbell One Arm Kickback': 0.85,
+  'Lever Seated Hip Adduction': 0.85,
+
+  // ── Imported: Calisthenics ──
+  'Single Leg Squat (Pistol) Male': 1.2,
+  'Chest Dip': 1.15,   // deep stretch at the bottom, and the whole bodyweight on it
+  'Triceps Dip': 1.1,
+  'Hyperextension': 1.1,   // spinal erectors through a full eccentric
+  'Diamond Push-Up': 1.05,
+  'Pike-To-Cobra Push-Up': 1.05,
+  'Hanging Leg Raise': 0.95,
+  'Decline Sit-Up': 0.9,
+  'Sit-Up With Arms On Chest': 0.85,
+  'Lying Leg Raise Flat Bench': 0.85,
+  'Russian Twist': 0.8,
+  'Crunch Floor': 0.7,   // a few inches of spinal flexion, and nothing lengthens
+
+  // ── Imported: Cardio ──
+  'Skater Hops': 1.2,   // lateral bounding — landings, and on one leg
+  'Bear Crawl': 0.9,
+  'High Knee Against Wall': 0.9,
+  'Short Stride Run': 0.9,   // shorter stride, softer landings than Run
+  'Mountain Climber': 0.85,
+  'Stationary Bike Walk': 0.45,   // supported and with no eccentric, like the other bikes
+
+  // ── Imported: WOD ──
+  'Kettlebell Turkish Get Up (Squat Style)': 1.1,
+  'Toes-to-Bar': 1.1,
 }
 
 // Typical speed for distance-based activities, used to turn distance covered
@@ -183,15 +254,15 @@ export const DAMAGE_OVERRIDES: Record<string, number> = {
 // listed (jump rope, the stair climber, and every non-cardio movement) is
 // scored on duration.
 export const REFERENCE_SPEED_KMH: Record<string, number> = {
-  Sprints: 20,
-  Running: 10,
-  Walking: 5,
-  Hiking: 4.5,
-  Cycling: 25,
-  'Air Bike': 28,
-  Rowing: 12,
-  Elliptical: 10,
-  Swimming: 3,
+  'Wind Sprints': 20,
+  'Cycling': 25,                    // outdoors, on the road
+  'Cycle Cross Trainer': 25,
+  'Stationary Bike Walk': 18,     // the console's "walk" programme, not a ride
+  'Walk Elliptical Cross Trainer': 10,
+  'Run': 10,
+  'Short Stride Run': 8.5,        // deliberately shorter stride: recovery pace
+  'Walking': 5,                     // outdoors, on the flat
+  'Walking On Incline Treadmill': 5,
 }
 
 // What measures a cardio movement's work, which decides the whole shape of the
@@ -207,23 +278,32 @@ export const REFERENCE_SPEED_KMH: Record<string, number> = {
 // athlete standing on it. Deriving one from the other means a calibration
 // change silently removes a map.
 export const CARDIO_TRACKING: Record<string, 'gps' | 'machine' | 'reps'> = {
-  Running: 'gps',
-  Sprints: 'gps',
-  Walking: 'gps',
-  Hiking: 'gps',
-  Cycling: 'gps',
+  // Outdoors, and the phone can follow it.
+  'Run': 'gps',
+  'Short Stride Run': 'gps',
+  'Wind Sprints': 'gps',
+  'Walking': 'gps',
+  'Cycling': 'gps',
 
-  // Indoor, fixed, or in water. All have a pace; none can be followed.
-  Rowing: 'machine',
-  Elliptical: 'machine',
-  'Air Bike': 'machine',
-  Swimming: 'machine',
+  // Indoor and fixed. All have a pace; none can be followed. The two cross
+  // trainers and the treadmill are machines the athlete stands on — they had
+  // been carried over as 'gps' from the outdoor movements they replaced, which
+  // would have drawn a map of somebody standing still.
+  'Cycle Cross Trainer': 'machine',
+  'Stationary Bike Walk': 'machine',
+  'Walk Elliptical Cross Trainer': 'machine',
+  'Walking On Incline Treadmill': 'machine',
 
-  // No kilometre exists at any effort, which is why neither appears in
-  // REFERENCE_SPEED_KMH either.
+  // No kilometre exists at any effort, so the work is counted instead. These
+  // matter more than they look: 'gps' is the fallback for anything unlisted,
+  // so leaving a floor movement out opens a map and waits for a fix that is
+  // never going to move.
   'Jump Rope': 'reps',
-  'Stair Climber': 'reps',
-  'Jumping Jacks': 'reps',
+  'Walking On Stepmill': 'reps',
+  'Mountain Climber': 'reps',
+  'High Knee Against Wall': 'reps',
+  'Skater Hops': 'reps',
+  'Bear Crawl': 'reps',
 }
 
 // Counts per minute at a typical continuous effort — the counting twin of
@@ -237,18 +317,26 @@ export const REFERENCE_CADENCE_RPM: Record<string, number> = {
   // the same minute, which is exactly the discount the density term should
   // apply — they are not twice the work.
   'Jump Rope': 110,
-  'Jumping Jacks': 50,
   // Floors, as the console reports them. Nobody counts steps, and the number
   // on the machine is the one an athlete can actually enter.
-  'Stair Climber': 6,
+  'Walking On Stepmill': 6,
+  // Counted per limb touching down, which is how anyone says it out loud.
+  'Mountain Climber': 90,
+  'High Knee Against Wall': 100,
+  'Skater Hops': 60,
+  // Paces, not hands: a crawl is counted the way a carry is.
+  'Bear Crawl': 40,
 }
 
 // What the count is called out loud and on screen. Wording only — the model
 // never reads it.
 export const REP_UNITS: Record<string, string> = {
   'Jump Rope': 'skips',
-  'Stair Climber': 'floors',
-  'Jumping Jacks': 'reps',
+  'Walking On Stepmill': 'floors',
+  'Mountain Climber': 'reps',
+  'High Knee Against Wall': 'reps',
+  'Skater Hops': 'hops',
+  'Bear Crawl': 'paces',
 }
 
 // Working load for a set of ~10 reps, as a FRACTION OF BODYWEIGHT, for a
@@ -266,107 +354,175 @@ export const REP_UNITS: Record<string, string> = {
 // at roughly a third of the barbell number for the same effort.
 export const LOAD_FACTORS: Record<string, number> = {
   // ── Chest ──────────────────────────────────────────────────────────────
-  'Decline Bench Press': 0.95,
-  'Bench Press': 0.90,
-  'Smith Machine Bench Press': 0.85,
-  'Machine Chest Press': 0.80,
-  'Incline Bench Press': 0.75,
-  'Close-Grip Bench Press': 0.70,
-  'Machine Chest Fly': 0.45,
+  'Barbell Decline Bench Press': 0.95,
+  'Barbell Bench Press': 0.90,
+  'Smith Bench Press': 0.85,
+  'Machine Inner Chest Press': 0.80,
+  'Barbell Incline Bench Press': 0.75,
+  'Barbell Close-Grip Bench Press': 0.70,
+  'Lever Seated Fly': 0.45,
   'Dumbbell Bench Press': 0.32,   // per hand
-  'Incline Dumbbell Press': 0.28, // per hand
+  'Dumbbell Incline Bench Press': 0.28, // per hand
   'Dumbbell Pullover': 0.28,      // one bell, both hands
-  'Cable Chest Press': 0.28,      // per side
-  'Cable Crossover': 0.22,        // per side
-  'Weighted Dip': 0.20,           // added load, not bodyweight
+  'Cable Seated Chest Press': 0.28,      // per side
+  'Cable Low Fly': 0.22,        // per side
+  'Weighted Bench Dip': 0.20,           // added load, not bodyweight
   'Dumbbell Fly': 0.16,           // per hand
 
   // ── Back ───────────────────────────────────────────────────────────────
-  'Rack Pull': 1.60,              // partial range, so heavier than the pull
+  'Barbell Rack Pull': 1.60,              // partial range, so heavier than the pull
   'Trap Bar Deadlift': 1.35,
-  'Deadlift': 1.30,
-  'Sumo Deadlift': 1.25,
+  'Barbell Deadlift': 1.30,
+  'Barbell Sumo Deadlift': 1.25,
   'Barbell Shrug': 1.00,
-  'Lat Pulldown': 0.75,
-  'Machine Row': 0.75,
-  'Seated Cable Row': 0.75,
-  'Barbell Row': 0.70,
-  'T-Bar Row': 0.65,
-  'Pendlay Row': 0.65,
+  'Cable Pulldown': 0.75,
+  'Lever Seated Row': 0.75,
+  'Cable Seated Row': 0.75,
+  'Barbell Bent Over Row': 0.70,
+  'Lever T Bar Row': 0.65,
+  'Barbell Pendlay Row': 0.65,
   'Dumbbell Shrug': 0.45,         // per hand
-  'Bent-Over Dumbbell Row': 0.35, // per hand
-  'Straight-Arm Pulldown': 0.30,
-  'Chest-Supported Dumbbell Row': 0.30, // per hand; no body english to help
-  'Back Extension': 0.20,         // held at the chest
+  'Dumbbell Bent Over Row': 0.35, // per hand
+  'Cable Straight Arm Pulldown': 0.30,
+  'Dumbbell Incline Row': 0.30, // per hand; no body english to help
+  'Lever Back Extension': 0.20,         // held at the chest
 
   // ── Legs ───────────────────────────────────────────────────────────────
-  'Leg Press': 2.00,              // the whole sled, and it is not a squat
-  'Hack Squat': 1.50,             // sled again, plus the machine's own carriage
-  'Barbell Hip Thrust': 1.10,
-  'Barbell Back Squat': 1.05,
-  'Smith Machine Squat': 1.00,
-  'Smith Machine Calf Raise': 1.00,
-  'Standing Calf Raise': 0.90,
-  'Romanian Deadlift': 0.85,
-  'Front Squat': 0.80,
-  'Leg Extension': 0.55,
-  'Hip Abduction Machine': 0.55,
-  'Seated Leg Curl': 0.50,
-  'Good Morning': 0.50,           // far lighter than it looks like it should be
-  'Barbell Reverse Lunge': 0.50,
-  'Lying Leg Curl': 0.45,
-  'Goblet Squat': 0.35,           // one bell at the chest
+  'Sled 45в° Leg Press': 2.00,              // the whole sled, and it is not a squat
+  'Sled Hack Squat': 1.50,             // sled again, plus the machine's own carriage
+  'Barbell Full Squat': 1.05,
+  'Smith Squat': 1.00,
+  'Smith Reverse Calf Raises': 1.00,
+  'Lever Standing Calf Raise': 0.90,
+  'Barbell Romanian Deadlift': 0.85,
+  'Barbell Front Squat': 0.80,
+  'Lever Leg Extension': 0.55,
+  'Lever Seated Hip Abduction': 0.55,
+  'Lever Seated Leg Curl': 0.50,
+  'Barbell Good Morning': 0.50,           // far lighter than it looks like it should be
+  'Barbell Lunge': 0.50,
+  'Lever Lying Leg Curl': 0.45,
+  'Dumbbell Goblet Squat': 0.35,           // one bell at the chest
   'Dumbbell Romanian Deadlift': 0.35, // per hand
-  'Bulgarian Split Squat': 0.25,  // per hand, one leg at a time
-  'Single-Leg Romanian Deadlift': 0.22, // per hand, balance-limited
-  'Dumbbell Walking Lunge': 0.22, // per hand
-  'Dumbbell Step-up': 0.20,       // per hand
-  'Cable Glute Kickback': 0.14,   // per leg
-  'Seated Calf Raise': 0.50,
+  'Split Squats': 0.25,  // per hand, one leg at a time
+  'Dumbbell Single Leg Deadlift': 0.22, // per hand, balance-limited
+  'Dumbbell Lunge': 0.22, // per hand
+  'Dumbbell Step-Up': 0.20,       // per hand
+  'Cable Kickback': 0.14,   // per leg
+  'Lever Seated Calf Raise': 0.50,
 
   // ── Shoulders — where the old flat default was most absurd ─────────────
-  'Push Press': 0.65,             // leg drive, so heavier than the strict press
-  'Machine Shoulder Press': 0.55,
-  'Smith Machine Shoulder Press': 0.55,
-  'Barbell Overhead Press': 0.50,
-  'Upright Row': 0.40,
-  'Machine Lateral Raise': 0.30,
-  'Reverse Pec Deck': 0.30,
-  'Face Pull': 0.30,
-  'Dumbbell Shoulder Press': 0.25, // per hand
-  'Arnold Press': 0.22,            // per hand
-  'Front Raise': 0.11,             // per hand
+  'Dumbbell Push Press': 0.65,             // leg drive, so heavier than the strict press
+  'Lever Shoulder Press': 0.55,
+  'Smith Shoulder Press': 0.55,
+  'Barbell Seated Overhead Press': 0.50,
+  'Barbell Upright Row': 0.40,
+  'Lever Lateral Raise': 0.30,
+  'Lever Seated Reverse Fly': 0.30,
+  'Dumbbell Seated Shoulder Press': 0.25, // per hand
+  'Dumbbell Arnold Press': 0.22,            // per hand
+  'Dumbbell Front Raise': 0.11,             // per hand
   'Dumbbell Lateral Raise': 0.10,  // ~8 kg for an 80 kg athlete, not 60
   'Cable Lateral Raise': 0.09,     // per side
-  'Rear Delt Fly': 0.09,           // per hand
+  'Dumbbell Rear Fly': 0.09,           // per hand
 
   // ── Arms ───────────────────────────────────────────────────────────────
-  "Farmer's Carry": 0.50,          // per hand, and grip is the limit
-  'Machine Tricep Extension': 0.50,
-  'Tricep Pushdown': 0.40,
+  'Farmers Walk': 0.50,          // per hand, and grip is the limit
+  'Lever Triceps Extension': 0.50,
+  'Cable Triceps Pushdown (V-Bar)': 0.40,
   'Barbell Curl': 0.38,
-  'EZ Bar Curl': 0.35,
-  'Machine Preacher Curl': 0.35,
+  'Ez-Bar Biceps Curl (With Arm Blaster)': 0.35,
+  'Lever Preacher Curl': 0.35,
   'Cable Curl': 0.35,
-  'Skull Crusher': 0.30,
-  'Cable Overhead Tricep Extension': 0.30,
-  'Preacher Curl': 0.28,
-  'Dumbbell Overhead Tricep Extension': 0.25, // one bell, both hands
-  'Reverse Curl': 0.24,
-  'Dumbbell Curl': 0.18,           // per hand
-  'Hammer Curl': 0.18,             // per hand
-  'Incline Dumbbell Curl': 0.14,   // per hand, at full stretch
-  'Concentration Curl': 0.14,      // per hand, nothing to cheat with
-  'Wrist Curl': 0.14,              // per hand
-  'Dumbbell Tricep Kickback': 0.10, // per hand
+  'Barbell Lying Triceps Extension Skull Crusher': 0.30,
+  'Cable Overhead Triceps Extension (Rope Attachment)': 0.30,
+  'Barbell Preacher Curl': 0.28,
+  'Dumbbell Decline Triceps Extension': 0.25, // one bell, both hands
+  'Barbell Reverse Curl': 0.24,
+  'Dumbbell Biceps Curl': 0.18,           // per hand
+  'Dumbbell Hammer Curl': 0.18,             // per hand
+  'Dumbbell Incline Curl': 0.14,   // per hand, at full stretch
+  'Dumbbell Concentration Curl': 0.14,      // per hand, nothing to cheat with
+  'Dumbbell Reverse Wrist Curl': 0.14,              // per hand
+  'Dumbbell Kickback': 0.10, // per hand
 
   // ── Core ───────────────────────────────────────────────────────────────
-  'Machine Ab Crunch': 0.50,
-  'Cable Crunch': 0.45,
-  'Cable Woodchop': 0.22,
-  'Pallof Press': 0.16,           // it is a hold, not a press
-  'Weighted Decline Sit-up': 0.12,
-  'Ab Wheel Rollout': 0,          // bodyweight; no external load to suggest
+  'Lever Seated Crunch': 0.50,
+  'Cable Kneeling Crunch': 0.45,
+  'Cable Twist': 0.22,
+  'Band Horizontal Pallof Press': 0.16,           // it is a hold, not a press
+  'Weighted Decline Sit-Up': 0.12,
+  'Wheel Rollerout': 0,          // bodyweight; no external load to suggest
+
+  // ── Imported: Chest ──
+  'Barbell Wide Bench Press': 0.9,
+  'Lever Chest Press': 0.85,
+  'Barbell Jm Bench Press': 0.45,   // heavier than a skull crusher, lighter than a close-grip bench
+  'Dumbbell Incline Hammer Press': 0.28,   // per hand
+  'Cable Bench Press': 0.28,   // per side
+  'Dumbbell Incline Alternate Press': 0.26,   // per hand; one side holds while the other works
+  'Cable Incline Bench Press': 0.25,   // per side
+  'Cable Incline Fly': 0.2,   // per side
+  'Dumbbell Decline Fly': 0.16,   // per hand
+  'Dumbbell Incline Fly': 0.15,   // per hand
+
+  // ── Imported: Back ──
+  'Smith Shrug': 1.05,   // the bar path is fixed, so it takes more than a free barbell
+  'Cable Underhand Pulldown': 0.72,
+  'Barbell Reverse Grip Bent Over Row': 0.7,
+  'Barbell Incline Row': 0.55,   // chest-supported: no body english to help
+  'Barbell Rear Delt Row': 0.4,
+  'Dumbbell Incline Shrug': 0.35,   // per hand
+  'Dumbbell Decline Shrug': 0.35,   // per hand
+
+  // ── Imported: Legs ──
+  'Barbell Glute Bridge': 1.00,   // replaces the hip thrust; floor-stopped, so lighter than one
+  'Barbell Wide Squat': 1.00,
+  'Barbell Straight Leg Deadlift': 0.75,
+  'Barbell Bench Front Squat': 0.75,
+  'Barbell Rear Lunge': 0.5,
+  'Lever Seated Hip Adduction': 0.5,
+  'Barbell Seated Calf Raise': 0.45,   // knees bent, so the soleus works alone and it is light
+  'Dumbbell Deadlift': 0.45,   // per hand
+  'Barbell Step-Up': 0.4,
+  'Barbell Lateral Lunge': 0.35,
+  'Barbell Seated Good Morning': 0.35,
+  'Barbell Single Leg Deadlift': 0.35,
+  'Dumbbell Standing Calf Raise': 0.3,   // per hand; grip gives out long before the calves
+
+  // ── Imported: Shoulders ──
+  'Barbell Standing Wide Military Press': 0.45,
+  'Barbell Wide-Grip Upright Row': 0.38,
+  'Cable Rear Delt Row (Stirrups)': 0.25,   // per side; replaces Face Pull, which had no row of its own
+  'Dumbbell Alternate Side Press': 0.22,   // per hand
+  'Barbell Front Raise': 0.2,   // both hands on one bar, so about double the dumbbell
+  'Dumbbell Incline Raise': 0.09,   // per hand
+  'Dumbbell Incline Rear Lateral Raise': 0.08,   // per hand
+  'Dumbbell Incline Shoulder Raise': 0.08,   // per hand
+
+  // ── Imported: Arms ──
+  'Barbell Decline Close Grip To Skull Press': 0.35,
+  'Barbell Lying Triceps Extension': 0.3,
+  'Barbell Lying Preacher Curl': 0.26,
+  'Barbell Reverse Preacher Curl': 0.18,
+  'Barbell Reverse Wrist Curl': 0.18,
+  'Dumbbell Alternate Biceps Curl': 0.18,   // per hand
+  'Dumbbell Alternate Seated Hammer Curl': 0.16,   // per hand; seated, nothing to swing with
+  'Cable Concentration Curl': 0.14,   // per side
+  'Dumbbell Incline Biceps Curl': 0.14,   // per hand, at full stretch
+  'Dumbbell Incline Hammer Curl': 0.14,   // per hand
+  'Dumbbell Alternate Preacher Curl': 0.13,   // per hand
+  'Dumbbell Alternate Hammer Preacher Curl': 0.13,   // per hand
+  'Dumbbell Biceps Curl Reverse': 0.12,   // per hand; the weak grip sets the load
+  'Dumbbell Incline Triceps Extension': 0.12,   // per hand
+  'Dumbbell Lying Single Extension': 0.1,   // per hand
+  'Dumbbell One Arm Kickback': 0.1,   // per hand
+
+  // ── Imported: Core ──
+  'Cable Reverse Crunch': 0.3,
+
+  // ── Imported: WOD ──
+  'Kettlebell Turkish Get Up (Squat Style)': 0.2,   // one bell overhead through a stand-up; balance limits it long before strength
 }
 
 export const damageFor = (exerciseName: string, modalityName: string): number =>
