@@ -241,6 +241,62 @@ const seedExercises = async (modalities: Map<string, string>) => {
   };
 };
 
+// ── media ──────────────────────────────────────────────────────────────────
+// One Media row per exercise that has artwork, pointing at the backend's own
+// static route. Managed the same way the links below are: the catalogue is the
+// authority, so a row it no longer wants is deleted rather than left behind.
+//
+// Both URLs are derived from the single `media` id, so the thumbnail and the
+// animation cannot drift apart, and re-running with an unchanged catalogue
+// writes nothing.
+const seedMedia = async (exerciseIds: Map<string, string>) => {
+  const want = new Map<string, { thumbnailUrl: string; videoUrl: string }>();
+  for (const ex of EXERCISES) {
+    const id = exerciseIds.get(ex.name);
+    if (!id || !ex.media) continue;
+    // Both relative, and deliberately so: an absolute host stored in the
+    // database is a host you have to re-seed 226 rows to change. The frontend
+    // serves the thumbnail from its own origin, and a Netlify proxy forwards
+    // /exercise-media to the backend — so in the browser both resolve
+    // same-origin, which is also what lets the service worker cache them.
+    want.set(id, {
+      thumbnailUrl: `/exercises/${ex.media}.jpg`,
+      videoUrl: `/exercise-media/${ex.media}.gif`,
+    });
+  }
+
+  const managedIds = [...exerciseIds.values()];
+  const existing = await prisma.media.findMany({
+    where: { exerciseId: { in: managedIds } },
+    select: { id: true, exerciseId: true, thumbnailUrl: true, videoUrl: true },
+  });
+
+  const seen = new Set<string>();
+  const stale: string[] = [];
+  const updates: Prisma.PrismaPromise<unknown>[] = [];
+
+  for (const row of existing) {
+    const target = want.get(row.exerciseId);
+    // No artwork wanted any more, or a second row for an exercise that should
+    // have exactly one — either way it goes.
+    if (!target || seen.has(row.exerciseId)) { stale.push(row.id); continue; }
+    seen.add(row.exerciseId);
+    if (row.thumbnailUrl !== target.thumbnailUrl || row.videoUrl !== target.videoUrl) {
+      updates.push(prisma.media.update({ where: { id: row.id }, data: target }));
+    }
+  }
+
+  const created = [...want.entries()]
+    .filter(([exerciseId]) => !seen.has(exerciseId))
+    .map(([exerciseId, urls]) => ({ exerciseId, ...urls }));
+
+  if (stale.length) await prisma.media.deleteMany({ where: { id: { in: stale } } });
+  if (created.length) await prisma.media.createMany({ data: created });
+  await runBatched(updates);
+
+  return { created: created.length, updated: updates.length, removed: stale.length };
+};
+
 // ── links ──────────────────────────────────────────────────────────────────
 // Stale links are deleted, not just left behind. The seed is the authority on
 // what a catalogue exercise needs, and it has to be able to take something
@@ -348,6 +404,11 @@ async function main() {
 
   const links = await seedLinks(exercises.ids, ref);
   console.log(`  links: ${links.created} created, ${links.retuned} retuned, ${links.removed} removed`);
+
+  const media = await seedMedia(exercises.ids);
+  const withArt = EXERCISES.filter(e => e.media).length;
+  console.log(`  media: ${media.created} created, ${media.updated} updated, ${media.removed} removed` +
+    ` — ${withArt} of ${EXERCISES.length} exercises have artwork`);
 
   // counts per modality for a quick sanity check
   const counts = await Promise.all(MODALITIES.map(async name => [
