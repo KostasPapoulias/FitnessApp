@@ -121,6 +121,117 @@ body {
   overflow-x: clip;
 }
 
+/* ── saving a workout: the session card tossed into the calendar ──────────
+   See components/workout/SaveToCalendar.tsx. The travel vector is measured at
+   runtime — the Calendar nav item is in the bottom bar on a phone and the left
+   sidebar on desktop — and handed in as --st-dx / --st-dy, so one pair of
+   keyframes serves both. --st-lift is subtracted from the y term to bow the
+   path upward, which is what makes it read as a toss rather than a slide. */
+/* The waiting card does not move — no float, no breath, no scale. All three
+   read as a stalled spinner, and a surface that drifts under the eye while
+   you are reading it is worse than one that sits still. The only motion is
+   the segment below, lapping the border.
+
+   A lap, specifically, and not a bar sweeping the bottom edge: a bar that
+   runs left to right and jumps back to restart looks like progress that keeps
+   failing, and there is no progress to report on one round trip. A lap has no
+   beginning to snap back to. `pathLength` is normalised to 100 in the markup,
+   so the dash is a percentage of the perimeter and one lap is always -100. */
+@keyframes st-trace {
+  to { stroke-dashoffset: -100; }
+}
+.st-trace {
+  stroke-dasharray: 26 74;
+  stroke-dashoffset: 0;
+  animation: st-trace 2.1s linear infinite;
+}
+
+/* Rotation is the one motion left once bobbing and scaling are ruled out.
+   `fill-box` so the origin is the circle's own centre and not the corner of
+   the nearest SVG viewport. */
+@keyframes st-spin {
+  to { transform: rotate(360deg); }
+}
+.st-spin {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: st-spin 950ms linear infinite;
+}
+
+/*
+  Horizontal travel is linear and the height term is a parabola — 4t(1-t),
+  evaluated at each stop — which is what a thrown object does.
+
+  The stops carry the whole shape, and the timing function MUST stay `linear`.
+  CSS applies `animation-timing-function` to every keyframe segment separately,
+  not once across the animation, so an eased curve here is not one ease over
+  the flight: it is one ease per pair of stops. The card crawls, darts, crawls,
+  darts — bunched at every stop and fastest between them. It looks like a
+  dropped frame rather than a throw, and it is invisible until you draw the
+  path out and look at the spacing.
+*/
+@keyframes st-toss {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  15% {
+    transform: translate3d(calc(var(--st-dx) * 0.15),
+                           calc(var(--st-dy) * 0.15 - var(--st-lift) * 0.51), 0)
+               scale(0.93) rotate(-4deg);
+  }
+  30% {
+    transform: translate3d(calc(var(--st-dx) * 0.30),
+                           calc(var(--st-dy) * 0.30 - var(--st-lift) * 0.84), 0)
+               scale(0.85) rotate(-7deg);
+  }
+  45% {
+    transform: translate3d(calc(var(--st-dx) * 0.45),
+                           calc(var(--st-dy) * 0.45 - var(--st-lift) * 0.99), 0)
+               scale(0.74) rotate(-8deg);
+  }
+  60% {
+    transform: translate3d(calc(var(--st-dx) * 0.60),
+                           calc(var(--st-dy) * 0.60 - var(--st-lift) * 0.96), 0)
+               scale(0.62) rotate(-7deg);
+  }
+  75% {
+    transform: translate3d(calc(var(--st-dx) * 0.75),
+                           calc(var(--st-dy) * 0.75 - var(--st-lift) * 0.75), 0)
+               scale(0.48) rotate(-5deg);
+  }
+  90% {
+    transform: translate3d(calc(var(--st-dx) * 0.90),
+                           calc(var(--st-dy) * 0.90 - var(--st-lift) * 0.36), 0)
+               scale(0.30) rotate(-2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--st-dx), var(--st-dy), 0) scale(0.10) rotate(0deg);
+    opacity: 0;
+  }
+}
+.st-toss {
+  animation: st-toss var(--st-duration, 560ms) linear forwards;
+}
+
+/* The impact ring on the nav item. One shot, not a loop — it marks the arrival
+   and then it is gone. */
+@keyframes st-land {
+  0%   { transform: scale(0.35); opacity: 0; }
+  30%  { transform: scale(1.05); opacity: 0.95; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+.st-land { animation: st-land 380ms cubic-bezier(0.2, 0.6, 0.3, 1) forwards; }
+
+/* Motion here is decorative — every state is reported in text either way. */
+@media (prefers-reduced-motion: reduce) {
+  .st-trace, .st-spin, .st-toss, .st-land { animation: none; }
+  /* Left mid-dash the trace is a teal stub on one edge, which reads as damage
+     rather than a border. Closed up, it is simply the card's own outline. */
+  .st-trace { stroke-dasharray: none; opacity: 0.5; }
+}
+
 /* Hide scrollbar on scrollable containers (e.g. the activity heatmap)
    while still allowing touch/wheel scrolling. */
 .no-scrollbar {

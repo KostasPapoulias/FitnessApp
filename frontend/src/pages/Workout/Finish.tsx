@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useFatigueStore } from '../../store/useFatigueStore'
 import { useNotifications } from '../../hooks/useNotifcations'
+import SaveToCalendar from '../../components/workout/SaveToCalendar'
 import { fmtTime } from './helpers'
 
 interface SnapshotExercise {
@@ -39,6 +40,16 @@ export default function Finish() {
   const [saving, setSaving] = useState(() => Boolean(useWorkoutStore.getState().sessionId))
   const [saveError, setSaveError] = useState<string | null>(null)
   const startedRef = useRef(false)
+  /**
+   * Whether the save animation has finished handing over.
+   *
+   * Separate from `saving` because the two end at different moments: the
+   * request resolves, and only then does the card fly into the Calendar tab.
+   * Seeded true when there is nothing to save — arriving here on an already
+   * finished session should show the summary at once, not perform a toss for
+   * a workout that was filed minutes ago.
+   */
+  const [settled, setSettled] = useState(() => !useWorkoutStore.getState().sessionId)
 
   const save = () => {
     // finishSession() de-dupes concurrent calls internally; this ref stops a
@@ -49,6 +60,7 @@ export default function Finish() {
     startedRef.current = true
     setSaving(true)
     setSaveError(null)
+    setSettled(false)   // a retry earns the animation again
     finishSession()
       .then(async res => {
         if (res) setResult(res)
@@ -72,17 +84,18 @@ export default function Finish() {
   if (!snapshot) return null
 
   // ── saving ──
-  if (saving) {
+  // Held past the request itself. `settled` is what the landing sets, so the
+  // summary cannot replace the screen mid-arc; on a failure the flight is
+  // skipped and the error banner below is reached immediately.
+  if (saving || !settled) {
     return (
-      <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
-        <div className="text-center">
-          <div className="text-5xl mb-4 animate-pulse">💾</div>
-          <p className="text-white font-semibold">Saving your workout...</p>
-          <p className="text-dark-300 text-[13px] mt-2">
-            Every set you logged is already stored — just finishing up.
-          </p>
-        </div>
-      </div>
+      <SaveToCalendar
+        pending={saving}
+        failed={Boolean(saveError)}
+        onSettled={() => setSettled(true)}
+        sets={snapshot.setsLogged}
+        durationLabel={fmtTime(result?.duration ?? snapshot.elapsed)}
+      />
     )
   }
 

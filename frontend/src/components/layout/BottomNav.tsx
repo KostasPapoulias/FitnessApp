@@ -63,7 +63,7 @@ export default function BottomNav() {
         <div className="flex flex-1 flex-col justify-between gap-6">
           <div className="space-y-2">
             <DesktopNavBtn icon={<HomeIcon />} label="Home" active={isActive('/')} onClick={() => navigate('/')} />
-            <DesktopNavBtn icon={<CalendarIcon />} label="Calendar" active={isActive('/calendar')} onClick={() => navigate('/calendar')} />
+            <DesktopNavBtn icon={<CalendarIcon />} label="Calendar" active={isActive('/calendar')} onClick={() => navigate('/calendar')} navKey="calendar" />
             <DesktopNavBtn icon={<ChatIcon />} label="AI Chat" active={isActive('/ai')} onClick={() => navigate('/ai')} />
             <DesktopNavBtn icon={<ProfileIcon />} label="Profile" active={isActive('/profile')} onClick={() => navigate('/profile')} />
           </div>
@@ -112,6 +112,7 @@ export default function BottomNav() {
         label="Calendar"
         active={isActive('/calendar')}
         onClick={() => navigate('/calendar')}
+        navKey="calendar"
       />
 
       {/* Center — context aware */}
@@ -152,11 +153,13 @@ export default function BottomNav() {
   )
 }
 
-function DesktopNavBtn({ icon, label, active, onClick }: {
+function DesktopNavBtn({ icon, label, active, onClick, navKey }: {
   icon: React.ReactNode
   label: string
   active: boolean
   onClick: () => void
+  /** See NavBtn — same handle, same reason for sitting on the icon. */
+  navKey?: string
 }) {
   return (
     <button
@@ -165,7 +168,7 @@ function DesktopNavBtn({ icon, label, active, onClick }: {
         active ? 'bg-brand-teal/15 text-brand-teal' : 'text-dark-300 hover:bg-dark-800 hover:text-white'
       }`}
     >
-      <div className={active ? 'text-brand-teal' : 'text-current'}>
+      <div data-nav={navKey} className={active ? 'text-brand-teal' : 'text-current'}>
         {icon}
       </div>
       <span className="text-sm font-medium">{label}</span>
@@ -174,18 +177,25 @@ function DesktopNavBtn({ icon, label, active, onClick }: {
 }
 
 // Reusable nav button
-function NavBtn({ icon, label, active, onClick }: {
+function NavBtn({ icon, label, active, onClick, navKey }: {
   icon: React.ReactNode
   label: string
   active: boolean
   onClick: () => void
+  /**
+   * Stable handle for animations that need to fly something to this tab.
+   * Put on the ICON, not the button: the button's box includes the label, so
+   * aiming at its centre lands between the glyph and the word.
+   * See components/workout/SaveToCalendar.tsx.
+   */
+  navKey?: string
 }) {
   return (
     <button
       onClick={onClick}
       className="flex flex-col items-center gap-1 active:scale-95 transition-transform"
     >
-      <div className={active ? 'text-brand-teal' : 'text-dark-300'}>
+      <div data-nav={navKey} className={active ? 'text-brand-teal' : 'text-dark-300'}>
         {icon}
       </div>
       <span className={`text-[9px] ${active ? 'text-brand-teal' : 'text-dark-300'}`}>

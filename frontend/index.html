@@ -67,8 +67,15 @@
         justify-content: center;
       }
 
-      /* Breathing teal bloom. Sits behind everything and is the only thing
-         visible on the very first frame, before the mark has decoded. */
+      /* Teal bloom. Sits behind everything and is the only thing visible on the
+         very first frame, before the mark has decoded.
+
+         Static. It used to breathe — opacity and scale, on a 2.8s loop, in step
+         with the mark doing the same thing. Two things swelling and shrinking
+         together under the logo is the shape of a stalled app, which is the one
+         thing a launch screen must not look like. The motion on this screen is
+         all travel now: the dots orbit, the sheen crosses the mark, the bar
+         slides. Nothing grows and shrinks in place. */
       #boot .boot-glow {
         position: absolute;
         width: 176px;
@@ -78,7 +85,6 @@
                       rgba(0, 212, 170, 0.26) 0%,
                       rgba(0, 212, 170, 0.08) 42%,
                       rgba(0, 212, 170, 0) 70%);
-        animation: bootGlow 2800ms ease-in-out infinite;
       }
 
       /* Orbit track carrying the two dots the mark already has, set moving. */
@@ -112,20 +118,17 @@
         box-shadow: 0 0 8px rgba(0, 212, 170, 0.9);
       }
 
+      /* One element again. This was split in two so a `both`-filled entrance
+         and an infinite idle loop would not fight over the same transform —
+         the loop stomped the entrance's final frame. The idle loop was the
+         mark breathing in and out, which is gone, so the entrance now has the
+         transform to itself. It runs once and settles; it is an arrival, not a
+         pulse. */
       #boot .boot-mark-wrap {
         position: relative;
         width: 104px;
         height: 99px;
         animation: bootIn 700ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
-      }
-      /* Entrance and idle are separate elements on purpose: one element cannot
-         run a `both`-filled entrance and an infinite loop on the same transform
-         without the loop stomping the entrance's final frame. */
-      #boot .boot-mark-breathe {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        animation: bootBreathe 2800ms ease-in-out 700ms infinite;
       }
       #boot .boot-mark {
         display: block;
@@ -194,14 +197,6 @@
         from { opacity: 0; transform: scale(0.82); }
         to   { opacity: 1; transform: scale(1); }
       }
-      @keyframes bootBreathe {
-        0%, 100% { transform: scale(1); }
-        50%      { transform: scale(1.045); }
-      }
-      @keyframes bootGlow {
-        0%, 100% { opacity: 0.55; transform: scale(0.92); }
-        50%      { opacity: 1;    transform: scale(1.06); }
-      }
       @keyframes bootSpin {
         to { transform: rotate(360deg); }
       }
@@ -223,14 +218,11 @@
          The bar goes rather than freezes: a stopped progress bar reads as a
          hung one. */
       @media (prefers-reduced-motion: reduce) {
-        #boot .boot-glow,
         #boot .boot-orbit,
         #boot .boot-mark-wrap,
-        #boot .boot-mark-breathe,
         #boot .boot-word { animation: none; }
         #boot .boot-shine { display: none; }
         #boot .boot-bar   { display: none; }
-        #boot .boot-glow  { opacity: 0.8; }
       }
     </style>
   </head>
@@ -243,10 +235,8 @@
           <i class="boot-dot boot-dot-b"></i>
         </div>
         <div class="boot-mark-wrap">
-          <div class="boot-mark-breathe">
-            <img class="boot-mark" src="/logo-mark.png" alt="SomaTrack" />
-            <div class="boot-shine"></div>
-          </div>
+          <img class="boot-mark" src="/logo-mark.png" alt="SomaTrack" />
+          <div class="boot-shine"></div>
         </div>
       </div>
       <p class="boot-word">SomaTrack</p>

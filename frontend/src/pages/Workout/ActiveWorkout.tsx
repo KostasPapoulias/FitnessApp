@@ -10,6 +10,8 @@ import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { ROTATING_EXAMPLES } from '../../constants/voiceCommands'
 import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
 import ExerciseNotes from '../../components/workout/ExerciseNotes'
+import SaveToCalendar from '../../components/workout/SaveToCalendar'
+import SessionStatus from '../../components/workout/SessionCard'
 import RestTimer from './RestTimer'
 import CalisthenicsView from './CalisthenicsView'
 import MobilityView from './MobilityView'
@@ -415,13 +417,16 @@ export default function ActiveWorkout() {
   // Rendered before the "no exercises" branch: finishSession clears the
   // selection, so without this the screen flashes an empty state on the way out.
   if (isFinishing) {
+    // `pending` stays true and nothing ever settles: handleFinish navigates in
+    // the same tick, so this is a single frame of hand-off to the Finish screen,
+    // which owns the request and plays the flight. It renders the same card so
+    // the two screens read as one continuous moment rather than a swap.
     return (
-      <div className="flex-1 bg-dark-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-pulse">💾</div>
-          <p className="text-white font-semibold">Saving your workout...</p>
-        </div>
-      </div>
+      <SaveToCalendar
+        pending
+        onSettled={() => {}}
+        headline="Ending session"
+      />
     )
   }
 
@@ -447,14 +452,17 @@ export default function ActiveWorkout() {
   }
 
   // ── LOADING ──
+  // The same card the finish screen uses, so opening a session and closing one
+  // look like two ends of one thing. `spin` rather than the solid dot: there is
+  // no session yet to stand for, and a rotating arc is the only motion left
+  // once bobbing and scaling are out.
   if (isStarting || (!sessionId && selectedExercises.length > 0)) {
     return (
-      <div className="flex-1 bg-dark-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-pulse">💪</div>
-          <p className="text-white font-semibold">Starting workout...</p>
-        </div>
-      </div>
+      <SessionStatus
+        headline="Starting workout…"
+        detail={`${selectedExercises.length} ${selectedExercises.length === 1 ? 'exercise' : 'exercises'}`}
+        spin
+      />
     )
   }
 
