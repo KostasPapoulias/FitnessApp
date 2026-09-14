@@ -95,6 +95,10 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
         })),
         categories: exercise.categoryLinks.map(cl => cl.category.name),
         equipment: exercise.equipmentLinks.map(el => el.equipment.name),
+        // Null for the handful with no artwork — the WOD block and outdoor
+        // walking and cycling, which the media library simply does not depict.
+        // The client falls back to the modality emoji rather than a gap.
+        thumbnailUrl: exercise.media?.[0]?.thumbnailUrl ?? null,
         isCustom: exercise.createdByUserId !== null,
         fatigueWarning: maxFatigue >= 70, //  show red warning
         maxMuscleFatigue: Math.round(maxFatigue),

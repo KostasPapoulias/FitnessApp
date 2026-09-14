@@ -65,6 +65,11 @@ const CATALOGUE_SELECT = {
   },
   categoryLinks: { select: { category: { select: { id: true, name: true } } } },
   equipmentLinks: { select: { equipmentId: true, equipment: { select: { name: true } } } },
+  // The thumbnail only. `videoUrl` is deliberately left out: the animation is
+  // shown on one exercise at a time, the detail screen already fetches it with
+  // `include: { media: true }`, and carrying a second URL for all 226 rows
+  // would add weight to the one response this file exists to keep small.
+  media: { select: { thumbnailUrl: true } },
 } as const
 
 export type CatalogueExercise = Awaited<

@@ -285,9 +285,31 @@ export default function ExerciseList() {
                                ? 'border-brand-red/40 bg-[#1a0d0d]'
                                : 'border-dark-600 bg-dark-800'}`}>
                   <div className="flex items-center gap-3 p-3">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0
+                    {/* The emoji is the backdrop, not the alternative: it is
+                        always rendered and the thumbnail covers it. That is
+                        what makes `onError` work — hiding a failed image
+                        reveals the emoji rather than leaving an empty square,
+                        which a ternary could not do without extra state. */}
+                    <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center text-xl
+                                    flex-shrink-0 overflow-hidden
                                     ${selected ? 'bg-brand-teal/20' : 'bg-dark-700'}`}>
-                      {exerciseEmoji(exercise)}
+                      <span>{exerciseEmoji(exercise)}</span>
+                      {exercise.thumbnailUrl && (
+                        <img
+                          src={exercise.thumbnailUrl}
+                          alt=""
+                          width={44}
+                          height={44}
+                          /* Only the rows on screen are fetched. The catalogue
+                             is 226 exercises in one long scroller, so eager
+                             loading would pull every thumbnail the moment the
+                             picker opens. */
+                          loading="lazy"
+                          decoding="async"
+                          className="absolute inset-0 h-full w-full object-cover"
+                          onError={e => { e.currentTarget.style.display = 'none' }}
+                        />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0"
                       onClick={() => navigate('/exercise-detail', { state: { exerciseId: exercise.id } })}>

@@ -4,6 +4,7 @@ import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import ExerciseHistoryCard from '../../components/progress/ExerciseHistoryCard'
 import StarIcon from '../../components/workout/StarIcon'
+import { exerciseEmoji } from './helpers'
 
 export default function ExerciseDetail() {
   const navigate = useNavigate()
@@ -102,7 +103,27 @@ export default function ExerciseDetail() {
         {/* Hero */}
         <div className="mx-3 bg-dark-800 rounded-card overflow-hidden border border-dark-600">
           <div className="bg-[#0d2218] p-6 text-center border-b border-dark-600">
-            <div className="text-5xl mb-3">💪</div>
+            {/* The animation, where there is one. A GIF rather than a video
+                element: the source library ships GIFs, they are ~95 KB, and
+                they loop on their own — a <video> would need a poster, a
+                muted/playsinline pair, and would still refuse to autoplay on
+                some phones.
+
+                `media` is an array on the API response because the schema
+                allows more than one row per exercise; the seed writes exactly
+                one. Falling back to the emoji keeps the WOD movements and
+                outdoor cardio looking deliberate rather than broken. */}
+            {exercise.media?.[0]?.videoUrl ? (
+              <img
+                src={exercise.media[0].videoUrl}
+                alt={`${exercise.name} demonstration`}
+                className="mx-auto mb-3 h-40 w-40 rounded-card bg-dark-900 object-contain"
+                decoding="async"
+                onError={e => { e.currentTarget.style.display = 'none' }}
+              />
+            ) : (
+              <div className="text-5xl mb-3">{exerciseEmoji(exercise)}</div>
+            )}
             <h2 className="text-white text-2xl font-bold">{exercise.name}</h2>
             <div className="flex justify-center gap-2 mt-3 flex-wrap">
               <span className="bg-brand-teal text-black text-xs font-bold

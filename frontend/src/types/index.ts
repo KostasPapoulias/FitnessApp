@@ -116,6 +116,16 @@ export interface Exercise {
   description?: string
   modality: string
   /**
+   * Illustration for the list row, served from this app's own `public/`.
+   *
+   * Null for the handful of movements the media library does not depict — the
+   * WOD block, and walking and cycling outdoors — and for every exercise the
+   * athlete created themselves. Anything rendering it must fall back rather
+   * than assume, which is why it is nullable and not optional: absent is a
+   * real, permanent state here, not a not-loaded-yet one.
+   */
+  thumbnailUrl?: string | null
+  /**
    * Typical speed for this movement, km/h. Calibration only — it is what turns
    * distance covered into work comparable across activities. Do NOT read it as
    * "does this have a pace?": the stair climber has no reference speed and is
