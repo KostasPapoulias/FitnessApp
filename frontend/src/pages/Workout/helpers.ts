@@ -49,6 +49,54 @@ export function exerciseEmoji(ex?: Pick<Exercise, 'modality'>): string {
   }
 }
 
+// ── Finish-screen summary ─────────────────────────────────────────────────
+export interface FinishSnapshot {
+  exercises: { name: string; emoji: string; count: number; topWeight: number; topReps: number }[]
+  muscles: string[]
+  setsLogged: number
+  elapsed: number
+}
+
+/**
+ * What the Finish screen shows, captured before `finishSession()` clears the
+ * store. Shared by the live workout and quick log so the two cannot drift into
+ * summarising the same session differently.
+ */
+export function summariseSession(
+  selectedExercises: { exercise: Exercise; sets: { reps: number; weight: number }[] }[],
+  completedSets: { exerciseId: string; setIndex: number }[],
+  elapsed: number
+): FinishSnapshot {
+  const exercises = selectedExercises
+    .filter(se => completedSets.some(cs => cs.exerciseId === se.exercise.id))
+    .map(se => {
+      const doneIdx = completedSets
+        .filter(cs => cs.exerciseId === se.exercise.id)
+        .map(cs => cs.setIndex)
+      const doneSets = doneIdx.map(i => se.sets[i]).filter(Boolean)
+      const best = doneSets.reduce(
+        (a, b) => (b.weight > a.weight ? b : a), doneSets[0] ?? { weight: 0, reps: 0 })
+      return {
+        name: se.exercise.name,
+        emoji: exerciseEmoji(se.exercise),
+        count: doneSets.length,
+        topWeight: best?.weight ?? 0,
+        topReps: best?.reps ?? 0,
+      }
+    })
+  const muscles = new Set<string>()
+  selectedExercises.forEach(se => {
+    if (completedSets.some(cs => cs.exerciseId === se.exercise.id))
+      se.exercise.muscles.forEach(m => muscles.add(m.name))
+  })
+  return {
+    exercises,
+    muscles: [...muscles],
+    setsLogged: completedSets.length,
+    elapsed,
+  }
+}
+
 // mm:ss — rounds first, so derived values (e.g. pace = 1000 / speed) don't
 // leak their fractional seconds into the string.
 export function fmtTime(seconds: number): string {

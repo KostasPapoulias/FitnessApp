@@ -57,7 +57,7 @@ export default function ExerciseList() {
   const autoFocusSearch: boolean = location.state?.autoFocusSearch === true
   const singleSelect = modality === 'Cardio'
 
-  const { selectedExercises, addExercise, removeExercise, setSingleExercise } = useWorkoutStore()
+  const { selectedExercises, addExercise, removeExercise, setSingleExercise, quickLog } = useWorkoutStore()
 
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [search, setSearch] = useState('')
@@ -378,10 +378,10 @@ export default function ExerciseList() {
               </p>
             )}
           </div>
-          <button onClick={() => navigate(meta.plan)}
+          <button onClick={() => navigate(quickLog ? '/workout/log' : meta.plan)}
             className="bg-brand-teal text-black text-sm font-bold px-4 py-2.5 rounded-btn
                        active:scale-95 transition-transform flex-shrink-0">
-            {meta.cta}
+            {quickLog ? 'Log Sets →' : meta.cta}
           </button>
         </div>
       )}

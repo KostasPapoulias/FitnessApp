@@ -40,7 +40,7 @@ export default function BrowseCategories() {
   const location = useLocation()
   const modality: string = location.state?.modality ?? 'Strength'
 
-  const { selectedExercises } = useWorkoutStore()
+  const { selectedExercises, quickLog } = useWorkoutStore()
 
   const [categories, setCategories] = useState<ExerciseCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -171,10 +171,10 @@ export default function BrowseCategories() {
           <p className="flex-1 text-sm font-semibold">
             {selectedCount} exercise{selectedCount > 1 ? 's' : ''} selected
           </p>
-          <button onClick={() => navigate('/workout/plan')}
+          <button onClick={() => navigate(quickLog ? '/workout/log' : '/workout/plan')}
             className="bg-brand-teal text-black text-sm font-bold px-4 py-2 rounded-btn
                        active:scale-95 transition-transform flex-shrink-0">
-            Plan Sets →
+            {quickLog ? 'Log Sets →' : 'Plan Sets →'}
           </button>
         </div>
       )}

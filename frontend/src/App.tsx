@@ -25,6 +25,7 @@ import ResetPassword from './pages/ResetPassword'
 import ActiveWorkout from './pages/Workout/ActiveWorkout'
 import PlanSets from './pages/Workout/PlanSets'
 import WorkoutQueue from './pages/Workout/WorkoutQueue'
+import QuickLog from './pages/Workout/QuickLog'
 import Finish from './pages/Workout/Finish'
 import CardioPlan from './pages/Workout/CardioPlan'
 import MobilityPlan from './pages/Workout/MobilityPlan'
@@ -170,6 +171,7 @@ export default function App() {
           <Route path="exercise-detail" element={<ExerciseDetail />} />
           <Route path="workout/active" element={<ActiveWorkout />} />
           <Route path="workout/queue" element={<WorkoutQueue />} />
+          <Route path="workout/log" element={<QuickLog />} />
           <Route path="workout/finish" element={<Finish />} />
           <Route path="ai" element={<AIChatHub />} />
           <Route path="ai/chat/:threadId" element={<AIChat />} />

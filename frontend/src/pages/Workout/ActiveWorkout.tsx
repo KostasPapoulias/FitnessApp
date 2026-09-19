@@ -19,7 +19,7 @@ import CardioView from './CardioView'
 import WodView from './WodView'
 import type { LogPayload, ModalityVoiceHandler } from './LiveShared'
 import {
-  rpeColor, rpeTint, rpeLabel, exerciseEmoji, fmtTime, RpeMode,
+  rpeColor, rpeTint, rpeLabel, fmtTime, RpeMode, summariseSession,
 } from './helpers'
 
 export default function ActiveWorkout() {
@@ -187,34 +187,7 @@ export default function ActiveWorkout() {
   const buildSnapshot = () => {
     // read fresh — a modality view may have just logged a set before finishing
     const { selectedExercises, completedSets } = useWorkoutStore.getState()
-    const exercises = selectedExercises
-      .filter(se => completedSets.some(cs => cs.exerciseId === se.exercise.id))
-      .map(se => {
-        const doneIdx = completedSets
-          .filter(cs => cs.exerciseId === se.exercise.id)
-          .map(cs => cs.setIndex)
-        const doneSets = doneIdx.map(i => se.sets[i]).filter(Boolean)
-        const best = doneSets.reduce(
-          (a, b) => (b.weight > a.weight ? b : a), doneSets[0] ?? { weight: 0, reps: 0 })
-        return {
-          name: se.exercise.name,
-          emoji: exerciseEmoji(se.exercise),
-          count: doneSets.length,
-          topWeight: best?.weight ?? 0,
-          topReps: best?.reps ?? 0,
-        }
-      })
-    const muscles = new Set<string>()
-    selectedExercises.forEach(se => {
-      if (completedSets.some(cs => cs.exerciseId === se.exercise.id))
-        se.exercise.muscles.forEach(m => muscles.add(m.name))
-    })
-    return {
-      exercises,
-      muscles: [...muscles],
-      setsLogged: completedSets.length,
-      elapsed,
-    }
+    return summariseSession(selectedExercises, completedSets, elapsed)
   }
 
   // Ending the workout does NOT call the API here. We capture the summary and

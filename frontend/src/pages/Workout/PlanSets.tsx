@@ -39,7 +39,7 @@ export default function PlanSets() {
   const navigate = useNavigate()
   const {
     selectedExercises, suggestionsLoading, loadSuggestions,
-    updateSet, addSet, removeSet, setExerciseRest, removeExerciseAt,
+    updateSet, addSet, removeSet, setExerciseRest, removeExerciseAt, setQuickLog,
   } = useWorkoutStore()
 
   // Pull history-based numbers once the plan is on screen. Until this lands the
@@ -60,6 +60,20 @@ export default function PlanSets() {
   ))
 
   const handleStart = () => navigate('/workout/active')
+
+  // Offered here rather than as its own entry on Start Workout: picking the
+  // exercises is the same either way, and "timer or not" is only a real choice
+  // once you can see what you are about to do. Strength only — the quick-log
+  // card floors load at 0 kg, so it cannot carry a calisthenics assist.
+  const live = selectedExercises.filter(se => !se.skipped)
+  const canQuickLog = live.length > 0 && live.every(se => se.exercise.modality === 'Strength')
+
+  // The flag is set on the way out, not toggled on this screen: while it is
+  // on, the browse tray sends "+ Add Exercise" to the log instead of back here.
+  const handleQuickLog = () => {
+    setQuickLog(true)
+    navigate('/workout/log')
+  }
 
   if (selectedExercises.length === 0) {
     return (
@@ -315,6 +329,16 @@ export default function PlanSets() {
           >
             ▶ Start Workout — {totalSets} sets
           </button>
+          {canQuickLog && (
+            <button
+              onClick={handleQuickLog}
+              className="w-full mt-2 py-3 rounded-btn border border-dark-600 bg-dark-800
+                         text-dark-200 text-[13.5px] font-semibold
+                         active:scale-95 transition-transform"
+            >
+              Start without timer — tick exercises off
+            </button>
+          )}
         </div>
       </div>
     </div>

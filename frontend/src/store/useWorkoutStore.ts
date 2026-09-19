@@ -15,11 +15,17 @@ interface PlannedSet {
   restSeconds: number
 }
 
-interface SelectedExercise {
+export interface SelectedExercise {
   exercise: Exercise
   sets: PlannedSet[]
   workoutExerciseId?: string // set after session starts
   skipped?: boolean
+  /**
+   * Ticked off on the quick-log screen. Nothing is sent when it is ticked —
+   * the sets travel at Finish — so an untick is free and never has to chase a
+   * row already written to the server.
+   */
+  done?: boolean
   /**
    * What the athlete wrote about this exercise, this session.
    *
@@ -143,6 +149,19 @@ interface WorkoutStore {
   suggestionsLoading: boolean
   removeExerciseAt: (exIdx: number) => void
   toggleSkip: (exIdx: number) => void
+
+  /**
+   * Quick log: the same session, with no set card, rest timer or clock on
+   * screen. The athlete ticks exercises off and everything is logged at Finish.
+   *
+   * A flag rather than route state because it has to survive the browse →
+   * exercise list → back round trip, and decide where the bottom nav's centre
+   * button goes — a quick-log session opened on the live screen would put the
+   * timer straight back.
+   */
+  quickLog: boolean
+  setQuickLog: (on: boolean) => void
+  toggleDone: (exIdx: number) => void
   swapExercise: (exIdx: number, exercise: Exercise) => void
   reorderExercises: (from: number, to: number) => void
   setCurrent: (exIdx: number, setIdx?: number) => void
@@ -154,7 +173,14 @@ interface WorkoutStore {
   currentSetIndex: number
   completedSets: { exerciseId: string; setIndex: number }[]
 
-  startSession: () => Promise<void>
+  /**
+   * `registerExercises: false` opens the session without attaching anything.
+   * Quick log uses it: there is no endpoint to take an exercise back off a
+   * session, so registering the whole selection up front would leave every
+   * exercise that was never ticked as an empty row in history. They are
+   * registered one at a time, by `completeSet`, when their sets are logged.
+   */
+  startSession: (opts?: { registerExercises?: boolean }) => Promise<void>
   registerExercise: (exIdx: number) => Promise<string>
   completeSet: (
     data: {
@@ -225,8 +251,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   logError: null,
   sourceTemplateId: null,
   sourceScheduledId: null,
+  quickLog: false,
 
   clearErrors: () => set({ startError: null, logError: null }),
+
+  setQuickLog: (quickLog) => set({ quickLog }),
 
   loadTemplate: (template, scheduledId = null) => {
     const selectedExercises: SelectedExercise[] = template.exercises.map(te => ({
@@ -267,6 +296,9 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       wodConfig: null,
       startError: null,
       logError: null,
+      // A saved plan opens in the planner and runs live; a quick-log flag left
+      // over from an abandoned session would reroute its "+ Add Exercise".
+      quickLog: false,
     })
   },
 
@@ -340,6 +372,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     logError: null,
     sourceTemplateId: null,
     sourceScheduledId: null,
+    quickLog: false,
   }),
 
   updateSets: (exerciseId, sets) => set(state => ({
@@ -365,7 +398,10 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     selectedExercises: state.selectedExercises.map((e, i) => {
       if (i !== exIdx) return e
       const last = e.sets[e.sets.length - 1] ?? DEFAULT_SET
-      return { ...e, sets: [...e.sets, { ...last }] }
+      // The set count is the athlete's choice as much as the numbers are.
+      // Quick log re-runs loadSuggestions on mount, straight after Plan Sets,
+      // and would otherwise put a planned fourth set back to three.
+      return { ...e, edited: true, sets: [...e.sets, { ...last }] }
     })
   })),
 
@@ -373,6 +409,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
       i !== exIdx ? e : {
         ...e,
+        edited: true,
         sets: e.sets.length > 1 ? e.sets.filter((_, j) => j !== setIdx) : e.sets
       }
     )
@@ -469,6 +506,14 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     )
   })),
 
+  toggleDone: (exIdx) => set(state => ({
+    selectedExercises: state.selectedExercises.map((e, i) =>
+      // Ticking is the athlete vouching for the numbers on the card, so a
+      // suggestion still in flight must not replace them afterwards.
+      i !== exIdx ? e : { ...e, done: !e.done, edited: true }
+    )
+  })),
+
   swapExercise: (exIdx, exercise) => set(state => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
       i !== exIdx ? e : { ...e, exercise, workoutExerciseId: undefined }
@@ -495,7 +540,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     currentSetIndex: setIdx
   }),
 
-  startSession: async () => {
+  startSession: async ({ registerExercises = true } = {}) => {
     // Already running, or another caller is mid-flight → reuse, never start twice.
     if (get().sessionId) return
     if (startInFlight) return startInFlight
@@ -519,7 +564,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
         // Only register what we'll actually work through — skipped exercises
         // would otherwise become empty rows in the user's history.
-        const pending = get().selectedExercises
+        const pending = !registerExercises ? [] : get().selectedExercises
           .map((se, i) => ({ se, i }))
           .filter(({ se }) => !se.skipped && !se.workoutExerciseId)
 
@@ -842,6 +887,7 @@ async function doFinish(
     logError: null,
     sourceTemplateId: null,
     sourceScheduledId: null,
+    quickLog: false,
   })
 
   return result

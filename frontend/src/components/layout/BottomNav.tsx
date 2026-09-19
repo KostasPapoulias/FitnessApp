@@ -6,7 +6,7 @@ import { useDeviceType } from '../../hooks/useDeviceType'
 export default function BottomNav() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { activeSession, selectedExercises } = useWorkoutStore()
+  const { activeSession, selectedExercises, quickLog } = useWorkoutStore()
   const { isPhone } = useDeviceType()
   const navRef = useRef<HTMLElement>(null)
 
@@ -41,11 +41,17 @@ export default function BottomNav() {
 
   // Center button state
   const centerButton = () => {
+    // A quick-log session has no live screen. Sending it to /workout/active
+    // would open the set card and rest timer on a session meant to have neither.
     if (activeSession) {
-      return { label: 'Live ●', path: '/workout/active', bg: 'bg-brand-red' }
+      return quickLog
+        ? { label: 'Log ●', path: '/workout/log', bg: 'bg-brand-red' }
+        : { label: 'Live ●', path: '/workout/active', bg: 'bg-brand-red' }
     }
     if (selectedExercises.length > 0) {
-      return { label: `Plan (${selectedExercises.length})`, path: '/workout/plan', bg: 'bg-brand-teal' }
+      return quickLog
+        ? { label: `Log (${selectedExercises.length})`, path: '/workout/log', bg: 'bg-brand-teal' }
+        : { label: `Plan (${selectedExercises.length})`, path: '/workout/plan', bg: 'bg-brand-teal' }
     }
     return { label: 'Plan', path: '/workout/start', bg: 'bg-brand-teal' }
   }
