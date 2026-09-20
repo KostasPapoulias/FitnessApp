@@ -6,17 +6,20 @@ import { templateService } from '../../services/template.service'
 import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
 import { ScheduledWorkout } from '../../types'
 import { workoutService, ActiveSession } from '../../services/workout.service'
+import { MessageKey, useT } from '../../i18n'
 
-// ── modality catalogue (id → label/desc/CTA), matching the prototype ──
+// ── modality catalogue (id → dictionary keys), matching the prototype ──
 type ModId = 'strength' | 'calisthenics' | 'cardio' | 'mobility' | 'wod'
-const MODALITIES: { id: ModId; label: string; desc: string; cta: string }[] = [
-  { id: 'strength',     label: 'Strength',     desc: 'Weights & machines',   cta: 'Browse Exercises →' },
-  { id: 'calisthenics', label: 'Calisthenics', desc: 'Bodyweight & skills',  cta: 'Browse Exercises →' },
-  { id: 'cardio',       label: 'Cardio',       desc: 'Runs, swims & rides',  cta: 'Choose Activity →' },
-  { id: 'mobility',     label: 'Mobility',     desc: 'Yoga, pilates, stretch', cta: 'Browse Flows →' },
-  { id: 'wod',          label: 'WOD',          desc: 'CrossFit & metcons',   cta: 'Browse WODs →' },
+const MODALITIES: { id: ModId; label: MessageKey; desc: MessageKey; cta: MessageKey }[] = [
+  { id: 'strength',     label: 'modality.strength',     desc: 'modality.strengthDesc',     cta: 'modality.strengthCta' },
+  { id: 'calisthenics', label: 'modality.calisthenics', desc: 'modality.calisthenicsDesc', cta: 'modality.calisthenicsCta' },
+  { id: 'cardio',       label: 'modality.cardio',       desc: 'modality.cardioDesc',       cta: 'modality.cardioCta' },
+  { id: 'mobility',     label: 'modality.mobility',     desc: 'modality.mobilityDesc',     cta: 'modality.mobilityCta' },
+  { id: 'wod',          label: 'modality.wod',          desc: 'modality.wodDesc',          cta: 'modality.wodCta' },
 ]
-// label sent to the browse/exercise screens (ExerciseList filters on this)
+// Sent to the browse/exercise screens, which filter on it, and matched against
+// the catalogue server-side. NOT display text: translating these would query
+// the API for a modality called "Δύναμη" and come back empty.
 const MOD_LABEL: Record<ModId, string> = {
   strength: 'Strength', calisthenics: 'Calisthenics', cardio: 'Cardio',
   mobility: 'Mobility', wod: 'WOD',
@@ -60,6 +63,7 @@ function Toggle({ on, onChange, disabled }: {
 export default function StartWorkout() {
   const navigate = useNavigate()
   const { clearExercises } = useWorkoutStore()
+  const { t, intl } = useT()
 
   const [modality, setModality] = useState<ModId>('strength')
 
@@ -77,8 +81,8 @@ export default function StartWorkout() {
 
   const activeMod = MODALITIES.find(m => m.id === modality)!
 
-  // Today, e.g. "Tuesday, July 15"
-  const todayLabel = new Date().toLocaleDateString(undefined, {
+  // Today, e.g. "Tuesday, July 15" — in the app's language, not the device's.
+  const todayLabel = new Date().toLocaleDateString(intl, {
     weekday: 'long', month: 'long', day: 'numeric',
   })
 
@@ -103,7 +107,7 @@ export default function StartWorkout() {
 
       {/* Title */}
       <div>
-        <h1 className="text-[27px] font-extrabold tracking-tight">Start Workout</h1>
+        <h1 className="text-[27px] font-extrabold tracking-tight">{t('start.title')}</h1>
         <p className="text-dark-300 text-[13px] mt-1 mb-5">{todayLabel}</p>
       </div>
 
@@ -117,7 +121,7 @@ export default function StartWorkout() {
       <StandbyStrip />
 
       {/* Modality */}
-      <Eyebrow>CHOOSE YOUR TRAINING</Eyebrow>
+      <Eyebrow>{t('start.chooseTraining')}</Eyebrow>
       <div className="flex flex-col gap-2.5 mb-6">
         {MODALITIES.map(m => {
           const on = modality === m.id
@@ -130,8 +134,8 @@ export default function StartWorkout() {
                 <ModIcon id={m.id} />
               </span>
               <span className="flex-1">
-                <span className="block text-[15px] font-bold">{m.label}</span>
-                <span className="block text-xs text-dark-300 mt-px">{m.desc}</span>
+                <span className="block text-[15px] font-bold">{t(m.label)}</span>
+                <span className="block text-xs text-dark-300 mt-px">{t(m.desc)}</span>
               </span>
               {on ? (
                 <span className="w-6 h-6 rounded-full bg-brand-teal text-black flex items-center justify-center">
@@ -147,30 +151,30 @@ export default function StartWorkout() {
       </div>
 
       {/* Smart features */}
-      <Eyebrow>SMART FEATURES</Eyebrow>
+      <Eyebrow>{t('start.smartFeatures')}</Eyebrow>
       <div className="bg-dark-800 border border-dark-600 rounded-card px-4 mb-6">
         {[
           {
             icon: <IcMic />,
-            label: 'Voice Commands',
+            label: t('start.voice'),
             // Unsupported is stated rather than hidden: a missing row reads as
             // a bug, an explained one reads as a device limit.
             sub: voiceSupported === false
-              ? 'This device has no speech recognition'
-              : '"Set done", "eight reps at sixty"',
+              ? t('start.voiceUnsupported')
+              : t('start.voiceExamples'),
             on: voice, set: setVoice,
             off: voiceSupported === false,
           },
           {
             icon: <IcVibrate />,
-            label: 'Haptic Rest Alerts',
-            sub: 'Vibrate when rest ends',
+            label: t('start.haptic'),
+            sub: t('start.hapticSub'),
             on: haptic, set: setHaptic,
           },
           {
             icon: <IcSpeaker />,
-            label: 'Audio Cues',
-            sub: 'Announce the next set out loud',
+            label: t('start.audio'),
+            sub: t('start.audioSub'),
             on: audio, set: setAudio,
           },
           // Pace coaching is NOT in this list on purpose. It only means
@@ -205,10 +209,10 @@ export default function StartWorkout() {
           <span className="text-[15px]">🎤</span>
           <span className="flex-1 min-w-0">
             <span className="block text-[12.5px] text-dark-200">
-              “set done” · “eight reps” · “log eight at sixty”
+              {t('start.voiceSamples')}
             </span>
             <span className="block text-[11px] text-dark-400 mt-0.5">
-              See all voice commands
+              {t('start.voiceSeeAll')}
             </span>
           </span>
           <span className="text-dark-400 text-sm">→</span>
@@ -222,7 +226,7 @@ export default function StartWorkout() {
           asking for a number that might turn out to mean nothing. */}
       {modality === 'cardio' && (
         <>
-          <Eyebrow>PACE COACH</Eyebrow>
+          <Eyebrow>{t('start.paceCoachEyebrow')}</Eyebrow>
           <button
             onClick={() => {
               const next = !paceCoach
@@ -236,11 +240,9 @@ export default function StartWorkout() {
           >
             <span className="text-[17px]">🎯</span>
             <span className="flex-1 min-w-0">
-              <span className="block text-sm font-semibold">Spoken pace coaching</span>
+              <span className="block text-sm font-semibold">{t('start.paceCoach')}</span>
               <span className="block text-xs text-dark-300 mt-0.5">
-                {paceCoach
-                  ? 'Set the pace and the progression on the run screen'
-                  : 'Calls a pace, then calls you up or down against it'}
+                {paceCoach ? t('start.paceCoachOn') : t('start.paceCoachOff')}
               </span>
             </span>
             <span
@@ -258,7 +260,7 @@ export default function StartWorkout() {
         onClick={handleBrowse}
         className="w-full bg-brand-teal text-black font-bold py-[15px] rounded-btn
                    text-[15px] active:scale-95 transition-transform">
-        {activeMod.cta}
+        {t(activeMod.cta)}
       </button>
 
       {showVoiceHelp && <VoiceCommandSheet onClose={() => setShowVoiceHelp(false)} />}
@@ -288,6 +290,7 @@ export default function StartWorkout() {
  */
 function UnfinishedStrip() {
   const navigate = useNavigate()
+  const { t, tn, intl } = useT()
 
   const [active, setActive] = useState<ActiveSession | null>(null)
   const [busy, setBusy] = useState(false)
@@ -318,17 +321,19 @@ function UnfinishedStrip() {
   const summary = active.exerciseNames.length > 0
     ? active.exerciseNames.slice(0, 2).join(', ') +
       (active.exerciseNames.length > 2 ? ` +${active.exerciseNames.length - 2}` : '')
-    : 'Nothing logged'
+    : t('start.nothingLogged')
 
   return (
     <div className="mb-4 rounded-card border border-brand-yellow/40 bg-[#2a2410] px-4 py-3.5">
       <p className="text-[10px] tracking-wider text-brand-yellow font-bold">
-        UNFINISHED WORKOUT
+        {t('start.unfinished')}
       </p>
       <p className="text-white text-sm font-bold mt-0.5">
-        Started {started.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+        {t('start.startedAt', {
+          time: started.toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' }),
+        })}
         {' · '}
-        {active.setCount} set{active.setCount === 1 ? '' : 's'}
+        {tn('calendar.sets', active.setCount)}
       </p>
       <p className="text-dark-300 text-[12px] mt-0.5">{summary}</p>
 
@@ -339,7 +344,7 @@ function UnfinishedStrip() {
           className="flex-1 py-2.5 rounded-btn bg-brand-yellow text-black text-[13px]
                      font-extrabold active:scale-95 transition-transform disabled:opacity-40"
         >
-          Resume
+          {t('start.resume')}
         </button>
         <button
           onClick={discard}
@@ -348,7 +353,7 @@ function UnfinishedStrip() {
                      text-dark-200 text-[13px] font-bold active:scale-95
                      transition-transform disabled:opacity-40"
         >
-          {busy ? '…' : 'Discard'}
+          {busy ? '…' : t('start.discard')}
         </button>
       </div>
     </div>
@@ -358,6 +363,7 @@ function UnfinishedStrip() {
 function StandbyStrip() {
   const navigate = useNavigate()
   const loadTemplate = useWorkoutStore(s => s.loadTemplate)
+  const { t, tn, intl, upper } = useT()
 
   const [next, setNext] = useState<ScheduledWorkout | null>(null)
   const [planCount, setPlanCount] = useState(0)
@@ -392,9 +398,9 @@ function StandbyStrip() {
         className="w-full mb-6 rounded-card border border-dark-600 bg-dark-800 px-4 py-3.5
                    text-left active:scale-[0.99] transition-transform"
       >
-        <p className="text-[10px] tracking-wide text-dark-400">SAVED PLANS</p>
+        <p className="text-[10px] tracking-wide text-dark-400">{t('start.savedPlans')}</p>
         <p className="text-[13px] font-semibold mt-0.5">
-          Load one of your {planCount} plan{planCount === 1 ? '' : 's'} →
+          {tn('start.loadPlan', planCount)}
         </p>
       </button>
     )
@@ -407,14 +413,22 @@ function StandbyStrip() {
   return (
     <div className="mb-6 rounded-card border border-brand-teal/40 bg-[#0a2a22] px-4 py-3.5">
       <p className="text-[10px] tracking-wider text-brand-teal font-bold">
-        {isToday ? 'ON STANDBY · TODAY' : `ON STANDBY · ${when.toLocaleDateString('en-GB', {
-          weekday: 'short', day: 'numeric', month: 'short',
-        }).toUpperCase()}`}
+        {isToday
+          ? t('start.standbyToday')
+          : t('start.standbyOn', {
+              // `upper` rather than toUpperCase: Greek loses the accent when
+              // uppercased, and keeping it reads as a typo.
+              date: upper(when.toLocaleDateString(intl, {
+                weekday: 'short', day: 'numeric', month: 'short',
+              })),
+            })}
       </p>
       <p className="text-white text-sm font-bold mt-0.5">{next.template.name}</p>
       <p className="text-dark-300 text-[12px] mt-0.5">
-        {next.template.exercises.length} exercises ·{' '}
-        {next.template.exercises.reduce((sum, e) => sum + e.sets.length, 0)} sets
+        {t('start.templateSummary', {
+          exercises: next.template.exercises.length,
+          sets: next.template.exercises.reduce((sum, e) => sum + e.sets.length, 0),
+        })}
       </p>
 
       <div className="flex gap-2 mt-3">
@@ -426,14 +440,14 @@ function StandbyStrip() {
           className="flex-1 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
                      active:scale-95 transition-transform"
         >
-          Start this →
+          {t('start.startThis')}
         </button>
         <button
           onClick={() => navigate('/plans')}
           className="px-4 py-2.5 rounded-btn border border-dark-600 bg-dark-800
                      text-white text-[13px] font-bold active:scale-95 transition-transform"
         >
-          All plans
+          {t('start.allPlans')}
         </button>
       </div>
     </div>

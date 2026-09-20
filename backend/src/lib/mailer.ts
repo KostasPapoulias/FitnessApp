@@ -13,6 +13,8 @@
  * and has no way to find out.
  */
 
+import type { Locale } from './locale'
+
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 /** Both must be present for mail to be considered configured. */
@@ -84,7 +86,9 @@ export const sendMail = async (mail: Mail): Promise<void> => {
  * text so the destination is visible before clicking, and never asks for
  * anything back.
  */
-export const passwordResetMail = (to: string, link: string, ttlMinutes: number): Mail => ({
+export const passwordResetMail = (
+  to: string, link: string, ttlMinutes: number, locale: Locale = 'en'
+): Mail => locale === 'el' ? passwordResetMailEl(to, link, ttlMinutes) : ({
   to,
   subject: 'Reset your SomaTrack password',
   text: [
@@ -115,6 +119,43 @@ export const passwordResetMail = (to: string, link: string, ttlMinutes: number):
       </p>
       <p style="font-size:12px;line-height:1.6;color:#555;margin:0">
         If this was not you, ignore this email — your password has not changed.
+      </p>
+    </div>
+  `.trim(),
+})
+
+/** The same email in Greek. Same structure, same rules. */
+const passwordResetMailEl = (to: string, link: string, ttlMinutes: number): Mail => ({
+  to,
+  subject: 'Επαναφορά κωδικού SomaTrack',
+  text: [
+    'Κάποιος ζήτησε επαναφορά του κωδικού για τον λογαριασμό σου στο SomaTrack.',
+    '',
+    `Άνοιξε αυτόν τον σύνδεσμο για να διαλέξεις καινούριο (λήγει σε ${ttlMinutes} λεπτά):`,
+    link,
+    '',
+    'Αν δεν ήσουν εσύ, αγνόησε αυτό το email — ο κωδικός σου δεν έχει αλλάξει.',
+  ].join('\n'),
+  html: `
+    <div lang="el" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                max-width:480px;margin:0 auto;padding:24px;color:#111">
+      <h1 style="font-size:20px;margin:0 0 16px">Επαναφορά κωδικού</h1>
+      <p style="font-size:14px;line-height:1.6;margin:0 0 20px">
+        Κάποιος ζήτησε επαναφορά του κωδικού για τον λογαριασμό σου στο SomaTrack.
+        Ο σύνδεσμος λήγει σε ${ttlMinutes} λεπτά και χρησιμοποιείται μία φορά.
+      </p>
+      <p style="margin:0 0 20px">
+        <a href="${link}"
+           style="display:inline-block;background:#00D4AA;color:#000;font-weight:700;
+                  text-decoration:none;padding:12px 20px;border-radius:12px;font-size:14px">
+          Διάλεξε καινούριο κωδικό
+        </a>
+      </p>
+      <p style="font-size:12px;line-height:1.6;color:#555;margin:0 0 20px;word-break:break-all">
+        Ή επικόλλησε αυτό στον browser σου:<br>${link}
+      </p>
+      <p style="font-size:12px;line-height:1.6;color:#555;margin:0">
+        Αν δεν ήσουν εσύ, αγνόησε αυτό το email — ο κωδικός σου δεν έχει αλλάξει.
       </p>
     </div>
   `.trim(),

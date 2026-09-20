@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
+import { useT } from '../i18n'
+import LanguageSwitch from '../components/LanguageSwitch'
 
 export default function Register() {
   const navigate = useNavigate()
   const { register, isLoading } = useAuthStore()
+  const { t } = useT()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,11 +21,11 @@ export default function Register() {
 
   const handleSubmit = async () => {
     if (!name || !email || !password) {
-      setError('Please fill in all fields')
+      setError(t('common.fillAllFields'))
       return
     }
     if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`)
+      setError(t('register.passwordTooShort', { min: MIN_PASSWORD_LENGTH }))
       return
     }
     try {
@@ -35,9 +38,7 @@ export default function Register() {
       // is worse than useless when the guess is wrong.
       setError(
         err?.response?.data?.error ||
-        (err?.response
-          ? 'Registration failed. Please try again.'
-          : 'Could not reach the server. Check your connection and try again.')
+        (err?.response ? t('register.failed') : t('common.offline'))
       )
     }
   }
@@ -45,20 +46,26 @@ export default function Register() {
   return (
     <div className="min-h-dvh bg-dark-900 flex flex-col justify-between px-6
                     pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
+      {/* The account is created in whichever language this shows, so it is
+          chosen here rather than discovered later in Profile. */}
+      <div className="flex justify-end">
+        <LanguageSwitch />
+      </div>
+
       <div className="flex-1 flex flex-col justify-center">
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-white">SomaTrack</h1>
-          <p className="text-dark-300 mt-2">Create your account</p>
+          <p className="text-dark-300 mt-2">{t('register.subtitle')}</p>
         </div>
 
         <div className="flex flex-col gap-4">
           <div>
-            <label className="text-dark-300 text-sm mb-2 block">Name</label>
+            <label className="text-dark-300 text-sm mb-2 block">{t('register.name')}</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Name"
+              placeholder={t('register.name')}
               className="w-full bg-dark-800 border border-dark-600 rounded-btn
                          px-4 py-3 text-white placeholder-dark-400
                          focus:outline-none focus:border-brand-teal"
@@ -66,12 +73,12 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="text-dark-300 text-sm mb-2 block">Email</label>
+            <label className="text-dark-300 text-sm mb-2 block">{t('auth.email')}</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              placeholder={t('auth.emailPlaceholder')}
               className="w-full bg-dark-800 border border-dark-600 rounded-btn
                          px-4 py-3 text-white placeholder-dark-400
                          focus:outline-none focus:border-brand-teal"
@@ -79,7 +86,7 @@ export default function Register() {
           </div>
 
           <div>
-            <label className="text-dark-300 text-sm mb-2 block">Password</label>
+            <label className="text-dark-300 text-sm mb-2 block">{t('auth.password')}</label>
             <input
               type="password"
               value={password}
@@ -92,7 +99,7 @@ export default function Register() {
             />
             {/* Stated before submitting, not after being rejected */}
             <p className="text-dark-400 text-xs mt-1.5">
-              At least {MIN_PASSWORD_LENGTH} characters. A short phrase works well.
+              {t('register.passwordHint', { min: MIN_PASSWORD_LENGTH })}
             </p>
           </div>
 
@@ -104,15 +111,15 @@ export default function Register() {
             className="w-full bg-brand-teal text-black font-bold py-4 rounded-btn
                        mt-2 active:scale-95 transition-transform disabled:opacity-50"
           >
-            {isLoading ? 'Creating account...' : 'Create Account'}
+            {isLoading ? t('register.submitting') : t('register.submit')}
           </button>
         </div>
       </div>
 
       <p className="text-center text-dark-300 text-sm">
-        Already have an account?{' '}
+        {t('register.haveAccount')}{' '}
         <Link to="/login" className="text-brand-teal font-semibold">
-          Sign In
+          {t('register.signIn')}
         </Link>
       </p>
     </div>

@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User } from '../types'
 import api from '../services/api'
+import { settingsService } from '../services/settings.service'
+import { useLocaleStore } from './useLocaleStore'
+import { isLocale } from '../i18n/locales'
 
 interface AuthStore {
   user: User | null
@@ -24,6 +27,38 @@ interface AuthStore {
  */
 const storedToken = (): string | null =>
   typeof localStorage === 'undefined' ? null : localStorage.getItem('somatrack_token')
+
+/**
+ * Squares the device's language with the account's, once the account is known.
+ *
+ * The account normally wins, so signing in on a new phone brings your language
+ * with you. A language picked on a signed-out screen is the exception — that
+ * was a choice, made seconds ago, and every account the migration created sits
+ * on the 'en' default — so it is saved to the account instead of reverted.
+ *
+ * A failed save leaves the choice pending rather than dropping it, and the next
+ * launch's fetchMe tries again. The device keeps showing what was picked
+ * either way.
+ */
+const reconcileLocale = (accountLanguage: unknown) => {
+  const { locale, pendingSync, setLocale, markSynced } = useLocaleStore.getState()
+
+  if (pendingSync) {
+    if (accountLanguage === locale) {
+      markSynced()
+      return
+    }
+    settingsService.updateSettings({ language: locale })
+      .then(() => {
+        // Only if nothing newer was picked while the request was in flight.
+        if (useLocaleStore.getState().locale === locale) markSynced()
+      })
+      .catch(() => {})
+    return
+  }
+
+  if (isLocale(accountLanguage) && accountLanguage !== locale) setLocale(accountLanguage)
+}
 
 export const useAuthStore = create<AuthStore>()(
   persist(
@@ -54,6 +89,7 @@ export const useAuthStore = create<AuthStore>()(
           const { token, user } = res.data.data
           localStorage.setItem('somatrack_token', token)
           set({ token, user, isAuthenticated: true })
+          reconcileLocale(user?.settings?.language)
         } finally {
           set({ isLoading: false })
         }
@@ -62,10 +98,13 @@ export const useAuthStore = create<AuthStore>()(
       register: async (email, password, name) => {
         set({ isLoading: true })
         try {
-          const res = await api.post('/auth/register', { email, password, name })
+          // The account starts in whatever language Register was showing.
+          const language = useLocaleStore.getState().locale
+          const res = await api.post('/auth/register', { email, password, name, language })
           const { token, user } = res.data.data
           localStorage.setItem('somatrack_token', token)
           set({ token, user, isAuthenticated: true })
+          reconcileLocale(user?.settings?.language)
         } finally {
           set({ isLoading: false })
         }
@@ -80,6 +119,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const res = await api.get('/auth/me')
           set({ user: res.data.data, isAuthenticated: true })
+          reconcileLocale(res.data.data?.settings?.language)
         } catch {
           localStorage.removeItem('somatrack_token')
           set({ user: null, token: null, isAuthenticated: false })

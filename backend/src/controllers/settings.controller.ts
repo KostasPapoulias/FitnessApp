@@ -1,7 +1,9 @@
 import { Response } from 'express'
+import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { log } from '../lib/logger'
+import { LOCALES, isLocale } from '../lib/locale'
 
 /**
  * The Settings row had no endpoint at all.
@@ -17,6 +19,27 @@ import { log } from '../lib/logger'
  * row sits on User and a permissive update would let a client set columns the
  * settings screen has no business touching.
  */
+
+/**
+ * The Settings columns a client may see. Every endpoint that returns the row —
+ * here, `/auth/me` and `/profile` — selects through this.
+ *
+ * An allowlist, not an omit. The row also holds the PIN's bcrypt hash and its
+ * lockout counters, and all three endpoints used to return it whole: the hash
+ * went to the phone, and `useAuthStore` persists the user to localStorage, so
+ * it sat on the device. A 4–8 digit PIN is at most 10^8 guesses, and offline
+ * nothing rate-limits them — the server-side lockout only protects a PIN the
+ * attacker has to ask about. Listing what is safe means a column added later is
+ * private until someone decides otherwise.
+ */
+export const CLIENT_SETTINGS_SELECT = {
+  preferredUnit: true,
+  notificationEnabled: true,
+  inactivityDaysThreshold: true,
+  theme: true,
+  aiConsentEnabled: true,
+  language: true,
+} satisfies Prisma.SettingsSelect
 
 const UNITS = ['metric', 'imperial'] as const
 const THEMES = ['dark', 'light'] as const
@@ -36,6 +59,7 @@ export interface SettingsPatch {
   notificationEnabled?: boolean
   inactivityDaysThreshold?: number
   aiConsentEnabled?: boolean
+  language?: string
 }
 
 /**
@@ -64,6 +88,13 @@ const buildPatch = (
       return { ok: false, error: `theme must be one of: ${THEMES.join(', ')}` }
     }
     data.theme = body.theme
+  }
+
+  if (body.language !== undefined) {
+    if (!isLocale(body.language)) {
+      return { ok: false, error: `language must be one of: ${LOCALES.join(', ')}` }
+    }
+    data.language = body.language
   }
 
   if (body.notificationEnabled !== undefined) {
@@ -105,6 +136,7 @@ export const getSettings = async (req: AuthRequest, res: Response): Promise<void
       where: { userId: req.userId! },
       update: {},
       create: { userId: req.userId! },
+      select: CLIENT_SETTINGS_SELECT,
     })
 
     res.json({ success: true, data: settings })
@@ -133,6 +165,7 @@ export const updateSettings = async (req: AuthRequest, res: Response): Promise<v
       where: { userId: req.userId! },
       update: patch.data,
       create: { userId: req.userId!, ...patch.data },
+      select: CLIENT_SETTINGS_SELECT,
     })
 
     res.json({ success: true, data: settings })

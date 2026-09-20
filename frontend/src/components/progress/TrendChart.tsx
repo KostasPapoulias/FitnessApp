@@ -1,4 +1,5 @@
 import { ReactNode, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useT } from '../../i18n'
 
 /**
  * The app's one line chart.
@@ -66,11 +67,12 @@ interface Props {
   singleHint?: string
 }
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+// The reader's locale, from useT: '12 Sept' in English, '12 Σεπ' in Greek.
+const fmtDate = (iso: string, intl: string) =>
+  new Date(iso).toLocaleDateString(intl, { day: 'numeric', month: 'short' })
 
-const fmtFull = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtFull = (iso: string, intl: string) =>
+  new Date(iso).toLocaleDateString(intl, { day: 'numeric', month: 'short', year: 'numeric' })
 
 export default function TrendChart({
   points,
@@ -80,7 +82,7 @@ export default function TrendChart({
   ceiling,
   minSpan = 1,
   plotHeight = 120,
-  valueHeader = 'Value',
+  valueHeader,
   empty,
   singleHint,
 }: Props) {
@@ -88,6 +90,7 @@ export default function TrendChart({
   const [width, setWidth] = useState(0)
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const [showTable, setShowTable] = useState(false)
+  const { t, intl } = useT()
 
   // Measured, not assumed. The card sits inside AppLayout's centred
   // max-w-[430px], and a viewBox scaled to fit would stretch the type with it.
@@ -160,7 +163,7 @@ export default function TrendChart({
   }
 
   if (points.length === 0) {
-    return <div className="px-4 pb-4 text-dark-400 text-xs">{empty ?? 'Nothing logged yet.'}</div>
+    return <div className="px-4 pb-4 text-dark-400 text-xs">{empty ?? t('chart.empty')}</div>
   }
 
   // One point is a number, not a trend. Drawing a flat line across the card
@@ -170,7 +173,7 @@ export default function TrendChart({
       <div className="px-4 pb-4">
         <p className="text-white text-xl font-bold tabular-nums">{format(points[0].value)}</p>
         <p className="text-dark-400 text-xs mt-1">
-          {fmtFull(points[0].at)} — {singleHint ?? 'one entry so far, so there is no trend to draw yet.'}
+          {fmtFull(points[0].at, intl)} — {singleHint ?? t('chart.single')}
         </p>
       </div>
     )
@@ -247,10 +250,10 @@ export default function TrendChart({
             )}
 
             <text x={PAD_X} y={plotHeight + 15} fill={AXIS} fontSize={10}>
-              {fmtDate(points[0].at)}
+              {fmtDate(points[0].at, intl)}
             </text>
             <text x={width - PAD_X} y={plotHeight + 15} fill={AXIS} fontSize={10} textAnchor="end">
-              {fmtDate(points[points.length - 1].at)}
+              {fmtDate(points[points.length - 1].at, intl)}
             </text>
           </svg>
         )}
@@ -270,7 +273,7 @@ export default function TrendChart({
             style={{ left: Math.min(Math.max(activeCoord.x - 45, 0), Math.max(width - 110, 0)) }}
           >
             <span className="font-bold tabular-nums">{format(active.value)}</span>
-            <span className="text-dark-300 ml-1.5">{fmtDate(active.at)}</span>
+            <span className="text-dark-300 ml-1.5">{fmtDate(active.at, intl)}</span>
             {active.detail && <span className="text-dark-300 ml-1.5">{active.detail}</span>}
           </div>
         )}
@@ -280,7 +283,7 @@ export default function TrendChart({
         onClick={() => setShowTable(v => !v)}
         className="w-full px-4 py-2 text-left text-dark-400 text-xs active:bg-dark-700"
       >
-        {showTable ? 'Hide values' : `Show all ${points.length} values`}
+        {showTable ? t('chart.hideValues') : t('chart.showValues', { count: points.length })}
       </button>
 
       {showTable && (
@@ -288,15 +291,15 @@ export default function TrendChart({
           <table className="w-full text-xs">
             <thead>
               <tr className="text-dark-400">
-                <th className="text-left font-normal py-1">Date</th>
-                <th className="text-right font-normal py-1">{valueHeader}</th>
+                <th className="text-left font-normal py-1">{t('chart.date')}</th>
+                <th className="text-right font-normal py-1">{valueHeader ?? t('chart.value')}</th>
               </tr>
             </thead>
             <tbody>
               {[...points].reverse().map((point, i) => (
                 <tr key={i} className="border-t border-dark-700">
                   <td className="py-1.5 text-dark-200">
-                    {fmtFull(point.at)}
+                    {fmtFull(point.at, intl)}
                     {point.detail && <span className="text-dark-400 ml-1.5">{point.detail}</span>}
                   </td>
                   <td className="py-1.5 text-right text-white tabular-nums">

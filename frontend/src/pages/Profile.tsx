@@ -21,6 +21,8 @@ import {
   NotificationPreferences,
   notificationService,
 } from '../services/notification.service'
+import { LANGUAGE_NAMES, LOCALES, useT } from '../i18n'
+import { useLocaleStore } from '../store/useLocaleStore'
 
 //   Reusable row components 
 function StatCard({ value, label, color = 'text-white' }: {
@@ -42,32 +44,21 @@ function TrainingLoadCard({ load, systemicFatigue }: {
   load: TrainingLoad | null
   systemicFatigue: number
 }) {
+  const { t, tn } = useT()
   if (!load) return null
 
   const trendCopy: Record<LoadTrend, { label: string; color: string; note: string }> = {
-    ramping: {
-      label: 'Ramping fast', color: 'text-brand-red',
-      note: 'This week is well above what you are conditioned for. Ease off before something gives.',
-    },
-    building: {
-      label: 'Building', color: 'text-brand-green',
-      note: 'Load is climbing at a sustainable rate. Keep it steady.',
-    },
-    maintaining: {
-      label: 'Maintaining', color: 'text-brand-teal',
-      note: 'Holding your current level. Add a little volume when you feel fresh.',
-    },
-    detraining: {
-      label: 'Tailing off', color: 'text-brand-yellow',
-      note: 'Training has dropped below your usual level — consistency beats intensity here.',
-    },
+    ramping:     { label: t('load.ramping'),     color: 'text-brand-red',    note: t('load.rampingNote') },
+    building:    { label: t('load.building'),    color: 'text-brand-green',  note: t('load.buildingNote') },
+    maintaining: { label: t('load.maintaining'), color: 'text-brand-teal',   note: t('load.maintainingNote') },
+    detraining:  { label: t('load.detraining'),  color: 'text-brand-yellow', note: t('load.detrainingNote') },
   }
 
   const formCopy: Record<FormState, string> = {
-    fresh: 'Fresh',
-    neutral: 'Neutral',
-    tired: 'Carrying load',
-    overreaching: 'Overreaching',
+    fresh: t('load.formFresh'),
+    neutral: t('load.formNeutral'),
+    tired: t('load.formTired'),
+    overreaching: t('load.formOverreaching'),
   }
 
   const trend = trendCopy[load.trend]
@@ -75,7 +66,7 @@ function TrainingLoadCard({ load, systemicFatigue }: {
   return (
     <div className="bg-dark-800 rounded-card border border-dark-600 p-2">
       <div className="flex justify-between items-center mb-1">
-        <p className="text-dark-300 text-xs uppercase tracking-wider">Training Load</p>
+        <p className="text-dark-300 text-xs uppercase tracking-wider">{t('load.title')}</p>
         {load.established && (
           <span className={`text-xs font-semibold ${trend.color}`}>{trend.label}</span>
         )}
@@ -83,15 +74,13 @@ function TrainingLoadCard({ load, systemicFatigue }: {
 
       {!load.established ? (
         <p className="text-dark-400 text-xs px-1 py-2 leading-relaxed">
-          {load.sessionCount === 0
-            ? 'No finished sessions yet. Log a couple of weeks of training and this will show whether you are building or overreaching.'
-            : `Only ${load.sessionCount} session${load.sessionCount === 1 ? '' : 's'} logged so far — a couple more weeks and this becomes meaningful.`}
+          {load.sessionCount === 0 ? t('load.none') : tn('load.few', load.sessionCount)}
         </p>
       ) : (
         <>
           <div className="flex gap-2">
-            <StatCard value={String(Math.round(load.fitness))} label="Fitness (6wk)" color="text-brand-teal" />
-            <StatCard value={String(Math.round(load.fatigue))} label="Fatigue (1wk)" color="text-brand-orange" />
+            <StatCard value={String(Math.round(load.fitness))} label={t('load.fitness')} color="text-brand-teal" />
+            <StatCard value={String(Math.round(load.fatigue))} label={t('load.fatigue')} color="text-brand-orange" />
             <StatCard
               value={load.form > 0 ? `+${Math.round(load.form)}` : String(Math.round(load.form))}
               label={formCopy[load.formState]}
@@ -99,7 +88,7 @@ function TrainingLoadCard({ load, systemicFatigue }: {
             />
             <StatCard
               value={`${systemicFatigue}%`}
-              label="Whole-body"
+              label={t('load.wholeBody')}
               color={
                 systemicFatigue >= 70 ? 'text-brand-red' :
                 systemicFatigue >= 35 ? 'text-brand-yellow' : 'text-brand-green'
@@ -109,7 +98,7 @@ function TrainingLoadCard({ load, systemicFatigue }: {
           <p className="text-dark-400 text-[11px] mt-2 px-1 leading-relaxed">
             {trend.note}
             {load.previousWeeklyLoad > 0 && (
-              <> This week {load.weeklyLoad} vs {load.previousWeeklyLoad} last week.</>
+              <> {t('load.weekCompare', { week: load.weeklyLoad, previous: load.previousWeeklyLoad })}</>
             )}
           </p>
         </>
@@ -222,25 +211,15 @@ const UNIT_OPTIONS = [
 // so the two cannot drift. It previously asked for a plain `age`, which the
 // recovery model no longer reads — it prefers `birthDate` — so editing it
 // changed nothing the athlete could observe.
-const SEX_OPTIONS = [
-  { value: 'male',              label: 'Male' },
-  { value: 'female',            label: 'Female' },
-  { value: 'other',             label: 'Other' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
-] as const
+//
+// Values only. Each label is a dictionary key built from its value, so the
+// typecheck refuses a value with no label in one of the languages.
+const SEXES = ['male', 'female', 'other', 'prefer_not_to_say'] as const
+const LEVELS = ['beginner', 'intermediate', 'advanced'] as const
+const GOALS = ['hypertrophy', 'strength', 'endurance', 'weight_loss'] as const
 
-const LEVEL_OPTIONS = [
-  { value: 'beginner',     label: 'Beginner' },
-  { value: 'intermediate', label: 'Intermediate' },
-  { value: 'advanced',     label: 'Advanced' },
-] as const
-
-const GOAL_OPTIONS = [
-  { value: 'hypertrophy', label: 'Build muscle' },
-  { value: 'strength',    label: 'Get stronger' },
-  { value: 'endurance',   label: 'Endurance' },
-  { value: 'weight_loss', label: 'Lose weight' },
-] as const
+const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
+  typeof value === 'string' && (list as readonly string[]).includes(value)
 
 function EditProfileModal({ profile, imperial, onSave, onClose }: {
   profile: any
@@ -248,6 +227,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
   onSave: (data: any) => void
   onClose: () => void
 }) {
+  const { t } = useT()
   const [name, setName] = useState<string>(profile?.name ?? '')
   const [birth, setBirth] = useState<DateParts>(toDateParts(profile?.birthDate))
   const [sex, setSex] = useState<string | null>(profile?.gender ?? null)
@@ -310,24 +290,24 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
     // The shared sheet, so this rises, drags shut and sits over the nav the
     // same way every other sheet in the app does.
     <BottomSheet
-      title="Edit Profile"
+      title={t('profile.editTitle')}
       onClose={onClose}
       footer={
         <button onClick={save} disabled={!valid}
           className="w-full bg-brand-teal text-black font-bold py-3.5
                      rounded-btn active:scale-95 transition-transform
                      disabled:opacity-40">
-          Save Changes
+          {t('profile.editSave')}
         </button>
       }
     >
         <div className="flex flex-col gap-5">
 
           <div>
-            <label className="text-dark-300 text-xs mb-1.5 block">Name</label>
+            <label className="text-dark-300 text-xs mb-1.5 block">{t('field.name')}</label>
             <input
               type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder="Your name"
+              placeholder={t('field.namePlaceholder')}
               className={`${INPUT_BASE} border-dark-600 focus:border-brand-teal`}
             />
           </div>
@@ -338,7 +318,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
           {imperial ? (
             <>
               <div>
-                <label className="text-dark-300 text-xs mb-1.5 block">Height</label>
+                <label className="text-dark-300 text-xs mb-1.5 block">{t('field.height')}</label>
                 <div className="flex gap-2.5">
                   <NumberField value={feet} onChange={setFeet} unit="ft"
                                placeholder="5" limits={LIMITS.feet} />
@@ -346,38 +326,39 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
                                placeholder="10" limits={LIMITS.inches} />
                 </div>
               </div>
-              <NumberField label="Weight" value={lb} onChange={setLb} unit="lb"
+              <NumberField label={t('field.weight')} value={lb} onChange={setLb} unit="lb"
                            placeholder="165" limits={LIMITS.lb} decimal />
             </>
           ) : (
             <>
-              <NumberField label="Height" value={cm} onChange={setCm} unit="cm"
+              <NumberField label={t('field.height')} value={cm} onChange={setCm} unit="cm"
                            placeholder="175" limits={LIMITS.cm} />
-              <NumberField label="Weight" value={kg} onChange={setKg} unit="kg"
+              <NumberField label={t('field.weight')} value={kg} onChange={setKg} unit="kg"
                            placeholder="75" limits={LIMITS.kg} decimal />
             </>
           )}
 
           <div>
-            <label className="text-dark-300 text-xs mb-1.5 block">Sex</label>
-            <ChipRow options={SEX_OPTIONS as any} value={sex as any}
-                     onChange={setSex} layout="grid2" />
+            <label className="text-dark-300 text-xs mb-1.5 block">{t('field.sex')}</label>
+            <ChipRow options={SEXES.map(v => ({ value: v, label: t(`sex.${v}`) }))}
+                     value={sex as any} onChange={setSex} layout="grid2" />
           </div>
 
           <div>
-            <label className="text-dark-300 text-xs mb-1.5 block">Fitness level</label>
-            <ChipRow options={LEVEL_OPTIONS as any} value={level as any} onChange={setLevel} />
+            <label className="text-dark-300 text-xs mb-1.5 block">{t('field.fitnessLevel')}</label>
+            <ChipRow options={LEVELS.map(v => ({ value: v, label: t(`level.${v}`) }))}
+                     value={level as any} onChange={setLevel} />
           </div>
 
           <div>
-            <label className="text-dark-300 text-xs mb-1.5 block">Goal</label>
-            <ChipRow options={GOAL_OPTIONS as any} value={goal as any}
-                     onChange={setGoal} layout="grid2" />
+            <label className="text-dark-300 text-xs mb-1.5 block">{t('field.goal')}</label>
+            <ChipRow options={GOALS.map(v => ({ value: v, label: t(`goal.${v}`) }))}
+                     value={goal as any} onChange={setGoal} layout="grid2" />
           </div>
 
           <div>
             <label className="text-dark-300 text-xs mb-1.5 block">
-              Days per week you train <span className="text-dark-400">(optional)</span>
+              {t('field.daysPerWeek')} <span className="text-dark-400">{t('common.optional')}</span>
             </label>
             <div className="flex gap-1.5">
               {[1, 2, 3, 4, 5, 6, 7].map(d => (
@@ -392,8 +373,9 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
             </div>
           </div>
 
-          <NumberField label="Years training (optional)" value={years} onChange={setYears}
-                       unit="yrs" placeholder="2.5" limits={LIMITS.years} decimal />
+          <NumberField label={`${t('field.yearsTraining')} ${t('common.optional')}`}
+                       value={years} onChange={setYears}
+                       unit={t('unit.years')} placeholder="2.5" limits={LIMITS.years} decimal />
         </div>
 
     </BottomSheet>
@@ -406,10 +388,11 @@ function LogSleepModal({ onSave, onClose }: {
 }) {
   const [hours, setHours]   = useState(7)
   const [score, setScore]   = useState(75)
+  const { t } = useT()
 
   return (
     <BottomSheet
-      title="Log Sleep"
+      title={t('sleep.title')}
       onClose={onClose}
       footer={
         <button
@@ -420,7 +403,7 @@ function LogSleepModal({ onSave, onClose }: {
           })}
           className="w-full bg-brand-teal text-black font-bold py-4
                      rounded-btn active:scale-95 transition-transform">
-          Save Sleep Log
+          {t('sleep.save')}
         </button>
       }
     >
@@ -428,28 +411,28 @@ function LogSleepModal({ onSave, onClose }: {
           {/* Hours */}
           <div>
             <div className="flex justify-between mb-2">
-              <label className="text-dark-300 text-sm">Duration</label>
-              <span className="text-white font-bold">{hours}h</span>
+              <label className="text-dark-300 text-sm">{t('sleep.duration')}</label>
+              <span className="text-white font-bold">{t('unit.hours', { n: hours })}</span>
             </div>
             <input type="range" data-no-page-swipe min="1" max="12" value={hours}
               onChange={e => setHours(Number(e.target.value))}
               className="w-full accent-brand-teal" />
             <div className="flex justify-between text-dark-500 text-xs mt-1">
-              <span>1h</span><span>12h</span>
+              <span>{t('unit.hours', { n: 1 })}</span><span>{t('unit.hours', { n: 12 })}</span>
             </div>
           </div>
 
           {/* Quality */}
           <div>
             <div className="flex justify-between mb-2">
-              <label className="text-dark-300 text-sm">Sleep Quality</label>
+              <label className="text-dark-300 text-sm">{t('sleep.quality')}</label>
               <span className="text-white font-bold">{score}%</span>
             </div>
             <input type="range" data-no-page-swipe min="0" max="100" value={score}
               onChange={e => setScore(Number(e.target.value))}
               className="w-full accent-brand-teal" />
             <div className="flex justify-between text-dark-500 text-xs mt-1">
-              <span>Poor</span><span>Excellent</span>
+              <span>{t('sleep.poor')}</span><span>{t('sleep.excellent')}</span>
             </div>
           </div>
         </div>
@@ -463,10 +446,11 @@ function LogNutritionModal({ onSave, onClose }: {
 }) {
   const [protein,  setProtein]  = useState(150)
   const [calories, setCalories] = useState(2500)
+  const { t } = useT()
 
   return (
     <BottomSheet
-      title="Log Nutrition"
+      title={t('nutrition.title')}
       onClose={onClose}
       footer={
         <button
@@ -477,14 +461,14 @@ function LogNutritionModal({ onSave, onClose }: {
           })}
           className="w-full bg-brand-teal text-black font-bold py-4
                      rounded-btn active:scale-95 transition-transform">
-          Save Nutrition Log
+          {t('nutrition.save')}
         </button>
       }
     >
         <div className="flex flex-col gap-5">
           <div>
             <div className="flex justify-between mb-2">
-              <label className="text-dark-300 text-sm">Protein</label>
+              <label className="text-dark-300 text-sm">{t('nutrition.protein')}</label>
               <span className="text-white font-bold">{protein}g</span>
             </div>
             <input type="range" data-no-page-swipe min="0" max="300" value={protein}
@@ -494,7 +478,7 @@ function LogNutritionModal({ onSave, onClose }: {
 
           <div>
             <div className="flex justify-between mb-2">
-              <label className="text-dark-300 text-sm">Calories</label>
+              <label className="text-dark-300 text-sm">{t('nutrition.calories')}</label>
               <span className="text-white font-bold">{calories} kcal</span>
             </div>
             <input type="range" data-no-page-swipe min="500" max="5000" step="50"
@@ -519,6 +503,8 @@ export default function Profile() {
   // all live on the Notifications screen now.
   const { isPushSubscribed } = useNotifications()
   const { equipmentIds, injuries } = useOnboardingStore()
+  const { t, tn, num, locale } = useT()
+  const setLocale = useLocaleStore(s => s.setLocale)
 
   const [profileData, setProfileData]       = useState<any>(null)
   const [isLoading, setIsLoading]           = useState(true)
@@ -622,9 +608,13 @@ export default function Profile() {
   const saveSettings = async (patch: SettingsPatch) => {
     if (!settings) return
     const previous = settings
+    const previousLocale = locale
 
     setSettings({ ...settings, ...patch })
     setSettingsError(null)
+    // The screen switches language before the server answers, like every
+    // other toggle here, and switches back with the rest if the save fails.
+    if (patch.language) setLocale(patch.language)
 
     try {
       const saved = await settingsService.updateSettings(patch)
@@ -634,7 +624,8 @@ export default function Profile() {
       setProfileData((prev: any) => (prev ? { ...prev, settings: saved } : prev))
     } catch {
       setSettings(previous)
-      setSettingsError('Could not save that. Check your connection and try again.')
+      if (patch.language) setLocale(previousLocale)
+      setSettingsError(t('profile.saveFailed'))
     }
   }
 
@@ -659,13 +650,25 @@ export default function Profile() {
 
   // Format total volume
   const formatVolume = (kg: number) => {
-    if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`
+    if (kg >= 1000) return `${num(kg / 1000)}t`
     return `${Math.round(kg)}kg`
   }
 
+  // Stored answers are enum values ('prefer_not_to_say', 'weight_loss'). Shown
+  // through the dictionary when recognised, and as stored otherwise — an old
+  // row holding something this build does not know is still worth showing.
+  const profile = profileData?.profile
+  const level: unknown = profile?.fitnessLevel
+  const goal: unknown = profile?.goal
+  const sex: unknown = profile?.gender
+  const levelLabel = isOneOf(LEVELS, level) ? t(`level.${level}`) : profile?.fitnessLevel
+  const goalLabel = isOneOf(GOALS, goal) ? t(`goal.${goal}`) : profile?.goal?.replace('_', ' ')
+  const sexLabel = isOneOf(SEXES, sex) ? t(`sex.${sex}`) : profile?.gender
+  const sleepHours = (minutes: number) => t('unit.hours', { n: num(minutes / 60) })
+
   if (isLoading) return (
     <div className="flex-1 bg-dark-900 flex items-center justify-center">
-      <div className="text-dark-300 text-sm">Loading profile...</div>
+      <div className="text-dark-300 text-sm">{t('profile.loading')}</div>
     </div>
   )
 
@@ -674,13 +677,13 @@ export default function Profile() {
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-2 pb-0">
-        <h1 className="text-white text-2xl font-bold">Profile</h1>
+        <h1 className="text-white text-2xl font-bold">{t('profile.title')}</h1>
         <button
           onClick={handleLogout}
           className="bg-dark-800 border border-dark-600 rounded-full
                      px-3 py-1.5 text-dark-300 text-xs"
         >
-          Sign Out
+          {t('profile.signOut')}
         </button>
       </div>
 
@@ -704,16 +707,14 @@ export default function Profile() {
 
         <div>
           <h2 className="text-white text-xl font-bold">
-            {profileData?.profile?.name ?? 'Athlete'}
+            {profile?.name ?? t('common.athlete')}
           </h2>
           <p className="text-dark-400 text-sm capitalize">
-            {profileData?.profile?.fitnessLevel ?? 'Athlete'}
-            {profileData?.profile?.goal
-              ? ` · ${profileData.profile.goal.replace('_', ' ')}`
-              : ''}
+            {levelLabel ?? t('common.athlete')}
+            {goalLabel ? ` · ${goalLabel}` : ''}
           </p>
           <p className="text-brand-teal text-xs mt-1">
-            ✓ Goal: {profileData?.profile?.goal?.replace('_', ' ') ?? 'Not set'}
+            {t('profile.goalLine', { goal: goalLabel ?? t('common.notSet') })}
           </p>
         </div>
       </div>
@@ -723,33 +724,33 @@ export default function Profile() {
         {/* Readiness strip */}
         <div className="bg-dark-800 rounded-card border border-dark-600 p-2">
           <p className="text-dark-300 text-xs uppercase tracking-wider mb-1">
-            Today's Readiness
+            {t('profile.todaysReadiness')}
           </p>
           <div className="flex gap-2">
             <StatCard
               value={`${readinessScore}%`}
-              label="Readiness"
+              label={t('profile.statReadiness')}
               color={readinessColor}
             />
             <StatCard
               value={profileData?.today?.hrv
                 ? `${Math.round(profileData.today.hrv)}`
                 : '—'}
-              label="HRV (ms)"
+              label={t('profile.statHrv')}
               color="text-brand-orange"
             />
             <StatCard
               value={profileData?.today?.sleepDuration
-                ? `${(profileData.today.sleepDuration / 60).toFixed(1)}h`
+                ? sleepHours(profileData.today.sleepDuration)
                 : '—'}
-              label="Sleep"
+              label={t('profile.statSleep')}
               color="text-brand-yellow"
             />
             <StatCard
               value={profileData?.today?.protein
                 ? `${Math.round(profileData.today.protein)}g`
                 : '—'}
-              label="Protein"
+              label={t('profile.statProtein')}
               color="text-brand-green"
             />
           </div>
@@ -768,7 +769,7 @@ export default function Profile() {
                   onClick={() => setShowSleepModal(true)}
                   className="text-brand-teal ml-1"
                 >
-                  Log it →
+                  {t('common.logIt')}
                 </button>
               )}
             </p>
@@ -781,13 +782,13 @@ export default function Profile() {
         <div className="bg-dark-800 rounded-card border border-dark-600 overflow-hidden">
           <p className="text-dark-300 text-xs uppercase tracking-wider
                         px-2 py-0.5 border-b border-dark-700">
-            Your Training
+            {t('profile.yourTraining')}
           </p>
 
           <SettingsRow
             icon="📈"
-            label="Progress & PRs"
-            sublabel="Estimated 1RMs, weekly volume, recovery"
+            label={t('profile.progress')}
+            sublabel={t('profile.progressSub')}
             onClick={() => navigate('/progress')}
           />
 
@@ -795,8 +796,8 @@ export default function Profile() {
 
           <SettingsRow
             icon="📋"
-            label="Workout History"
-            sublabel="Every finished session, newest first"
+            label={t('profile.history')}
+            sublabel={t('profile.historySub')}
             onClick={() => navigate('/history')}
           />
         </div>
@@ -817,20 +818,20 @@ export default function Profile() {
         <div className="bg-dark-800 rounded-card border border-dark-600 p-2">
           <div className="flex justify-between items-center mb-3">
             <p className="text-dark-300 text-xs uppercase tracking-wider">
-              Body Stats
+              {t('profile.bodyStats')}
             </p>
             <button
               onClick={() => setShowEditModal(true)}
               className="text-brand-teal text-xs">
-              Edit →
+              {t('profile.edit')}
             </button>
           </div>
           <div className="grid grid-cols-2 gap-y-3">
             {[
-              { label: 'Height', value: profileData?.profile?.height ? `${profileData.profile.height} cm` : '—' },
-              { label: 'Weight', value: profileData?.profile?.weight ? `${profileData.profile.weight} kg` : '—' },
-              { label: 'Age',    value: profileData?.profile?.age    ? `${profileData.profile.age} yrs`   : '—' },
-              { label: 'Gender', value: profileData?.profile?.gender ? profileData.profile.gender : '—' },
+              { label: t('profile.height'), value: profile?.height ? `${profile.height} cm` : '—' },
+              { label: t('profile.weight'), value: profile?.weight ? `${profile.weight} kg` : '—' },
+              { label: t('profile.age'),    value: profile?.age    ? `${profile.age} ${t('unit.years')}` : '—' },
+              { label: t('profile.gender'), value: sexLabel ?? '—' },
             ].map(({ label, value }) => (
               <div key={label} className="flex justify-between items-center pr-4">
                 <span className="text-dark-400 text-sm">{label}</span>
@@ -845,30 +846,30 @@ export default function Profile() {
         {/* Training summary */}
         <div className="bg-dark-800 rounded-card border border-dark-600 p-2">
           <p className="text-dark-300 text-xs uppercase tracking-wider mb-1">
-            Training Summary
+            {t('profile.summary')}
           </p>
           <div className="flex gap-3 items-center">
             <div className="flex-1 text-center">
               <p className="text-white text-2xl font-bold">
                 {profileData?.stats?.totalWorkouts ?? 0}
               </p>
-              <p className="text-dark-400 text-xs mt-1">Workouts</p>
+              <p className="text-dark-400 text-xs mt-1">{t('profile.workouts')}</p>
             </div>
             <div className="w-px h-10 bg-dark-600" />
             <div className="flex-1 text-center">
               <p className="text-white text-2xl font-bold">
                 {formatVolume(profileData?.stats?.totalVolume ?? 0)}
               </p>
-              <p className="text-dark-400 text-xs mt-1">Total Volume</p>
+              <p className="text-dark-400 text-xs mt-1">{t('profile.totalVolume')}</p>
             </div>
             <div className="w-px h-10 bg-dark-600" />
             <div className="flex-1 text-center">
               <p className="text-white text-2xl font-bold">
                 {profileData?.stats?.avgRpe
-                  ? profileData.stats.avgRpe.toFixed(1)
+                  ? num(profileData.stats.avgRpe)
                   : '—'}
               </p>
-              <p className="text-dark-400 text-xs mt-1">Avg RPE</p>
+              <p className="text-dark-400 text-xs mt-1">{t('profile.avgRpe')}</p>
             </div>
           </div>
         </div>
@@ -877,13 +878,13 @@ export default function Profile() {
         <div className="bg-dark-800 rounded-card border border-dark-600 overflow-hidden">
           <p className="text-dark-300 text-xs uppercase tracking-wider
                         px-2 py-0.5 border-b border-dark-700">
-            Settings
+            {t('profile.settings')}
           </p>
 
           <SettingsRow
             icon="👤"
-            label="Edit Profile"
-            sublabel="Name, age, height, weight, goal"
+            label={t('profile.editProfile')}
+            sublabel={t('profile.editProfileSub')}
             onClick={() => setShowEditModal(true)}
           />
 
@@ -891,10 +892,10 @@ export default function Profile() {
 
           <SettingsRow
             icon="🏋️"
-            label="Training Setup"
+            label={t('profile.trainingSetup')}
             sublabel={equipmentIds.length > 0 || injuries.length > 0
-              ? `${equipmentIds.length} equipment · ${injuries.length} injur${injuries.length === 1 ? 'y' : 'ies'}`
-              : 'Equipment and injuries — not set'}
+              ? `${tn('profile.trainingSetupEquipment', equipmentIds.length)} · ${tn('profile.trainingSetupInjuries', injuries.length)}`
+              : t('profile.trainingSetupNone')}
             onClick={() => navigate('/training-setup')}
           />
 
@@ -903,10 +904,10 @@ export default function Profile() {
 
           <SettingsRow
             icon="😴"
-            label="Log Sleep"
+            label={t('profile.logSleep')}
             sublabel={profileData?.today?.sleepDuration
-              ? `Last: ${(profileData.today.sleepDuration / 60).toFixed(1)}h`
-              : 'No sleep logged today'}
+              ? t('profile.logSleepLast', { hours: sleepHours(profileData.today.sleepDuration) })
+              : t('profile.logSleepNone')}
             onClick={() => setShowSleepModal(true)}
           />
 
@@ -914,10 +915,10 @@ export default function Profile() {
 
           <SettingsRow
             icon="🥗"
-            label="Log Nutrition"
+            label={t('profile.logNutrition')}
             sublabel={profileData?.today?.protein
-              ? `Today: ${Math.round(profileData.today.protein)}g protein`
-              : 'No nutrition logged today'}
+              ? t('profile.logNutritionToday', { grams: Math.round(profileData.today.protein) })
+              : t('profile.logNutritionNone')}
             onClick={() => setShowNutritionModal(true)}
           />
 
@@ -925,10 +926,10 @@ export default function Profile() {
 
           <SettingsRow
             icon="📏"
-            label="Units"
+            label={t('profile.units')}
             sublabel={settings?.preferredUnit === 'imperial'
-              ? 'Pounds and feet'
-              : 'Kilograms and centimetres'}
+              ? t('profile.unitsImperial')
+              : t('profile.unitsMetric')}
             right={
               <SegmentedControl
                 value={settings?.preferredUnit === 'imperial' ? 'imperial' : 'metric'}
@@ -940,15 +941,33 @@ export default function Profile() {
 
           <div className="h-px bg-dark-700 mx-4" />
 
+          {/* Shows the device's language, not the settings row's: they agree
+              once signed in, and the device's is what is on screen. Each name
+              is written in its own language, so it can be found by someone
+              who cannot read the one currently showing. */}
+          <SettingsRow
+            icon="🌐"
+            label={t('common.language')}
+            right={
+              <SegmentedControl
+                value={locale}
+                options={LOCALES.map(l => ({ value: l, label: LANGUAGE_NAMES[l].name }))}
+                onChange={language => saveSettings({ language })}
+              />
+            }
+          />
+
+          <div className="h-px bg-dark-700 mx-4" />
+
           <SettingsRow
             icon="🤖"
-            label="AI Data Consent"
+            label={t('profile.aiConsent')}
             sublabel={settings?.aiConsentEnabled === false
               // Says what actually changes. "Allow AI to use your fitness data"
               // gives no hint that the chat survives and the coach nudges do
               // not, and the difference is the whole reason to leave it on.
-              ? 'Off — the coach cannot see your training, and sends no nudges'
-              : 'The coach can read your readiness, history and injuries'}
+              ? t('profile.aiConsentOff')
+              : t('profile.aiConsentOn')}
             right={
               <Toggle
                 value={settings?.aiConsentEnabled ?? true}
@@ -967,12 +986,12 @@ export default function Profile() {
               notified about, how often and quiet hours all live together now. */}
           <SettingsRow
             icon="🔔"
-            label="Notifications"
+            label={t('profile.notifications')}
             sublabel={
-              !pushEnabled ? 'Off — choose what to be notified about' :
-              prefs?.coachSuspendedAt ? 'On · AI coaching paused' :
-              prefs?.coachEnabled ? `On · AI coaching, up to ${prefs.dailyCap}/day` :
-              `On · up to ${prefs?.dailyCap ?? 3}/day`
+              !pushEnabled ? t('profile.notificationsOff') :
+              prefs?.coachSuspendedAt ? t('profile.notificationsPaused') :
+              prefs?.coachEnabled ? t('profile.notificationsCoach', { cap: prefs.dailyCap }) :
+              t('profile.notificationsOn', { cap: prefs?.dailyCap ?? 3 })
             }
             right={<span className="text-dark-400 text-lg">›</span>}
             onClick={() => navigate('/profile/notifications')}
@@ -982,8 +1001,8 @@ export default function Profile() {
 
           <SettingsRow
             icon="🔒"
-            label="Security"
-            sublabel="PIN lock, password, sessions"
+            label={t('profile.security')}
+            sublabel={t('profile.securitySub')}
             right={<span className="text-dark-400 text-lg">›</span>}
             onClick={() => navigate('/profile/security')}
           />
@@ -992,9 +1011,9 @@ export default function Profile() {
 
           <SettingsRow
             icon="📊"
-            label="Export Data"
-            sublabel="Download your workout history"
-            onClick={() => alert('Export coming soon')}
+            label={t('profile.export')}
+            sublabel={t('profile.exportSub')}
+            onClick={() => alert(t('profile.exportSoon'))}
           />
         </div>
 
@@ -1003,32 +1022,31 @@ export default function Profile() {
           {!showDeleteConfirm ? (
             <SettingsRow
               icon="🗑️"
-              label="Delete Account"
-              sublabel="Permanently remove all your data (GDPR)"
+              label={t('profile.delete')}
+              sublabel={t('profile.deleteSub')}
               color="text-brand-red"
               onClick={() => setShowDeleteConfirm(true)}
             />
           ) : (
             <div className="p-4">
               <p className="text-white text-sm font-semibold mb-1">
-                Are you sure?
+                {t('profile.deleteConfirmTitle')}
               </p>
               <p className="text-dark-400 text-xs mb-4">
-                This will permanently delete your account and all workout history.
-                This cannot be undone.
+                {t('profile.deleteConfirmBody')}
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
                   className="flex-1 bg-dark-700 text-dark-300 border border-dark-600
                              py-3 rounded-btn text-sm">
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleDeleteAccount}
                   className="flex-1 bg-brand-red text-white font-bold
                              py-3 rounded-btn text-sm active:scale-95">
-                  Delete Everything
+                  {t('profile.deleteConfirm')}
                 </button>
               </div>
             </div>

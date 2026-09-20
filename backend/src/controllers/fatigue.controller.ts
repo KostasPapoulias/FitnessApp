@@ -6,6 +6,8 @@ import { getTrainingLoad } from '../services/training-load.service'
 import { recoveryRateFor, resolveAge } from '../services/fatigue-model.service'
 import { AuthRequest } from '../server'
 import { log } from '../lib/logger'
+import { localeOf } from '../lib/locale'
+import { describeSleepReadiness } from '../services/sleep-readiness.service'
 import { parseBody } from '../lib/validate'
 import { overrideFatigueSchema } from '../schemas/fatigue.schema'
 
@@ -15,7 +17,7 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
   try {
     const {
       muscles, readinessScore, status, fitnessLevel,
-      systemicFatigue, systemicRecoveryTargetAt, sleep, sleepNote,
+      systemicFatigue, systemicRecoveryTargetAt, sleep,
     } = await getUserReadiness(req.userId!)
 
     res.json({
@@ -39,7 +41,9 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
           durationMin: sleep.durationMin,
           sleepScore: sleep.sleepScore,
           sleepDate: sleep.sleepDate,
-          note: sleepNote,
+          // Phrased here rather than taken from readiness.sleepNote, which
+          // stays English for the AI prompt that also quotes it.
+          note: describeSleepReadiness(sleep, localeOf(res)),
         },
       }
     })

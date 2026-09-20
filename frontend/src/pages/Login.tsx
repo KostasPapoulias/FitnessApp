@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
+import { useT } from '../i18n'
+import LanguageSwitch from '../components/LanguageSwitch'
 
 export default function Login() {
   const navigate = useNavigate()
   const { login, isLoading } = useAuthStore()
+  const { t } = useT()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
   const handleSubmit = async () => {
     if (!email || !password) {
-      setError('Please fill in all fields')
+      setError(t('common.fillAllFields'))
       return
     }
     try {
@@ -25,11 +28,9 @@ export default function Login() {
       const status = err?.response?.status
       setError(
         status === 401
-          ? 'Invalid email or password'
+          ? t('login.invalid')
           : err?.response?.data?.error ||
-            (err?.response
-              ? 'Could not sign in. Please try again.'
-              : 'Could not reach the server. Check your connection and try again.')
+            (err?.response ? t('login.failed') : t('common.offline'))
       )
     }
   }
@@ -38,23 +39,29 @@ export default function Login() {
     <div className="min-h-dvh bg-dark-900 flex flex-col justify-between px-6
                     pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
 
+      {/* The first screen anyone sees, so the language is offered here and
+          not only once they have found their way to Register. */}
+      <div className="flex justify-end">
+        <LanguageSwitch />
+      </div>
+
       {/* Top */}
       <div className="flex-1 flex flex-col justify-center">
         {/* Logo */}
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-white">SomaTrack</h1>
-          <p className="text-dark-300 mt-2">Track your body. Own your recovery.</p>
+          <p className="text-dark-300 mt-2">{t('login.tagline')}</p>
         </div>
 
         {/* Form */}
         <div className="flex flex-col gap-4">
           <div>
-            <label className="text-dark-300 text-sm mb-2 block">Email</label>
+            <label className="text-dark-300 text-sm mb-2 block">{t('auth.email')}</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              placeholder={t('auth.emailPlaceholder')}
               className="w-full bg-dark-800 border border-dark-600 rounded-btn
                          px-4 py-3 text-white placeholder-dark-400
                          focus:outline-none focus:border-brand-teal"
@@ -62,7 +69,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="text-dark-300 text-sm mb-2 block">Password</label>
+            <label className="text-dark-300 text-sm mb-2 block">{t('auth.password')}</label>
             <input
               type="password"
               value={password}
@@ -81,7 +88,7 @@ export default function Login() {
             to="/forgot-password"
             className="text-dark-300 text-xs self-end -mt-1 active:opacity-70"
           >
-            Forgot your password?
+            {t('login.forgot')}
           </Link>
 
           {error && (
@@ -94,16 +101,16 @@ export default function Login() {
             className="w-full bg-brand-teal text-black font-bold py-4 rounded-btn
                        mt-2 active:scale-95 transition-transform disabled:opacity-50"
           >
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isLoading ? t('login.submitting') : t('login.submit')}
           </button>
         </div>
       </div>
 
       {/* Bottom */}
       <p className="text-center text-dark-300 text-sm">
-        Don't have an account?{' '}
+        {t('login.noAccount')}{' '}
         <Link to="/register" className="text-brand-teal font-semibold">
-          Register
+          {t('login.register')}
         </Link>
       </p>
     </div>

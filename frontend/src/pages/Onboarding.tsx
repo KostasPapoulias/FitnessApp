@@ -8,6 +8,7 @@ import {
   BirthDateField, DateParts, LIMITS, MIN_AGE, NumberField,
   num, resolveBirthDate, within,
 } from '../components/forms/Fields'
+import { useT } from '../i18n'
 
 // The gated stage of onboarding.
 //
@@ -28,31 +29,19 @@ type Sex = OnboardingAnswers['sex']
 type Level = OnboardingAnswers['fitnessLevel']
 type Goal = OnboardingAnswers['goal']
 
-const SEXES: { value: Sex; label: string }[] = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
-]
-
-const LEVELS: { value: Level; label: string; blurb: string }[] = [
-  { value: 'beginner',     label: 'Beginner',     blurb: 'New to training, or back after a long break' },
-  { value: 'intermediate', label: 'Intermediate', blurb: 'Training consistently for a while' },
-  { value: 'advanced',     label: 'Advanced',     blurb: 'Years of structured training behind you' },
-]
-
-const GOALS: { value: Goal; label: string; blurb: string }[] = [
-  { value: 'hypertrophy', label: 'Build muscle', blurb: 'Size and volume first' },
-  { value: 'strength',    label: 'Get stronger', blurb: 'Heavier lifts, lower reps' },
-  { value: 'endurance',   label: 'Endurance',    blurb: 'Go longer, recover faster' },
-  { value: 'weight_loss', label: 'Lose weight',  blurb: 'Higher output, tighter recovery' },
-]
+// Values only — the labels are dictionary keys built from them (`sex.male`,
+// `level.beginnerBlurb`), which the typecheck resolves, so a value with no
+// label in either language cannot be added here.
+const SEXES: Sex[] = ['male', 'female', 'other', 'prefer_not_to_say']
+const LEVELS: Level[] = ['beginner', 'intermediate', 'advanced']
+const GOALS: Goal[] = ['hypertrophy', 'strength', 'endurance', 'weight_loss']
 
 const TOTAL_STEPS = 5
 
 export default function Onboarding() {
   const navigate = useNavigate()
   const { user, fetchMe } = useAuthStore()
+  const { t } = useT()
 
   const imperial = user?.settings?.preferredUnit === 'imperial'
 
@@ -134,9 +123,7 @@ export default function Onboarding() {
     } catch (err: any) {
       setError(
         err?.response?.data?.error ||
-        (err?.response
-          ? 'Could not save your profile. Please try again.'
-          : 'Could not reach the server. Check your connection and try again.')
+        (err?.response ? t('onboarding.saveFailed') : t('common.offline'))
       )
     } finally {
       setSaving(false)
@@ -163,12 +150,12 @@ export default function Onboarding() {
         {step === 0 && <IntroStep name={user?.profile?.name} />}
 
         {step === 1 && (
-          <Step title="About you"
-                subtitle="Age and sex change how fast you recover and how we read your effort.">
+          <Step title={t('onboarding.aboutTitle')}
+                subtitle={t('onboarding.aboutSubtitle')}>
             <div className="flex flex-col gap-2">
               {SEXES.map(o => (
-                <Choice key={o.value} selected={sex === o.value}
-                        onClick={() => setSex(o.value)} label={o.label} />
+                <Choice key={o} selected={sex === o}
+                        onClick={() => setSex(o)} label={t(`sex.${o}`)} />
               ))}
             </div>
 
@@ -177,7 +164,7 @@ export default function Onboarding() {
                               error={birth.error} />
               {!birth.error && (
                 <p className="text-dark-400 text-xs mt-1.5">
-                  Day, month, year — e.g. 04 09 {exampleYear}
+                  {t('onboarding.birthHint', { year: exampleYear })}
                 </p>
               )}
             </div>
@@ -185,29 +172,29 @@ export default function Onboarding() {
         )}
 
         {step === 2 && (
-          <Step title="Height and weight"
-                subtitle="Bodyweight is the one we genuinely need — every pull-up, dip and push-up is scored against it.">
+          <Step title={t('onboarding.bodyTitle')}
+                subtitle={t('onboarding.bodySubtitle')}>
             {imperial ? (
               <>
-                <label className="text-dark-300 text-sm mb-2 block">Height</label>
+                <label className="text-dark-300 text-sm mb-2 block">{t('field.height')}</label>
                 <div className="flex gap-3 mb-6">
                   <NumberField value={feet} onChange={setFeet} unit="ft"
                                placeholder="5" limits={LIMITS.feet} />
                   <NumberField value={inches} onChange={setInches} unit="in"
                                placeholder="10" limits={LIMITS.inches} />
                 </div>
-                <label className="text-dark-300 text-sm mb-2 block">Weight</label>
+                <label className="text-dark-300 text-sm mb-2 block">{t('field.weight')}</label>
                 <NumberField value={lb} onChange={setLb} unit="lb"
                              placeholder="165" limits={LIMITS.lb} decimal />
               </>
             ) : (
               <>
-                <label className="text-dark-300 text-sm mb-2 block">Height</label>
+                <label className="text-dark-300 text-sm mb-2 block">{t('field.height')}</label>
                 <div className="mb-6">
                   <NumberField value={cm} onChange={setCm} unit="cm"
                                placeholder="175" limits={LIMITS.cm} />
                 </div>
-                <label className="text-dark-300 text-sm mb-2 block">Weight</label>
+                <label className="text-dark-300 text-sm mb-2 block">{t('field.weight')}</label>
                 <NumberField value={kg} onChange={setKg} unit="kg"
                              placeholder="75" limits={LIMITS.kg} decimal />
               </>
@@ -216,17 +203,17 @@ export default function Onboarding() {
         )}
 
         {step === 3 && (
-          <Step title="Your experience"
-                subtitle="This sets how quickly we assume you bounce back between sessions.">
+          <Step title={t('onboarding.experienceTitle')}
+                subtitle={t('onboarding.experienceSubtitle')}>
             <div className="flex flex-col gap-2">
               {LEVELS.map(o => (
-                <Choice key={o.value} selected={level === o.value}
-                        onClick={() => setLevel(o.value)} label={o.label} blurb={o.blurb} />
+                <Choice key={o} selected={level === o} onClick={() => setLevel(o)}
+                        label={t(`level.${o}`)} blurb={t(`level.${o}Blurb`)} />
               ))}
             </div>
 
             <label className="text-dark-300 text-sm mt-7 mb-2 block">
-              Days per week you train <span className="text-dark-400">(optional)</span>
+              {t('field.daysPerWeek')} <span className="text-dark-400">{t('common.optional')}</span>
             </label>
             <div className="flex gap-1.5">
               {[1, 2, 3, 4, 5, 6, 7].map(d => (
@@ -242,20 +229,20 @@ export default function Onboarding() {
             </div>
 
             <label className="text-dark-300 text-sm mt-6 mb-2 block">
-              Years training <span className="text-dark-400">(optional)</span>
+              {t('field.yearsTraining')} <span className="text-dark-400">{t('common.optional')}</span>
             </label>
             <NumberField value={experienceYears} onChange={setExperienceYears}
-                         unit="yrs" placeholder="2.5" limits={{ min: 0, max: 80 }} decimal />
+                         unit={t('unit.years')} placeholder="2.5" limits={{ min: 0, max: 80 }} decimal />
           </Step>
         )}
 
         {step === 4 && (
-          <Step title="What are you training for?"
-                subtitle="Your plans and AI suggestions get built around this. You can change it any time.">
+          <Step title={t('onboarding.goalTitle')}
+                subtitle={t('onboarding.goalSubtitle')}>
             <div className="flex flex-col gap-2">
               {GOALS.map(o => (
-                <Choice key={o.value} selected={goal === o.value}
-                        onClick={() => setGoal(o.value)} label={o.label} blurb={o.blurb} />
+                <Choice key={o} selected={goal === o} onClick={() => setGoal(o)}
+                        label={t(`goal.${o}`)} blurb={t(`goal.${o}Blurb`)} />
               ))}
             </div>
           </Step>
@@ -270,13 +257,13 @@ export default function Onboarding() {
             className="px-6 py-4 rounded-btn font-semibold text-dark-300
                        bg-dark-800 border border-dark-600 active:scale-95
                        transition-transform disabled:opacity-50">
-            Back
+            {t('common.back')}
           </button>
         )}
         <button onClick={next} disabled={!canAdvance() || saving}
           className="flex-1 bg-brand-teal text-black font-bold py-4 rounded-btn
                      active:scale-95 transition-transform disabled:opacity-40">
-          {saving ? 'Saving…' : step === TOTAL_STEPS - 1 ? 'Finish' : 'Continue'}
+          {saving ? t('common.saving') : step === TOTAL_STEPS - 1 ? t('onboarding.finish') : t('common.continue')}
         </button>
       </div>
     </div>
@@ -315,25 +302,19 @@ function Choice({ selected, onClick, label, blurb }: {
 }
 
 function IntroStep({ name }: { name?: string }) {
+  const { t } = useT()
   return (
     <div className="flex-1 flex flex-col justify-center">
       <h1 className="text-4xl font-bold text-white leading-tight">
-        {name ? `Welcome, ${name}.` : 'Welcome to SomaTrack.'}
+        {name ? t('onboarding.welcomeName', { name }) : t('onboarding.welcome')}
       </h1>
-      <p className="text-dark-300 mt-4 leading-relaxed">
-        SomaTrack tracks how much load each muscle is carrying and how recovered
-        you are — then builds sessions around what your body can actually take
-        today.
-      </p>
-      <p className="text-dark-300 mt-4 leading-relaxed">
-        To do that it needs a few things about you. It takes about a minute, and
-        you can change any of it later.
-      </p>
+      <p className="text-dark-300 mt-4 leading-relaxed">{t('onboarding.intro1')}</p>
+      <p className="text-dark-300 mt-4 leading-relaxed">{t('onboarding.intro2')}</p>
 
       <ul className="mt-8 flex flex-col gap-3">
-        <IntroPoint icon="⚖️" text="Your bodyweight, so bodyweight exercises are scored against the right number" />
-        <IntroPoint icon="🎂" text="Your age, which sets how fast we assume you recover" />
-        <IntroPoint icon="🎯" text="What you're training for, so plans match the goal" />
+        <IntroPoint icon="⚖️" text={t('onboarding.pointWeight')} />
+        <IntroPoint icon="🎂" text={t('onboarding.pointAge')} />
+        <IntroPoint icon="🎯" text={t('onboarding.pointGoal')} />
       </ul>
     </div>
   )

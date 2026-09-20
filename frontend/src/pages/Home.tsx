@@ -6,6 +6,7 @@ import { useOnboardingStore } from '../store/useOnboardingStore'
 import MuscleMap from '../components/muscle/MuscleMap'
 import { useDeviceTilt } from '../hooks/useDeviceTilt'
 import MuscleFatiguePopup from '../components/muscle/MuscleFatiguePopup'
+import { useT } from '../i18n'
 
 export default function Home() {
   const { user } = useAuthStore()
@@ -16,6 +17,7 @@ export default function Home() {
   // Degrees of counter-rotation from the phone's tilt. Always 0 on desktop,
   // and on any device that declines the sensor.
   const tilt = useDeviceTilt()
+  const { t } = useT()
 
   useEffect(() => {
     fetchFatigue()
@@ -42,16 +44,16 @@ export default function Home() {
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-6 pb-2">
         <div>
-          <p className="text-dark-300 text-sm">Hello,</p>
+          <p className="text-dark-300 text-sm">{t('home.hello')}</p>
           <h1 className="text-white text-2xl font-bold">
-            {user?.profile?.name ?? 'Athlete'}
+            {user?.profile?.name ?? t('common.athlete')}
           </h1>
         </div>
 
         {/* Readiness badge */}
         <div className={`border rounded-2xl px-3 py-2 text-center ${readinessBg}`}>
           <p className="text-dark-300 text-[10px] uppercase tracking-wide">
-            Readiness
+            {t('home.readiness')}
           </p>
           {isLoading
             ? <div className="w-8 h-5 bg-dark-600 rounded animate-pulse mx-auto mt-0.5" />
@@ -78,7 +80,7 @@ export default function Home() {
                      transition-transform"
         >
           <span className="text-sm">📈</span>
-          <span className="text-white text-xs font-semibold flex-1">Progress</span>
+          <span className="text-white text-xs font-semibold flex-1">{t('home.progress')}</span>
           <span className="text-dark-400 text-sm leading-none">›</span>
         </Link>
         <Link
@@ -88,7 +90,7 @@ export default function Home() {
                      transition-transform"
         >
           <span className="text-sm">📋</span>
-          <span className="text-white text-xs font-semibold flex-1">History</span>
+          <span className="text-white text-xs font-semibold flex-1">{t('home.history')}</span>
           <span className="text-dark-400 text-sm leading-none">›</span>
         </Link>
       </div>
@@ -106,7 +108,7 @@ export default function Home() {
                          ? 'bg-brand-teal text-black'
                          : 'text-dark-300'}`}
           >
-            Front
+            {t('home.front')}
           </button>
           <button
             onClick={() => setSide('back')}
@@ -115,7 +117,7 @@ export default function Home() {
                          ? 'bg-brand-teal text-black'
                          : 'text-dark-300'}`}
           >
-            Back
+            {t('home.back')}
           </button>
         </div>
 
@@ -154,11 +156,11 @@ export default function Home() {
                         flex gap-4 bg-dark-800/80 rounded-full px-4 py-2
                         border border-dark-600">
           {[
-            { color: 'bg-brand-green', label: 'Recovered' },
-            { color: 'bg-brand-yellow', label: 'Moderate' },
-            { color: 'bg-brand-red', label: 'Fatigue' },
+            { color: 'bg-brand-green', label: t('home.legendRecovered') },
+            { color: 'bg-brand-yellow', label: t('home.legendModerate') },
+            { color: 'bg-brand-red', label: t('home.legendFatigue') },
           ].map(({ color, label }) => (
-            <div key={label} className="flex items-center gap-1.5">
+            <div key={color} className="flex items-center gap-1.5">
               <div className={`w-2.5 h-2.5 rounded-full ${color}`} />
               <span className="text-dark-300 text-[10px]">{label}</span>
             </div>
@@ -177,10 +179,9 @@ export default function Home() {
         >
           <span className="text-lg">🏋️</span>
           <div className="flex-1">
-            <p className="text-white text-sm font-semibold">Finish your setup</p>
+            <p className="text-white text-sm font-semibold">{t('home.setupTitle')}</p>
             <p className="text-dark-300 text-xs mt-0.5 leading-relaxed">
-              Tell us your equipment and any injuries so we only suggest sessions
-              you can actually do.
+              {t('home.setupBody')}
             </p>
           </div>
           <span className="text-dark-400 text-lg leading-none">›</span>
@@ -204,7 +205,7 @@ export default function Home() {
           }`}>
             {sleep.note}
             {!sleep.applied && (
-              <Link to="/profile" className="text-brand-teal ml-1">Log it →</Link>
+              <Link to="/profile" className="text-brand-teal ml-1">{t('common.logIt')}</Link>
             )}
           </p>
         </div>

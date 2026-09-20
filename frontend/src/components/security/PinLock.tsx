@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { securityService } from '../../services/security.service'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useT } from '../../i18n'
 
 /**
  * Full-screen PIN gate.
@@ -19,6 +20,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [shake, setShake] = useState(false)
+  const { t } = useT()
 
   // A PIN is 4–8 digits, so there is no submit button — verify as soon as the
   // shortest valid length is reached, then again on each further digit.
@@ -33,7 +35,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
         if (!cancelled) onUnlock()
       } catch (err: any) {
         if (cancelled) return
-        setError(err?.response?.data?.error ?? 'Incorrect PIN.')
+        setError(err?.response?.data?.error ?? t('pin.incorrect'))
         setShake(true)
         setPin('')
         setTimeout(() => setShake(false), 420)
@@ -62,9 +64,9 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
                     items-center [justify-content:safe_center] overflow-y-auto px-8
                     pt-[calc(2rem+var(--safe-top))] pb-[calc(2rem+var(--safe-bottom))]">
       <div className="text-[44px] leading-none mb-4">🔒</div>
-      <h1 className="text-xl font-extrabold">Enter your PIN</h1>
+      <h1 className="text-xl font-extrabold">{t('pin.title')}</h1>
       <p className="text-dark-300 text-[13px] mt-1.5 text-center max-w-[260px]">
-        {error ?? 'SomaTrack is locked on this device.'}
+        {error ?? t('pin.locked')}
       </p>
 
       {/* Dots */}
@@ -98,7 +100,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
         onClick={logout}
         className="mt-9 text-dark-300 text-[13px] underline underline-offset-4"
       >
-        Forgot PIN? Sign out
+        {t('pin.forgot')}
       </button>
 
       <style>{`

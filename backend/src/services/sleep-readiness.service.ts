@@ -1,3 +1,5 @@
+import type { Locale } from '../lib/locale'
+
 // Sleep's contribution to readiness.
 //
 // The app's thesis is that it models recovery rather than volume, and the
@@ -155,8 +157,15 @@ export const resolveSleepReadiness = (
   }
 }
 
-/** One short line naming what sleep did to the score, for the UI. */
-export const describeSleepReadiness = (sleep: SleepReadiness): string => {
+/**
+ * One short line naming what sleep did to the score, for the UI.
+ *
+ * English unless asked otherwise: the AI prompt quotes this line too, and the
+ * coach's instructions are written in English whatever language it replies in.
+ */
+export const describeSleepReadiness = (sleep: SleepReadiness, locale: Locale = 'en'): string => {
+  if (locale === 'el') return describeSleepReadinessEl(sleep)
+
   if (!sleep.applied) {
     return sleep.reason === 'stale'
       ? 'Last sleep log is out of date — not counted.'
@@ -168,4 +177,24 @@ export const describeSleepReadiness = (sleep: SleepReadiness): string => {
   return sleep.adjustment > 0
     ? `${hours}h sleep added ${sleep.adjustment} points.`
     : `${hours}h sleep took off ${Math.abs(sleep.adjustment)} points.`
+}
+
+/** Greek decimals take a comma: 7,5 ώρες, not 7.5. */
+const elNumber = (value: number, digits: number): string =>
+  value.toFixed(digits).replace('.', ',')
+
+const describeSleepReadinessEl = (sleep: SleepReadiness): string => {
+  if (!sleep.applied) {
+    return sleep.reason === 'stale'
+      ? 'Η τελευταία καταγραφή ύπνου είναι παλιά — δεν μετράει.'
+      : 'Δεν έχει καταγραφεί ύπνος — η ετοιμότητα βγαίνει μόνο από το προπονητικό φορτίο.'
+  }
+
+  const hours = elNumber(sleep.durationMin! / 60, 1)
+  const points = Math.abs(sleep.adjustment)
+  const unit = points === 1 ? 'πόντο' : 'πόντους'
+  if (sleep.adjustment === 0) return `${hours} ώρες ύπνου — ακριβώς στο κανονικό σου.`
+  return sleep.adjustment > 0
+    ? `${hours} ώρες ύπνου πρόσθεσαν ${elNumber(points, points % 1 === 0 ? 0 : 1)} ${unit}.`
+    : `${hours} ώρες ύπνου αφαίρεσαν ${elNumber(points, points % 1 === 0 ? 0 : 1)} ${unit}.`
 }

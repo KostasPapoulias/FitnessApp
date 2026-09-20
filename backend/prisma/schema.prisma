@@ -237,6 +237,15 @@ model Settings {
   aiConsentEnabled        Boolean  @default(true)
 
   /**
+   * 'en' | 'el'. Stored on the account rather than only on the device because
+   * the server writes to the athlete when no request is in flight — push
+   * notifications and the AI coach — and has nothing else to read it from.
+   * Request-scoped text (errors, the sleep note) follows Accept-Language
+   * instead, which also covers the signed-out screens.
+   */
+  language                String   @default("en")
+
+  /**
    * Optional screen lock. Bcrypt-hashed like a password — a PIN is short
    * enough to brute force offline if it were ever stored reversibly.
    * Null means the user has not set one.

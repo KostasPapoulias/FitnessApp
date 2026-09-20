@@ -1,3 +1,5 @@
+import type { Locale } from '../i18n/locales'
+
 // User
 export interface User {
   id: string
@@ -35,6 +37,8 @@ export interface Settings {
    * server-side in ai.service.ts — never treat this as a client-side hint.
    */
   aiConsentEnabled: boolean
+  /** The account's language. The device's lives in useLocaleStore. */
+  language: Locale
 }
 
 // Fatigue

@@ -1,5 +1,6 @@
 import api from './api'
 import type { Settings } from '../types'
+import type { Locale } from '../i18n/locales'
 
 /**
  * Everything on the Settings row is a partial patch — the settings screen saves
@@ -12,6 +13,7 @@ export interface SettingsPatch {
   notificationEnabled?: boolean
   inactivityDaysThreshold?: number
   aiConsentEnabled?: boolean
+  language?: Locale
 }
 
 export const settingsService = {

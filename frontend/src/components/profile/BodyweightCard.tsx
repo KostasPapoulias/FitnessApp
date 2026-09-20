@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { BiometricPoint } from '../../services/profile.service'
 import TrendChart from '../progress/TrendChart'
+import { MessageKey, useT } from '../../i18n'
 
 /**
  * Bodyweight over time, with BMI.
@@ -26,11 +27,11 @@ import TrendChart from '../progress/TrendChart'
 const SERIES = '#00D4AA'      // brand-teal
 
 /** WHO bands. Colour is never the only cue — the label always says which. */
-const bmiBand = (bmi: number) =>
-  bmi < 18.5 ? { label: 'Underweight', tone: 'text-brand-yellow' } :
-  bmi < 25   ? { label: 'Normal',      tone: 'text-brand-green' } :
-  bmi < 30   ? { label: 'Overweight',  tone: 'text-brand-yellow' } :
-               { label: 'Obese',       tone: 'text-brand-orange' }
+const bmiBand = (bmi: number): { label: MessageKey; tone: string } =>
+  bmi < 18.5 ? { label: 'bodyweight.underweight', tone: 'text-brand-yellow' } :
+  bmi < 25   ? { label: 'bodyweight.normal',      tone: 'text-brand-green' } :
+  bmi < 30   ? { label: 'bodyweight.overweight',  tone: 'text-brand-yellow' } :
+               { label: 'bodyweight.obese',       tone: 'text-brand-orange' }
 
 interface Props {
   points: BiometricPoint[]
@@ -40,9 +41,10 @@ interface Props {
 }
 
 export default function BodyweightCard({ points, heightCm, imperial }: Props) {
+  const { t, num } = useT()
   const toDisplay = (kg: number) => imperial ? kg * 2.20462 : kg
   const unit = imperial ? 'lb' : 'kg'
-  const fmtWeight = (kg: number) => `${toDisplay(kg).toFixed(1)}${unit}`
+  const fmtWeight = (kg: number) => `${num(toDisplay(kg))}${unit}`
 
   const latest = points.length > 0 ? points[points.length - 1] : null
 
@@ -66,23 +68,23 @@ export default function BodyweightCard({ points, heightCm, imperial }: Props) {
           large number look loose, and nothing is aligned under it. */}
       <div className="p-4 pb-2 flex items-end justify-between gap-3">
         <div>
-          <p className="text-dark-300 text-xs uppercase tracking-wider">Bodyweight</p>
+          <p className="text-dark-300 text-xs uppercase tracking-wider">{t('bodyweight.title')}</p>
           {latest ? (
             <p className="text-white text-3xl font-bold mt-1 leading-none">
-              {toDisplay(latest.value).toFixed(1)}
+              {num(toDisplay(latest.value))}
               <span className="text-dark-300 text-base font-semibold ml-1">{unit}</span>
             </p>
           ) : (
-            <p className="text-dark-300 text-sm mt-2">Not recorded yet</p>
+            <p className="text-dark-300 text-sm mt-2">{t('bodyweight.notRecorded')}</p>
           )}
         </div>
 
         {bmi != null && (
           <div className="text-right">
-            <p className="text-dark-300 text-xs uppercase tracking-wider">BMI</p>
-            <p className="text-white text-2xl font-bold mt-1 leading-none">{bmi.toFixed(1)}</p>
+            <p className="text-dark-300 text-xs uppercase tracking-wider">{t('bodyweight.bmi')}</p>
+            <p className="text-white text-2xl font-bold mt-1 leading-none">{num(bmi)}</p>
             <p className={`text-xs mt-0.5 font-medium ${bmiBand(bmi).tone}`}>
-              {bmiBand(bmi).label}
+              {t(bmiBand(bmi).label)}
             </p>
           </div>
         )}
@@ -90,7 +92,7 @@ export default function BodyweightCard({ points, heightCm, imperial }: Props) {
 
       {latest && bmi == null && (
         <p className="px-4 pb-1 text-dark-400 text-xs">
-          Add your height in Edit Profile to see BMI.
+          {t('bodyweight.addHeight')}
         </p>
       )}
 
@@ -103,9 +105,9 @@ export default function BodyweightCard({ points, heightCm, imperial }: Props) {
         color={SERIES}
         baseline="auto"
         minSpan={2}
-        valueHeader="Weight"
-        empty="Set your weight in Edit Profile to start tracking it."
-        singleHint="update your weight in Edit Profile and a trend will appear here."
+        valueHeader={t('bodyweight.valueHeader')}
+        empty={t('bodyweight.empty')}
+        singleHint={t('bodyweight.single')}
       />
     </div>
   )

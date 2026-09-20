@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt'
 import prisma from '../lib/prisma'
 import { isMailConfigured, passwordResetMail, sendMail } from '../lib/mailer'
 import { revokeAllTokens } from './token-version.service'
+import type { Locale } from '../lib/locale'
 
 /**
  * Forgotten-password recovery.
@@ -43,7 +44,7 @@ const hashToken = (token: string): string =>
 
 export const requestPasswordReset = async (
   email: string,
-  { baseUrl, requestIp }: { baseUrl: string; requestIp?: string }
+  { baseUrl, requestIp, locale = 'en' }: { baseUrl: string; requestIp?: string; locale?: Locale }
 ): Promise<void> => {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -76,7 +77,7 @@ export const requestPasswordReset = async (
   })
 
   const link = `${baseUrl.replace(/\/+$/, '')}/reset-password?token=${token}`
-  await sendMail(passwordResetMail(user.email, link, TOKEN_TTL_MINUTES))
+  await sendMail(passwordResetMail(user.email, link, TOKEN_TTL_MINUTES, locale))
 }
 
 export class ResetError extends Error {}

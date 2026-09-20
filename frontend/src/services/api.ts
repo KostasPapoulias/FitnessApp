@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useLocaleStore } from '../store/useLocaleStore'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
@@ -11,6 +12,11 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // Every message the server writes back — errors, the sleep note — is in
+  // this language. Read per request, so a switch applies to the next call.
+  // Always set, even for English: left alone the browser sends its own, and a
+  // Greek phone would get Greek errors under an English screen.
+  config.headers['Accept-Language'] = useLocaleStore.getState().locale
   return config
 })
 

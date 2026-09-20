@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { authService } from '../services/auth.service'
+import { useT } from '../i18n'
+
+/** Must match credentials.service on the server, as Register's does. */
+const MIN_PASSWORD_LENGTH = 10
 
 /**
  * Choose a new password, using the token from the emailed link.
@@ -19,6 +23,7 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const { t } = useT()
 
   // Checked here as well as server-side, so a mismatch costs no round trip and
   // the message appears next to the field that caused it.
@@ -32,10 +37,7 @@ export default function ResetPassword() {
       await authService.resetPassword(token, password)
       setDone(true)
     } catch (err: any) {
-      setError(
-        err?.response?.data?.error ??
-        'Could not reach the server. Check your connection and try again.'
-      )
+      setError(err?.response?.data?.error ?? t('common.offline'))
     } finally {
       setIsLoading(false)
     }
@@ -46,7 +48,7 @@ export default function ResetPassword() {
                     pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
       <div className="flex-1 flex flex-col justify-center">{children}</div>
       <p className="text-center text-dark-300 text-sm">
-        <Link to="/login" className="text-brand-teal font-semibold">Back to sign in</Link>
+        <Link to="/login" className="text-brand-teal font-semibold">{t('auth.backToSignIn')}</Link>
       </p>
     </div>
   )
@@ -57,17 +59,14 @@ export default function ResetPassword() {
   if (!token) {
     return shell(
       <>
-        <h1 className="text-3xl font-bold text-white">Link incomplete</h1>
-        <p className="text-dark-300 mt-2 mb-6">
-          This page needs the link from your reset email. Open it there, or ask
-          for a new one.
-        </p>
+        <h1 className="text-3xl font-bold text-white">{t('reset.incompleteTitle')}</h1>
+        <p className="text-dark-300 mt-2 mb-6">{t('reset.incompleteBody')}</p>
         <Link
           to="/forgot-password"
           className="w-full bg-brand-teal text-black font-bold py-4 rounded-btn
                      text-center active:scale-95 transition-transform"
         >
-          Request a new link
+          {t('reset.requestNew')}
         </Link>
       </>
     )
@@ -76,16 +75,14 @@ export default function ResetPassword() {
   if (done) {
     return shell(
       <>
-        <h1 className="text-3xl font-bold text-white">Password updated</h1>
-        <p className="text-dark-300 mt-2 mb-6">
-          You’ve been signed out everywhere else. Sign in with your new password.
-        </p>
+        <h1 className="text-3xl font-bold text-white">{t('reset.doneTitle')}</h1>
+        <p className="text-dark-300 mt-2 mb-6">{t('reset.doneBody')}</p>
         <button
           onClick={() => navigate('/login', { replace: true })}
           className="w-full bg-brand-teal text-black font-bold py-4 rounded-btn
                      active:scale-95 transition-transform"
         >
-          Sign in
+          {t('reset.signIn')}
         </button>
       </>
     )
@@ -94,13 +91,13 @@ export default function ResetPassword() {
   return shell(
     <>
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white">New password</h1>
-        <p className="text-dark-300 mt-2">At least 10 characters.</p>
+        <h1 className="text-3xl font-bold text-white">{t('reset.title')}</h1>
+        <p className="text-dark-300 mt-2">{t('reset.subtitle', { min: MIN_PASSWORD_LENGTH })}</p>
       </div>
 
       <div className="flex flex-col gap-4">
         <div>
-          <label className="text-dark-300 text-sm mb-2 block">New password</label>
+          <label className="text-dark-300 text-sm mb-2 block">{t('reset.newPassword')}</label>
           <input
             type="password"
             value={password}
@@ -113,7 +110,7 @@ export default function ResetPassword() {
         </div>
 
         <div>
-          <label className="text-dark-300 text-sm mb-2 block">Confirm</label>
+          <label className="text-dark-300 text-sm mb-2 block">{t('reset.confirm')}</label>
           <input
             type="password"
             value={confirm}
@@ -125,7 +122,7 @@ export default function ResetPassword() {
                         ${mismatch ? 'border-brand-red' : 'border-dark-600 focus:border-brand-teal'}`}
           />
           {mismatch && (
-            <p className="text-brand-red text-xs mt-1.5">Those don’t match.</p>
+            <p className="text-brand-red text-xs mt-1.5">{t('reset.mismatch')}</p>
           )}
         </div>
 
@@ -137,7 +134,7 @@ export default function ResetPassword() {
           className="w-full bg-brand-teal text-black font-bold py-4 rounded-btn
                      mt-2 active:scale-95 transition-transform disabled:opacity-50"
         >
-          {isLoading ? 'Saving…' : 'Set new password'}
+          {isLoading ? t('common.saving') : t('reset.submit')}
         </button>
       </div>
     </>

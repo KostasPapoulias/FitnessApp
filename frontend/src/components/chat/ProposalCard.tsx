@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { aiService } from '../../services/ai.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { AiProposal } from '../../types'
+import { useT } from '../../i18n'
 
 /**
  * A workout the coach has drafted, waiting on the athlete.
@@ -14,8 +15,8 @@ import { AiProposal } from '../../types'
  * fatigue and load number downstream is computed from it.
  */
 
-const fmtWhen = (iso: string) =>
-  new Date(iso).toLocaleString('en-GB', {
+const fmtWhen = (iso: string, intl: string) =>
+  new Date(iso).toLocaleString(intl, {
     weekday: 'short', day: 'numeric', month: 'short',
     hour: '2-digit', minute: '2-digit',
   })
@@ -29,6 +30,7 @@ interface Props {
 export default function ProposalCard({ proposal, onResolved }: Props) {
   const navigate = useNavigate()
   const loadTemplate = useWorkoutStore(s => s.loadTemplate)
+  const { t, intl } = useT()
 
   // A drafted exercise and a drafted plan are the same card with different
   // nouns: what it is called, what accepting it means, and where "open" goes.
@@ -52,7 +54,7 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
     } catch (err: any) {
       // 409 means expired or already used — the server phrases those for a
       // human, so show its reason rather than a generic failure.
-      setError(err?.response?.data?.error ?? 'Could not add that. Try asking again.')
+      setError(err?.response?.data?.error ?? t('proposal.failed'))
     } finally {
       setBusy(false)
     }
@@ -85,7 +87,7 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
       loadTemplate(template)
       navigate('/workout/plan')
     } catch {
-      setError('Saved, but the planner could not be opened. It is in your plans.')
+      setError(t('proposal.savedNoOpen'))
       setBusy(false)
     }
   }
@@ -97,8 +99,8 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
         <div className="min-w-0 flex-1">
           <p className="text-[10px] tracking-wider text-brand-teal font-bold">
             {isExercise
-              ? (accepted ? 'ADDED TO YOUR EXERCISES' : 'NEW EXERCISE · NOT SAVED YET')
-              : (accepted ? 'ADDED TO YOUR PLANS' : 'SUGGESTED PLAN · NOT SAVED YET')}
+              ? (accepted ? t('proposal.addedExercise') : t('proposal.newExercise'))
+              : (accepted ? t('proposal.addedPlan') : t('proposal.newPlan'))}
           </p>
           <p className="text-white text-sm font-bold mt-0.5 truncate">{proposal.title}</p>
         </div>
@@ -114,8 +116,9 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
 
       {proposal.scheduledFor && (
         <div className="px-4 pb-2 text-[12px] text-dark-300">
-          📅 {fmtWhen(proposal.scheduledFor)}
-          {proposal.reminderAt && ` · reminder ${fmtWhen(proposal.reminderAt)}`}
+          📅 {fmtWhen(proposal.scheduledFor, intl)}
+          {proposal.reminderAt &&
+            ` · ${t('proposal.reminder', { when: fmtWhen(proposal.reminderAt, intl) })}`}
         </div>
       )}
 
@@ -132,14 +135,14 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
               className="flex-1 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
                          active:scale-95 transition-transform disabled:opacity-40"
             >
-              {isExercise ? 'View exercise →' : 'Open in planner →'}
+              {isExercise ? t('proposal.viewExercise') : t('proposal.openPlanner')}
             </button>
             <button
               onClick={() => onResolved(proposal.id)}
               className="px-4 py-2.5 rounded-btn border border-dark-600 bg-dark-800
                          text-white text-[13px] font-bold active:scale-95 transition-transform"
             >
-              Later
+              {t('proposal.later')}
             </button>
           </>
         ) : (
@@ -150,10 +153,10 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
               className="flex-1 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
                          active:scale-95 transition-transform disabled:opacity-40"
             >
-              {busy ? 'Adding…'
-                : isExercise ? 'Add exercise'
-                : proposal.scheduledFor ? 'Add & schedule'
-                : 'Add to my plans'}
+              {busy ? t('proposal.adding')
+                : isExercise ? t('proposal.addExercise')
+                : proposal.scheduledFor ? t('proposal.addSchedule')
+                : t('proposal.addPlan')}
             </button>
             <button
               onClick={dismiss}
@@ -162,7 +165,7 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
                          text-white text-[13px] font-bold active:scale-95 transition-transform
                          disabled:opacity-40"
             >
-              No thanks
+              {t('proposal.noThanks')}
             </button>
           </>
         )}

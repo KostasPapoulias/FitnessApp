@@ -2,6 +2,7 @@ import { Response } from 'express'
 import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { yearsBetween } from './onboarding.controller'
+import { CLIENT_SETTINGS_SELECT } from './settings.controller'
 import { log } from '../lib/logger'
 import { parseBody } from '../lib/validate'
 import {
@@ -23,7 +24,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: req.userId! },
-        include: { profile: true, settings: true }
+        // Settings through the allowlist: `true` sent the PIN hash to the phone.
+        include: { profile: true, settings: { select: CLIENT_SETTINGS_SELECT } }
       }),
       prisma.workoutSession.count({ where: { userId: req.userId! } }),
       prisma.workoutSession.aggregate({

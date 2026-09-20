@@ -1,7 +1,9 @@
 import { useFatigueStore } from '../../store/useFatigueStore'
+import { useT } from '../../i18n'
 
 export default function MuscleFatiguePopup() {
   const { selectedMuscle, selectMuscle, overrideMuscle } = useFatigueStore()
+  const { t, num } = useT()
 
   if (!selectedMuscle) return null
 
@@ -12,16 +14,17 @@ export default function MuscleFatiguePopup() {
   const hoursLeft = recoveryTargetAt
     ? Math.max(0, (new Date(recoveryTargetAt).getTime() - Date.now()) / 3600000)
     : 0
+  const days = Math.round(hoursLeft / 24 * 10) / 10
   const recoveryLabel =
-    hoursLeft <= 0 ? 'Ready' :
-    hoursLeft < 1 ? '<1h' :
-    hoursLeft < 24 ? `~${Math.round(hoursLeft)}h` :
-    `~${Math.round(hoursLeft / 24 * 10) / 10}d`
+    hoursLeft <= 0 ? t('muscle.ready') :
+    hoursLeft < 1 ? t('muscle.underHour') :
+    hoursLeft < 24 ? t('muscle.hoursLeft', { n: Math.round(hoursLeft) }) :
+    t('muscle.daysLeft', { n: Number.isInteger(days) ? days : num(days) })
 
   const statusConfig = {
-    recovered: { label: 'Recovered', color: 'text-brand-green', bg: 'bg-brand-green' },
-    moderate:  { label: 'Moderate Fatigue', color: 'text-brand-yellow', bg: 'bg-brand-yellow' },
-    high:      { label: 'High Fatigue', color: 'text-brand-red', bg: 'bg-brand-red' }
+    recovered: { label: t('muscle.statusRecovered'), color: 'text-brand-green', bg: 'bg-brand-green' },
+    moderate:  { label: t('muscle.statusModerate'), color: 'text-brand-yellow', bg: 'bg-brand-yellow' },
+    high:      { label: t('muscle.statusHigh'), color: 'text-brand-red', bg: 'bg-brand-red' }
   }
 
   const config = statusConfig[status]
@@ -58,7 +61,7 @@ export default function MuscleFatiguePopup() {
         {/* Fatigue bar */}
         <div className="mb-3">
           <div className="flex justify-between text-xs text-dark-300 mb-1">
-            <span>Fatigue</span>
+            <span>{t('muscle.fatigue')}</span>
             <span className={config.color}>{fatigueLevel}%</span>
           </div>
           <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
@@ -72,23 +75,23 @@ export default function MuscleFatiguePopup() {
         {/* Stats */}
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div className="bg-dark-700 rounded-lg p-2 text-center">
-            <p className="text-dark-300 text-xs">Recovery</p>
+            <p className="text-dark-300 text-xs">{t('muscle.recovery')}</p>
             <p className="text-white text-sm font-semibold">
               {recoveryLabel}
             </p>
           </div>
           <div className="bg-dark-700 rounded-lg p-2 text-center">
-            <p className="text-dark-300 text-xs">Status</p>
+            <p className="text-dark-300 text-xs">{t('muscle.status')}</p>
             <p className={`text-sm font-semibold ${config.color}`}>
-              {status === 'recovered' ? '✓ Go' :
-               status === 'moderate'  ? '~ Easy' : '✕ Rest'}
+              {status === 'recovered' ? t('muscle.go') :
+               status === 'moderate'  ? t('muscle.easy') : t('muscle.rest')}
             </p>
           </div>
         </div>
 
         {/* Manual override */}
         <div className="border-t border-dark-600 pt-3">
-          <p className="text-dark-300 text-xs mb-2">Manual override</p>
+          <p className="text-dark-300 text-xs mb-2">{t('muscle.override')}</p>
           <div className="flex gap-2">
             {[0, 35, 70, 100].map(level => (
               <button

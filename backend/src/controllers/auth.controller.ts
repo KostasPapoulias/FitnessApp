@@ -9,11 +9,15 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../server';
 import { AuthRequest } from '../server';
 import { log } from '../lib/logger';
+import { isLocale, localeOf } from '../lib/locale';
+import { CLIENT_SETTINGS_SELECT } from './settings.controller';
 
 interface RegisterBody {
   email: string;
   password: string;
   name?: string;
+  /** 'en' | 'el' — the language picked on the Register screen. */
+  language?: string;
 }
 
 interface LoginBody {
@@ -36,7 +40,7 @@ const signToken = (userId: string, tokenVersion: number): string =>
 // POST /api/auth/register
 export const register = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { email: rawEmail, password, name } = req.body as RegisterBody;
+    const { email: rawEmail, password, name, language } = req.body as RegisterBody;
 
     // Normalised so one address cannot become several accounts
     const email = normalizeEmail(rawEmail);
@@ -82,7 +86,9 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
           },
         },
         settings: {
-          create: {},
+          // The explicit choice if the client sent one, otherwise whatever
+          // the Register screen was showing — which is what the header says.
+          create: { language: isLocale(language) ? language : localeOf(res) },
         },
       },
       select: {
@@ -90,6 +96,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
         email: true,
         profile: true,
         tokenVersion: true,
+        settings: { select: { language: true } },
       },
     });
 
@@ -135,6 +142,9 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       password: true,
       profile: true,
       tokenVersion: true,
+      // The account's language, so a new phone switches to it on sign-in
+      // instead of waiting for the next cold launch's /me.
+      settings: { select: { language: true } },
     };
 
     const user =
@@ -199,7 +209,8 @@ export const me = async (req: AuthRequest, res: Response): Promise<void> => {
         email: true,
         createdAt: true,
         profile: true,
-        settings: true,
+        // Not `true` — that shipped the PIN hash. See CLIENT_SETTINGS_SELECT.
+        settings: { select: CLIENT_SETTINGS_SELECT },
       },
     });
 
@@ -262,6 +273,10 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
     await requestPasswordReset(email, {
       baseUrl: APP_BASE_URL,
       requestIp: req.ip,
+      // The language of the screen they asked from, not the account's: someone
+      // locked out and reading Greek should not get the email in English
+      // because the account still holds the default.
+      locale: localeOf(res),
     });
 
     res.json(accepted);

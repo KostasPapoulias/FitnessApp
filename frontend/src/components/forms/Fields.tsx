@@ -1,4 +1,5 @@
 import React from 'react'
+import { MessageKey, useT } from '../../i18n'
 
 // Shared form primitives for anywhere the user types a measurement.
 //
@@ -56,6 +57,7 @@ export function NumberField({
   decimal?: boolean
   label?: string
 }) {
+  const { t } = useT()
   const parsed = num(value)
   // Only complain about a value the user has finished typing. Flagging "1" as
   // out of range while they are on their way to "175" is noise.
@@ -92,7 +94,7 @@ export function NumberField({
       </div>
       {invalid && (
         <p className="text-brand-red text-xs mt-1.5">
-          Must be between {limits.min} and {limits.max}{unit ? ` ${unit}` : ''}
+          {t('field.outOfRange', { min: limits.min, max: limits.max, unit: unit ? ` ${unit}` : '' })}
         </p>
       )}
     </div>
@@ -134,6 +136,16 @@ function DatePart({
 export interface DateParts { day: string; month: string; year: string }
 
 /**
+ * Why three fields are not a date, as a message key rather than a sentence.
+ * This runs inside useMemo on Onboarding, so a translated string would be
+ * frozen in whatever language was showing when the digits were typed; a key
+ * is translated where it is shown, in BirthDateField.
+ */
+export type BirthDateError =
+  | ''
+  | Extract<MessageKey, 'birth.badMonth' | 'birth.badDay' | 'birth.noSuchDate' | 'birth.tooYoung' | 'birth.checkYear'>
+
+/**
  * Resolves three text fields into a real date, or explains why they aren't one.
  *
  * Deliberately not <input type="date">: that renders in whatever order the
@@ -142,12 +154,12 @@ export interface DateParts { day: string; month: string; year: string }
  * miserable way to reach a birth year thirty years back.
  */
 export const resolveBirthDate = ({ day, month, year }: DateParts): {
-  date: Date | null; error: string
+  date: Date | null; error: BirthDateError
 } => {
   const d = num(day), m = num(month), y = num(year)
   if (d === null || m === null || y === null) return { date: null, error: '' }
-  if (m < 1 || m > 12) return { date: null, error: 'Month must be between 1 and 12' }
-  if (d < 1 || d > 31) return { date: null, error: 'Day must be between 1 and 31' }
+  if (m < 1 || m > 12) return { date: null, error: 'birth.badMonth' }
+  if (d < 1 || d > 31) return { date: null, error: 'birth.badDay' }
   if (year.length < 4) return { date: null, error: '' }
 
   const date = new Date(y, m - 1, d)
@@ -155,12 +167,12 @@ export const resolveBirthDate = ({ day, month, year }: DateParts): {
   // into the next month rather than failing, so the only way to catch one is
   // to check the parts survived the trip.
   if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
-    return { date: null, error: 'That date does not exist' }
+    return { date: null, error: 'birth.noSuchDate' }
   }
 
   const age = (Date.now() - date.getTime()) / (365.2425 * 24 * 60 * 60 * 1000)
-  if (age < MIN_AGE) return { date: null, error: `You need to be at least ${MIN_AGE} to use SomaTrack` }
-  if (age > MAX_AGE) return { date: null, error: 'Please check the year' }
+  if (age < MIN_AGE) return { date: null, error: 'birth.tooYoung' }
+  if (age > MAX_AGE) return { date: null, error: 'birth.checkYear' }
 
   return { date, error: '' }
 }
@@ -180,27 +192,28 @@ export const toDateParts = (iso: string | null | undefined): DateParts => {
 export function BirthDateField({ value, onChange, error }: {
   value: DateParts
   onChange: (v: DateParts) => void
-  error?: string
+  error?: BirthDateError
 }) {
+  const { t } = useT()
   const monthRef = React.useRef<HTMLInputElement>(null)
   const yearRef = React.useRef<HTMLInputElement>(null)
 
   return (
     <div>
-      <label className="text-dark-300 text-xs mb-1.5 block">Date of birth</label>
+      <label className="text-dark-300 text-xs mb-1.5 block">{t('field.dateOfBirth')}</label>
       <div className="flex gap-2.5">
-        <DatePart value={value.day} placeholder="DD" maxLength={2} flex="flex-1"
+        <DatePart value={value.day} placeholder={t('field.dayPlaceholder')} maxLength={2} flex="flex-1"
                   onChange={day => onChange({ ...value, day })}
                   onFilled={() => monthRef.current?.focus()} />
-        <DatePart value={value.month} placeholder="MM" maxLength={2} flex="flex-1"
+        <DatePart value={value.month} placeholder={t('field.monthPlaceholder')} maxLength={2} flex="flex-1"
                   inputRef={monthRef}
                   onChange={month => onChange({ ...value, month })}
                   onFilled={() => yearRef.current?.focus()} />
-        <DatePart value={value.year} placeholder="YYYY" maxLength={4} flex="flex-[1.4]"
+        <DatePart value={value.year} placeholder={t('field.yearPlaceholder')} maxLength={4} flex="flex-[1.4]"
                   inputRef={yearRef}
                   onChange={year => onChange({ ...value, year })} />
       </div>
-      {error && <p className="text-brand-red text-xs mt-1.5">{error}</p>}
+      {error && <p className="text-brand-red text-xs mt-1.5">{t(error, { min: MIN_AGE })}</p>}
     </div>
   )
 }

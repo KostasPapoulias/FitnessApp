@@ -2,12 +2,14 @@ import { useLayoutEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useDeviceType } from '../../hooks/useDeviceType'
+import { useT } from '../../i18n'
 
 export default function BottomNav() {
   const navigate = useNavigate()
   const location = useLocation()
   const { activeSession, selectedExercises, quickLog } = useWorkoutStore()
   const { isPhone } = useDeviceType()
+  const { t } = useT()
   const navRef = useRef<HTMLElement>(null)
 
   // Publish the nav's real height so fixed overlays (chat input) can sit
@@ -45,15 +47,16 @@ export default function BottomNav() {
     // would open the set card and rest timer on a session meant to have neither.
     if (activeSession) {
       return quickLog
-        ? { label: 'Log ●', path: '/workout/log', bg: 'bg-brand-red' }
-        : { label: 'Live ●', path: '/workout/active', bg: 'bg-brand-red' }
+        ? { label: t('nav.logLive'), path: '/workout/log', bg: 'bg-brand-red' }
+        : { label: t('nav.live'), path: '/workout/active', bg: 'bg-brand-red' }
     }
     if (selectedExercises.length > 0) {
+      const count = selectedExercises.length
       return quickLog
-        ? { label: `Log (${selectedExercises.length})`, path: '/workout/log', bg: 'bg-brand-teal' }
-        : { label: `Plan (${selectedExercises.length})`, path: '/workout/plan', bg: 'bg-brand-teal' }
+        ? { label: t('nav.logCount', { count }), path: '/workout/log', bg: 'bg-brand-teal' }
+        : { label: t('nav.planCount', { count }), path: '/workout/plan', bg: 'bg-brand-teal' }
     }
-    return { label: 'Plan', path: '/workout/start', bg: 'bg-brand-teal' }
+    return { label: t('nav.plan'), path: '/workout/start', bg: 'bg-brand-teal' }
   }
 
   const center = centerButton()
@@ -63,15 +66,15 @@ export default function BottomNav() {
       <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-dark-600 bg-dark-900/95 px-6 py-6">
         <div className="mb-8">
           <p className="text-xs uppercase tracking-[0.3em] text-dark-400">Somatrack</p>
-          <h2 className="mt-2 text-2xl font-bold text-white">Training hub</h2>
+          <h2 className="mt-2 text-2xl font-bold text-white">{t('nav.hubTitle')}</h2>
         </div>
 
         <div className="flex flex-1 flex-col justify-between gap-6">
           <div className="space-y-2">
-            <DesktopNavBtn icon={<HomeIcon />} label="Home" active={isActive('/')} onClick={() => navigate('/')} />
-            <DesktopNavBtn icon={<CalendarIcon />} label="Calendar" active={isActive('/calendar')} onClick={() => navigate('/calendar')} navKey="calendar" />
-            <DesktopNavBtn icon={<ChatIcon />} label="AI Chat" active={isActive('/ai')} onClick={() => navigate('/ai')} />
-            <DesktopNavBtn icon={<ProfileIcon />} label="Profile" active={isActive('/profile')} onClick={() => navigate('/profile')} />
+            <DesktopNavBtn icon={<HomeIcon />} label={t('nav.home')} active={isActive('/')} onClick={() => navigate('/')} />
+            <DesktopNavBtn icon={<CalendarIcon />} label={t('nav.calendar')} active={isActive('/calendar')} onClick={() => navigate('/calendar')} navKey="calendar" />
+            <DesktopNavBtn icon={<ChatIcon />} label={t('nav.ai')} active={isActive('/ai')} onClick={() => navigate('/ai')} />
+            <DesktopNavBtn icon={<ProfileIcon />} label={t('nav.profile')} active={isActive('/profile')} onClick={() => navigate('/profile')} />
           </div>
 
           <button
@@ -88,7 +91,7 @@ export default function BottomNav() {
               <div>
                 <p className={`text-sm font-bold ${activeSession ? 'text-white' : 'text-black'}`}>{center.label}</p>
                 <p className={`text-xs ${activeSession ? 'text-white/75' : 'text-black/70'}`}>
-                  {activeSession ? 'Jump back into your session' : 'Open workout planning'}
+                  {activeSession ? t('nav.resume') : t('nav.openPlanning')}
                 </p>
               </div>
             </div>
@@ -107,7 +110,7 @@ export default function BottomNav() {
       {/* Home */}
       <NavBtn
         icon={<HomeIcon />}
-        label="Home"
+        label={t('nav.home')}
         active={isActive('/')}
         onClick={() => navigate('/')}
       />
@@ -115,7 +118,7 @@ export default function BottomNav() {
       {/* Calendar */}
       <NavBtn
         icon={<CalendarIcon />}
-        label="Calendar"
+        label={t('nav.calendar')}
         active={isActive('/calendar')}
         onClick={() => navigate('/calendar')}
         navKey="calendar"
@@ -143,7 +146,7 @@ export default function BottomNav() {
       {/* AI Chat */}
       <NavBtn
         icon={<ChatIcon />}
-        label="AI Chat"
+        label={t('nav.ai')}
         active={isActive('/ai')}
         onClick={() => navigate('/ai')}
       />
@@ -151,7 +154,7 @@ export default function BottomNav() {
       {/* Profile */}
       <NavBtn
         icon={<ProfileIcon />}
-        label="Profile"
+        label={t('nav.profile')}
         active={isActive('/profile')}
         onClick={() => navigate('/profile')}
       />

@@ -4,14 +4,16 @@ import { aiService } from '../services/ai.service'
 import { settingsService } from '../services/settings.service'
 import { useFatigueStore } from '../store/useFatigueStore'
 import { NEW_THREAD } from '../constants/chat'
+import { MessageKey, useT } from '../i18n'
 
-const SUGGESTED_PROMPTS = [
-  { emoji: '💪', text: 'What should I train today?' },
-  { emoji: '🔴', text: 'Which muscles need rest?' },
-  { emoji: '📈', text: 'How is my progress?' },
-  { emoji: '😴', text: 'How is my recovery?' },
-  { emoji: '🎯', text: 'Suggest a workout for my goal' },
-  { emoji: '⚡', text: 'Am I overtraining?' },
+// The text is also what gets SENT, so a Greek screen asks the coach in Greek.
+const SUGGESTED_PROMPTS: { emoji: string; key: MessageKey }[] = [
+  { emoji: '💪', key: 'ai.promptTrainToday' },
+  { emoji: '🔴', key: 'ai.promptRest' },
+  { emoji: '📈', key: 'ai.promptProgress' },
+  { emoji: '😴', key: 'ai.promptRecovery' },
+  { emoji: '🎯', key: 'ai.promptGoal' },
+  { emoji: '⚡', key: 'ai.promptOvertraining' },
 ]
 
 interface Thread {
@@ -25,6 +27,7 @@ interface Thread {
 export default function AIChatHub() {
   const navigate = useNavigate()
   const { readinessScore, muscles } = useFatigueStore()
+  const { t, tn, intl } = useT()
 
   const [threads,     setThreads]     = useState<Thread[]>([])
   const [isLoading,   setIsLoading]   = useState(true)
@@ -75,10 +78,10 @@ export default function AIChatHub() {
     const diff = now.getTime() - date.getTime()
     const days = Math.floor(diff / 86400000)
 
-    if (days === 0) return 'Today'
-    if (days === 1) return 'Yesterday'
-    if (days < 7)  return `${days} days ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    if (days === 0) return t('ai.today')
+    if (days === 1) return t('ai.yesterday')
+    if (days < 7)  return tn('ai.daysAgo', days)
+    return date.toLocaleDateString(intl, { month: 'short', day: 'numeric' })
   }
 
   return (
@@ -86,11 +89,9 @@ export default function AIChatHub() {
 
       {/* Header */}
       <div className="px-5 pt-4 pb-4">
-        <h1 className="text-white text-2xl font-bold">AI Coach</h1>
+        <h1 className="text-white text-2xl font-bold">{t('ai.title')}</h1>
         <p className="text-dark-400 text-sm mt-1">
-          {aiConsent === false
-            ? 'Powered by Gemini · General advice only'
-            : 'Powered by Gemini · Your body data as context'}
+          {aiConsent === false ? t('ai.subtitleGeneral') : t('ai.subtitleContext')}
         </p>
       </div>
 
@@ -107,19 +108,17 @@ export default function AIChatHub() {
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">🙈</span>
               <span className="text-dark-200 text-sm font-semibold">
-                The coach cannot see your data
+                {t('ai.noDataTitle')}
               </span>
             </div>
             <p className="text-dark-400 text-xs leading-relaxed mb-3">
-              AI Data Consent is off, so the coach has no access to your
-              readiness, fatigue, history or injuries, and sends no nudges. It
-              can still answer general training and recovery questions.
+              {t('ai.noDataBody')}
             </p>
             <button
               onClick={() => navigate('/profile')}
               className="text-brand-teal text-xs font-semibold active:opacity-70"
             >
-              Turn it on in Profile ›
+              {t('ai.turnOn')}
             </button>
           </div>
         ) : (
@@ -129,20 +128,18 @@ export default function AIChatHub() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">🤖</span>
                 <span className="text-brand-teal text-sm font-semibold">
-                  AI knows your current state
+                  {t('ai.knowsState')}
                 </span>
               </div>
               <div className={`text-lg font-bold ${readinessColor}`}>
-                {readinessScore}% ready
+                {t('ai.readyPct', { score: readinessScore })}
               </div>
             </div>
 
             {/* Fatigue context pills */}
             {highFatigue.length > 0 ? (
               <div>
-                <p className="text-dark-400 text-xs mb-2">
-                  High fatigue detected:
-                </p>
+                <p className="text-dark-400 text-xs mb-2">{t('ai.highFatigue')}</p>
                 <div className="flex gap-2 flex-wrap">
                   {highFatigue.map(m => (
                     <span key={m.muscleId}
@@ -154,9 +151,7 @@ export default function AIChatHub() {
                 </div>
               </div>
             ) : (
-              <p className="text-dark-400 text-xs">
-                All muscles recovered — great day to train hard!
-              </p>
+              <p className="text-dark-400 text-xs">{t('ai.allRecovered')}</p>
             )}
           </div>
         )}
@@ -164,13 +159,13 @@ export default function AIChatHub() {
         {/* Suggested prompts */}
         <div className="mb-5">
           <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-            Quick questions
+            {t('ai.quickQuestions')}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {SUGGESTED_PROMPTS.map(prompt => (
               <button
-                key={prompt.text}
-                onClick={() => startChat(prompt.text)}
+                key={prompt.key}
+                onClick={() => startChat(t(prompt.key))}
                 className="bg-dark-800 border border-dark-600 rounded-card
                            p-3 text-left active:scale-95 transition-all
                            active:border-brand-teal/50 active:bg-brand-teal/5
@@ -178,7 +173,7 @@ export default function AIChatHub() {
               >
                 <span className="text-xl block mb-1.5">{prompt.emoji}</span>
                 <span className="text-dark-200 text-xs leading-relaxed">
-                  {prompt.text}
+                  {t(prompt.key)}
                 </span>
               </button>
             ))}
@@ -198,14 +193,14 @@ export default function AIChatHub() {
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          New Chat
+          {t('ai.newChat')}
         </button>
 
         {/* Chat history */}
         {!isLoading && threads.length > 0 && (
           <div>
             <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-              Recent chats
+              {t('ai.recentChats')}
             </p>
             <div className="flex flex-col gap-2">
               {threads.map(thread => {
@@ -233,18 +228,18 @@ export default function AIChatHub() {
                           className="flex-1 text-left min-w-0"
                         >
                           <p className="text-white text-sm font-semibold truncate">
-                            {thread.title ?? 'Chat'}
+                            {thread.title ?? t('ai.untitled')}
                           </p>
                           {lastMsg && (
                             <p className="text-dark-400 text-xs mt-0.5 truncate">
-                              {lastMsg.sender === 'user' ? 'You: ' : 'AI: '}
+                              {lastMsg.sender === 'user' ? t('ai.senderYou') : t('ai.senderAi')}
                               {lastMsg.messageText}
                             </p>
                           )}
                           <p className="text-dark-500 text-xs mt-1">
                             {formatDate(thread.createdAt)}
                             {' · '}
-                            {thread._count.messages} messages
+                            {tn('ai.messages', thread._count.messages)}
                           </p>
                         </button>
 
@@ -275,22 +270,20 @@ export default function AIChatHub() {
                     ) : (
                       // Delete confirm
                       <div className="p-4">
-                        <p className="text-white text-sm mb-3">
-                          Delete this chat?
-                        </p>
+                        <p className="text-white text-sm mb-3">{t('ai.deleteChat')}</p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => setDeleteId(null)}
                             className="flex-1 bg-dark-700 text-dark-300
                                        border border-dark-600 py-2.5 rounded-btn
                                        text-sm">
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                           <button
                             onClick={() => handleDelete(thread.id)}
                             className="flex-1 bg-brand-red text-white font-semibold
                                        py-2.5 rounded-btn text-sm">
-                            Delete
+                            {t('common.delete')}
                           </button>
                         </div>
                       </div>
@@ -305,10 +298,8 @@ export default function AIChatHub() {
         {/* Empty history */}
         {!isLoading && threads.length === 0 && (
           <div className="text-center py-6">
-            <p className="text-dark-500 text-sm">No chats yet</p>
-            <p className="text-dark-600 text-xs mt-1">
-              Start a conversation above
-            </p>
+            <p className="text-dark-500 text-sm">{t('ai.noChats')}</p>
+            <p className="text-dark-600 text-xs mt-1">{t('ai.startAbove')}</p>
           </div>
         )}
       </div>

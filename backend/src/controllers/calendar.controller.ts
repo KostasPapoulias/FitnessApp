@@ -6,6 +6,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma';
 import type { AuthRequest } from '../server';
 import { log } from '../lib/logger'
+import { INTL_LOCALE, Locale, localeOf } from '../lib/locale'
 
 // Muscle -> muscle-group mapping, mirrors the groups used on the
 // Calendar "Muscles" tab (Chest / Back / Legs / Shoulders / Arms / Core / Calves).
@@ -19,6 +20,58 @@ const MUSCLE_GROUP: Record<string, string> = {
   'Calves': 'Calves',
 }
 const GROUP_ORDER = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Calves']
+
+/**
+ * The groups as the athlete reads them. Only these seven are translated here —
+ * individual muscle names come from the database and are still English until
+ * the catalogue carries Greek.
+ */
+const GROUP_LABELS: Record<Locale, Record<string, string>> = {
+  en: Object.fromEntries(GROUP_ORDER.map(g => [g, g])),
+  el: {
+    Chest: 'Στήθος', Back: 'Πλάτη', Legs: 'Πόδια', Shoulders: 'Ώμοι',
+    Arms: 'Χέρια', Core: 'Κορμός', Calves: 'Γάμπες',
+  },
+}
+
+/**
+ * The imbalance line, which names muscle groups and has to agree with them in
+ * number. Written per language rather than assembled from fragments: Greek
+ * puts the verb elsewhere and a template built for English word order produces
+ * something no Greek speaker would write.
+ */
+const muscleInsightFor = (
+  locale: Locale, neglected: string[], overloaded: string[]
+): string => {
+  const neg = neglected.join(locale === 'el' ? ' και ' : ' and ')
+  const over = overloaded.join(locale === 'el' ? ' και ' : ' and ')
+  const negMany = neglected.length > 1
+  const overMany = overloaded.length > 1
+
+  if (locale === 'el') {
+    if (neglected.length && overloaded.length) {
+      return `${neg} ${negMany ? 'δεν έχουν' : 'δεν έχει'} δεχθεί όγκο τις τελευταίες 3 εβδομάδες, ενώ ${over} ${overMany ? 'ανεβαίνουν' : 'ανεβαίνει'} πολύ. Πρόσθεσε ένα finisher για ${neglected[0].toLowerCase()} αυτή την εβδομάδα για να ισορροπήσει.`
+    }
+    if (neglected.length) {
+      return `${neg} ${negMany ? 'δεν έχουν' : 'δεν έχει'} δεχθεί όγκο τις τελευταίες 3 εβδομάδες. Ώρα να ${negMany ? 'επιστρέψουν' : 'επιστρέψει'} στο πρόγραμμά σου.`
+    }
+    if (overloaded.length) {
+      return `${over} ${overMany ? 'ανεβαίνουν' : 'ανεβαίνει'} σε σχέση με το υπόλοιπο πρόγραμμά σου. Φρόντισε να προλαβαίνει η αποκατάσταση.`
+    }
+    return 'Η προπόνησή σου είναι καλά ισορροπημένη ανάμεσα στις μυϊκές ομάδες τις τελευταίες 8 εβδομάδες.'
+  }
+
+  if (neglected.length && overloaded.length) {
+    return `${neg} ${negMany ? 'have' : 'has'} gone without volume in the last 3 weeks while ${over} ${overMany ? 'are' : 'is'} trending high. Add a ${neglected[0].toLowerCase()} finisher this week to even things out.`
+  }
+  if (neglected.length) {
+    return `${neg} ${negMany ? "haven't" : "hasn't"} seen volume in the last 3 weeks. Work it back into your split soon.`
+  }
+  if (overloaded.length) {
+    return `${over} ${overMany ? 'are' : 'is'} trending high relative to the rest of your split. Make sure recovery keeps pace.`
+  }
+  return 'Your training is well balanced across muscle groups over the last 8 weeks.'
+}
 
 // Calendar day key (YYYY-MM-DD) in LOCAL time.
 // toISOString() must never be used for this: it renders the UTC date, so for a
@@ -355,7 +408,9 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
       return 4
     }
 
-    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    // The heatmap's month labels, in the reader's language — 'Σεπ', not 'Sep'.
+    const monthName = new Intl.DateTimeFormat(INTL_LOCALE[localeOf(res)], { month: 'short' })
+    const MONTHS = Array.from({ length: 12 }, (_, m) => monthName.format(new Date(2021, m, 1)))
     const weeks: { monthLabel: string; days: { date: string; level: number; future: boolean }[] }[] = []
     let prevMonth = -1
     const cursor = new Date(start)
@@ -457,8 +512,11 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     })
 
     const avgRecent = withRecent.reduce((s, r) => s + r.recent, 0) / withRecent.length
+    const groupLabel = GROUP_LABELS[localeOf(res)]
     const muscleRows = withRecent.map(r => ({
-      name: r.name,
+      // Translated here rather than in the client: the insight sentence below
+      // names the same groups and the two must not disagree.
+      name: groupLabel[r.name] ?? r.name,
       cells: r.cells,
       status: r.recent === 0
         ? 'neglected'
@@ -468,16 +526,7 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     const neglected = muscleRows.filter(r => r.status === 'neglected').map(r => r.name)
     const overloaded = muscleRows.filter(r => r.status === 'overloaded').map(r => r.name)
 
-    let muscleInsight: string
-    if (neglected.length && overloaded.length) {
-      muscleInsight = `${neglected.join(' and ')} ${neglected.length > 1 ? 'have' : 'has'} gone without volume in the last 3 weeks while ${overloaded.join(' and ')} ${overloaded.length > 1 ? 'are' : 'is'} trending high. Add a ${neglected[0].toLowerCase()} finisher this week to even things out.`
-    } else if (neglected.length) {
-      muscleInsight = `${neglected.join(' and ')} ${neglected.length > 1 ? "haven't" : "hasn't"} seen volume in the last 3 weeks. Work it back into your split soon.`
-    } else if (overloaded.length) {
-      muscleInsight = `${overloaded.join(' and ')} ${overloaded.length > 1 ? 'are' : 'is'} trending high relative to the rest of your split. Make sure recovery keeps pace.`
-    } else {
-      muscleInsight = 'Your training is well balanced across muscle groups over the last 8 weeks.'
-    }
+    const muscleInsight = muscleInsightFor(localeOf(res), neglected, overloaded)
 
     // AI coach tip, derived from current per-muscle fatigue levels (read at the
     // top, alongside the volume query).
@@ -505,7 +554,8 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     res.json({
       success: true,
       data: {
-        weekHeads: Array.from({ length: WEEKS }, (_, i) => i === WEEKS - 1 ? 'Now' : `-${WEEKS - 1 - i}`),
+        weekHeads: Array.from({ length: WEEKS }, (_, i) =>
+          i === WEEKS - 1 ? (localeOf(res) === 'el' ? 'Τώρα' : 'Now') : `-${WEEKS - 1 - i}`),
         muscleRows,
         muscleInsight,
         coachTip

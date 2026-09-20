@@ -1,11 +1,16 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "commonjs",
+    // node16 rather than commonjs + "node": that pair is deprecated in
+    // TypeScript 6, which is what VS Code bundles, so the editor flagged this
+    // file as an error while the project's own 5.x compiled it silently. With
+    // "type": "commonjs" in package.json node16 still emits CommonJS — the
+    // compiled dist/ was diffed before and after and came out byte-identical.
+    "module": "node16",
     "lib": ["ES2020"],
     "outDir": "./dist",
     "rootDir": "./src",
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

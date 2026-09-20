@@ -32,6 +32,7 @@ import { startNotificationScheduler } from './lib/notificationScheduler';
 import { startSessionSweeper } from './lib/sessionSweeper';
 import { apiLimiter } from './middleware/rateLimit.middleware';
 import { requestLogger } from './middleware/requestLog.middleware';
+import { localizeResponses } from './middleware/locale.middleware';
 
 // Types
 export interface AuthRequest extends Request {
@@ -61,6 +62,10 @@ app.set('trust proxy', 1);
 // a request id attached, and a stack trace that cannot be tied to a request is
 // most of the way to useless.
 app.use(requestLogger);
+
+// Before every limiter and route, so each error — a 429 and the 404 below
+// included — reaches the athlete in the language on their screen.
+app.use(localizeResponses);
 
 // Middleware
 app.use(cors({

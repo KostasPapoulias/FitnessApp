@@ -9,6 +9,7 @@ import { BOTTOM_NAV_HEIGHT, PHONE_MAX_WIDTH, SIDEBAR_WIDTH } from '../constants/
 import { NEW_THREAD } from '../constants/chat'
 import { AiProposal, Message } from '../types'
 import ProposalCard from '../components/chat/ProposalCard'
+import { useT } from '../i18n'
 
 export default function AIChat() {
   const navigate  = useNavigate()
@@ -23,6 +24,7 @@ export default function AIChat() {
     undefined
 
   const { readinessScore } = useFatigueStore()
+  const { t, intl } = useT()
   const { isPhone }     = useDeviceType()
   const keyboardInset   = useKeyboardInset()
 
@@ -142,8 +144,8 @@ export default function AIChat() {
         id:          Date.now().toString() + '_err',
         sender:      'assistant',
         messageText: limited
-          ? err.response.data?.error ?? 'You have reached today’s AI limit.'
-          : 'Sorry, I ran into an error. Please try again.',
+          ? err.response.data?.error ?? t('ai.limitReached')
+          : t('ai.error'),
         dateTime:    new Date().toISOString()
       }])
     } finally {
@@ -204,8 +206,8 @@ export default function AIChat() {
         </div>
 
         <div className="flex-1 min-w-0">
-          <h1 className="text-white text-base font-bold">AI Coach</h1>
-          <p className="text-dark-400 text-xs">Gemini · Context-aware</p>
+          <h1 className="text-white text-base font-bold">{t('ai.title')}</h1>
+          <p className="text-dark-400 text-xs">{t('ai.headerSub')}</p>
         </div>
 
         <div className="bg-dark-800 border border-dark-600 rounded-full
@@ -222,23 +224,19 @@ export default function AIChat() {
       <div ref={scrollerRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-4">
         {isLoadingHistory ? (
           <div className="flex items-center justify-center h-32">
-            <div className="text-dark-400 text-sm">Loading...</div>
+            <div className="text-dark-400 text-sm">{t('common.loading')}</div>
           </div>
         ) : messages.length === 0 && proposals.length === 0 ? (
           <div className="flex flex-col items-center justify-center
                           min-h-[200px] text-center px-4">
             <div className="text-5xl mb-4">🤖</div>
-            <p className="text-white font-bold text-lg mb-2">
-              What's on your mind?
-            </p>
-            <p className="text-dark-400 text-sm">
-              Ask me anything about training, recovery, or nutrition.
-            </p>
+            <p className="text-white font-bold text-lg mb-2">{t('ai.emptyTitle')}</p>
+            <p className="text-dark-400 text-sm">{t('ai.emptyBody')}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
             {messages.map(msg => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble key={msg.id} message={msg} intl={intl} />
             ))}
             {/* Drafted plans sit after the conversation: they belong to the
                 latest reply, and anchoring them mid-thread would put a live
@@ -301,7 +299,7 @@ export default function AIChat() {
                   sendMessage(input)
                 }
               }}
-              placeholder="Ask your AI coach..."
+              placeholder={t('ai.placeholder')}
               className="w-full bg-transparent text-white text-sm
                          placeholder-dark-400 outline-none"
             />
@@ -325,9 +323,9 @@ export default function AIChat() {
   )
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, intl }: { message: Message; intl: string }) {
   const isUser = message.sender === 'user'
-  const time = new Date(message.dateTime).toLocaleTimeString('en-US', {
+  const time = new Date(message.dateTime).toLocaleTimeString(intl, {
     hour: '2-digit', minute: '2-digit'
   })
 

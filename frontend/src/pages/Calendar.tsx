@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { calendarService } from '../services/calendar.service'
 import MiniMuscleMap from '../components/muscle/MiniMuscleMap'
@@ -9,18 +9,24 @@ import ExerciseSetsSheet from '../components/workout/ExerciseSetsSheet'
 import { workoutService } from '../services/workout.service'
 import ChunkBoundary from '../components/ChunkBoundary'
 import { lazyRetry } from '../lib/lazyRetry'
+import { useT } from '../i18n'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
 // the calendar itself must not cost a map.
 const RunDetail = lazyRetry(() => import('../components/RunDetail'))
 //import { useFatigueStore } from '../store/useFatigueStore'
 
-const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December'
-]
+// Weekday and month names come from Intl rather than a table: Greek needs
+// both the standalone month ("Ιανουάριος 2026") and correct short weekdays,
+// and the browser already has them for every locale.
+//
+// 1 Jan 2023 was a Sunday, so a week from it enumerates the columns in the
+// order the grid draws them.
+const weekdayNamesFor = (intl: string) =>
+  Array.from({ length: 7 }, (_, i) =>
+    new Intl.DateTimeFormat(intl, { weekday: 'short' }).format(new Date(2023, 0, 1 + i)))
 
+// The tab's identity, not its label — the label is looked up for display.
 type Tab = 'Month' | 'Activity' | 'Muscles'
 
 interface DaySummary {
@@ -112,6 +118,7 @@ const statusColor = (status: MuscleRow['status']) =>
   : 'bg-brand-green'
 
 export default function Calendar() {
+  const { t, tn, num, intl } = useT()
   const today = new Date()
   const [tab, setTab] = useState<Tab>('Month')
 
@@ -160,6 +167,13 @@ export default function Calendar() {
 
   const [muscles, setMuscles] = useState<MusclesData | null>(null)
   const [isLoadingMuscles, setIsLoadingMuscles] = useState(false)
+
+  const weekdayNames = useMemo(() => weekdayNamesFor(intl), [intl])
+  const tabLabels: Record<Tab, string> = {
+    Month: t('calendar.tabMonth'),
+    Activity: t('calendar.tabActivity'),
+    Muscles: t('calendar.tabMuscles'),
+  }
 
   // Load month data
   useEffect(() => {
@@ -212,7 +226,7 @@ export default function Calendar() {
       setConfirmDeleteSet(null)
       await reloadAfterMutation()
     } catch (err: any) {
-      setMutateError(err?.response?.data?.error ?? 'Could not remove that set.')
+      setMutateError(err?.response?.data?.error ?? t('calendar.removeSetFailed'))
     } finally {
       setMutating(false)
     }
@@ -228,7 +242,7 @@ export default function Calendar() {
       setEditingSession(null)
       await reloadAfterMutation()
     } catch (err: any) {
-      setMutateError(err?.response?.data?.error ?? 'Could not delete that workout.')
+      setMutateError(err?.response?.data?.error ?? t('calendar.deleteSessionFailed'))
     } finally {
       setMutating(false)
     }
@@ -288,9 +302,11 @@ export default function Calendar() {
     year === today.getFullYear()
 
   const formatDuration = (seconds: number) => {
-    if (seconds < 60) return '<1 min'
+    if (seconds < 60) return t('calendar.underMinute')
     const m = Math.floor(seconds / 60)
-    return m < 60 ? `${m} min` : `${Math.floor(m/60)}h ${m%60}m`
+    return m < 60
+      ? t('calendar.minutes', { count: m })
+      : t('calendar.hoursMinutes', { hours: Math.floor(m / 60), minutes: m % 60 })
   }
 
   const legacyExercises = (dayDetail as any)?.exercises ?? []
@@ -313,8 +329,8 @@ export default function Calendar() {
   const workoutDayCount = Object.keys(days).length
   const monthVolume = Object.values(days).reduce((sum, d) => sum + (d.totalVolume ?? 0), 0)
   const monthVolumeLabel = monthVolume >= 1000
-    ? `${(monthVolume / 1000).toFixed(1)}k`
-    : Math.round(monthVolume).toLocaleString()
+    ? `${num(monthVolume / 1000)}k`
+    : Math.round(monthVolume).toLocaleString(intl)
   const monthConsistency = daysInMonth > 0
     ? Math.round((workoutDayCount / daysInMonth) * 100)
     : 0
@@ -324,26 +340,26 @@ export default function Calendar() {
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
-        <h1 className="text-white text-2xl font-bold">Calendar</h1>
+        <h1 className="text-white text-2xl font-bold">{t('calendar.title')}</h1>
         <div className="flex items-center gap-2 text-brand-teal text-xs font-bold">
           <span className="w-2 h-2 rounded-full bg-brand-teal shadow-[0_0_8px_#00D4AA]" />
-          {isLoadingActivity ? '…' : `${activity?.streak.current ?? 0} day streak`}
+          {isLoadingActivity ? '…' : tn('calendar.streak', activity?.streak.current ?? 0)}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 px-5 mb-4">
-        {(['Month', 'Activity', 'Muscles'] as Tab[]).map(t => (
+        {(['Month', 'Activity', 'Muscles'] as Tab[]).map(t_ => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={t_}
+            onClick={() => setTab(t_)}
             className={`flex-1 py-2 rounded-full text-xs font-semibold border
                        transition-colors active:scale-95
-                       ${tab === t
+                       ${tab === t_
                          ? 'bg-brand-teal border-brand-teal text-black'
                          : 'bg-dark-800 border-dark-600 text-dark-300'}`}
           >
-            {t}
+            {tabLabels[t_]}
           </button>
         ))}
       </div>
@@ -354,9 +370,9 @@ export default function Calendar() {
           {/* Month stats */}
           <div className="flex gap-2 px-5 mb-4">
             {[
-              { value: workoutDayCount, label: 'Workouts', color: 'text-brand-teal' },
-              { value: `${monthVolumeLabel} kg`, label: 'Volume', color: 'text-white' },
-              { value: `${monthConsistency}%`, label: 'Consistency', color: 'text-brand-green' },
+              { value: workoutDayCount, label: t('calendar.workouts'), color: 'text-brand-teal' },
+              { value: `${monthVolumeLabel} kg`, label: t('calendar.volume'), color: 'text-white' },
+              { value: `${monthConsistency}%`, label: t('calendar.consistency'), color: 'text-brand-green' },
             ].map(s => (
               <div key={s.label}
                 className="flex-1 bg-dark-800 border border-dark-600 rounded-card px-2.5 py-2.5">
@@ -375,7 +391,8 @@ export default function Calendar() {
               ‹
             </button>
             <h2 className="text-white text-lg font-bold">
-              {MONTHS[month - 1]} {year}
+              {new Intl.DateTimeFormat(intl, { month: 'long', year: 'numeric' })
+                .format(new Date(year, month - 1, 1))}
             </h2>
             <button onClick={nextMonth}
               className="w-8 h-8 bg-dark-800 border border-dark-600 rounded-full
@@ -387,7 +404,7 @@ export default function Calendar() {
 
           {/* Day headers */}
           <div className="grid grid-cols-7 px-1 mb-1">
-            {DAYS.map(d => (
+            {weekdayNames.map(d => (
               <div key={d} className="text-center text-dark-400 text-xs font-medium py-1">
                 {d}
               </div>
@@ -447,10 +464,10 @@ export default function Calendar() {
 
           {/* Intensity legend */}
           <div className="flex items-center justify-center gap-4 mb-4 px-2">
-            <span className="text-dark-500 text-xs">rest</span>
+            <span className="text-dark-500 text-xs">{t('calendar.intensityRest')}</span>
             <div className="flex-1 h-1.5 rounded-full"
               style={{ background: 'linear-gradient(to right, #2A2A2A, #4ADE80, #FACC15, #EF4444)' }} />
-            <span className="text-dark-500 text-xs">high</span>
+            <span className="text-dark-500 text-xs">{t('calendar.intensityHigh')}</span>
           </div>
 
           {/* Day detail panel */}
@@ -458,9 +475,7 @@ export default function Calendar() {
 
             {!selectedDate && (
               <div className="text-center py-12">
-                <p className="text-dark-500 text-sm">
-                  Tap a day to see workout details
-                </p>
+                <p className="text-dark-500 text-sm">{t('calendar.tapDay')}</p>
               </div>
             )}
 
@@ -473,7 +488,7 @@ export default function Calendar() {
 
             {selectedDate && !isLoadingDay && !dayDetail && (
               <div className="text-center py-8">
-                <p className="text-dark-400 text-sm">No workout on this day</p>
+                <p className="text-dark-400 text-sm">{t('calendar.noWorkout')}</p>
               </div>
             )}
 
@@ -483,7 +498,7 @@ export default function Calendar() {
                 {/* Session summary — two column with mini SVG */}
                 <div className="bg-dark-800 rounded-card border border-dark-600 p-4">
                   <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-                    {new Date(selectedDate).toLocaleDateString('en-US', {
+                    {new Date(selectedDate).toLocaleDateString(intl, {
                       weekday: 'long', day: 'numeric', month: 'long'
                     })}
                   </p>
@@ -498,25 +513,25 @@ export default function Calendar() {
                     {/* Stats */}
                     <div className="flex-1 flex flex-col justify-between">
                       <p className="text-white font-bold text-base ">
-                        {exerciseCount} exercise workout
+                        {tn('calendar.exerciseWorkout', exerciseCount)}
                       </p>
                       <div className="flex flex-col gap-1.5">
                         <div className="flex justify-between">
-                          <span className="text-dark-400 text-xs">Volume</span>
+                          <span className="text-dark-400 text-xs">{t('calendar.volume')}</span>
                           <span className="text-brand-teal text-xs font-bold">
                             {dayDetail.session.totalVolume
-                              ? `${Math.round(dayDetail.session.totalVolume).toLocaleString()} kg`
+                              ? `${Math.round(dayDetail.session.totalVolume).toLocaleString(intl)} kg`
                               : '—'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-dark-400 text-xs">Avg RPE</span>
+                          <span className="text-dark-400 text-xs">{t('calendar.avgRpe')}</span>
                           <span className="text-brand-yellow text-xs font-bold">
-                            {dayDetail.session.avgRpe ? dayDetail.session.avgRpe.toFixed(1) : '—'}
+                            {dayDetail.session.avgRpe ? num(dayDetail.session.avgRpe) : '—'}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-dark-400 text-xs">Duration</span>
+                          <span className="text-dark-400 text-xs">{t('calendar.duration')}</span>
                           <span className="text-white text-xs font-semibold">
                             {dayDetail.session.duration
                               ? formatDuration(dayDetail.session.duration)
@@ -524,7 +539,7 @@ export default function Calendar() {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-dark-400 text-xs">Sessions</span>
+                          <span className="text-dark-400 text-xs">{t('calendar.sessions')}</span>
                           <span className="text-white text-xs">
                             {sessionCount}
                           </span>
@@ -544,7 +559,7 @@ export default function Calendar() {
                     ))}
                     {(dayDetail.fatigueSnapshot?.length ?? 0) > 3 && (
                       <span className="text-[10px] text-dark-500">
-                        +{(dayDetail.fatigueSnapshot?.length ?? 0) - 3} more
+                        {t('calendar.morePlus', { count: (dayDetail.fatigueSnapshot?.length ?? 0) - 3 })}
                       </span>
                     )}
                   </div>
@@ -554,7 +569,7 @@ export default function Calendar() {
                 {/* Exercises list */}
                 <div>
                   <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
-                    Exercises ({exerciseCount})
+                    {t('calendar.exercises', { count: exerciseCount })}
                   </p>
 
                   <div className="flex flex-col gap-4">
@@ -565,28 +580,28 @@ export default function Calendar() {
                             never also slides Calendar to another tab. */}
                         <SwipeActions
                           left={{
-                            label: editingSession === session.id ? 'Done' : 'Edit',
+                            label: editingSession === session.id ? t('calendar.editDone') : t('calendar.edit'),
                             icon: '✏️',
                             onSelect: () => setEditingSession(
                               editingSession === session.id ? null : session.id
                             ),
                           }}
                           right={{
-                            label: 'Delete', icon: '🗑️', tone: 'danger',
+                            label: t('common.delete'), icon: '🗑️', tone: 'danger',
                             onSelect: () => setConfirmDelete({
                               id: session.id,
-                              label: `Session ${sIdx + 1}`,
+                              label: t('calendar.session', { number: sIdx + 1 }),
                             }),
                           }}
                         >
                           <div className="flex items-center justify-between px-3 py-2.5">
                             <p className="text-dark-400 text-xs uppercase tracking-wider">
-                              Session {sIdx + 1} · {new Date(session.dateTime)
-                                .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                              {t('calendar.session', { number: sIdx + 1 })} · {new Date(session.dateTime)
+                                .toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' })}
                             </p>
                             <span className="text-dark-500 text-xs">
                               {session.totalVolume
-                                ? `${Math.round(session.totalVolume).toLocaleString()} kg`
+                                ? `${Math.round(session.totalVolume).toLocaleString(intl)} kg`
                                 : '—'}
                             </span>
                           </div>
@@ -594,14 +609,13 @@ export default function Calendar() {
 
                         {editingSession === session.id && (
                           <p className="text-brand-teal text-[11px] px-1 -mt-1">
-                            Tap a set to correct or remove it. Fatigue and readiness
-                            are rebuilt from what you change.
+                            {t('calendar.editHint')}
                           </p>
                         )}
 
                         {session.exercises.length === 0 && (
                           <div className="bg-dark-800 border border-dark-600 rounded-card p-4">
-                            <p className="text-dark-400 text-sm">No sets logged in this session</p>
+                            <p className="text-dark-400 text-sm">{t('calendar.noSets')}</p>
                           </div>
                         )}
 
@@ -644,15 +658,15 @@ export default function Calendar() {
                                   <p className="text-dark-400 text-xs mt-0.5">
                                     {isCardio ? (
                                       <>
-                                        {cardioKm.toFixed(2)} km · {fmtTime(cardioSec)}
+                                        {num(cardioKm, 2)} km · {fmtTime(cardioSec)}
                                         {cardioKm > 0 && cardioSec > 0
                                           ? ` · ${fmtTime(cardioSec / cardioKm)} /km`
                                           : ''}
                                       </>
                                     ) : (
                                       <>
-                                        {totalSets} sets
-                                        {totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString()} kg` : ''}
+                                        {tn('calendar.sets', totalSets)}
+                                        {totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString(intl)} kg` : ''}
                                       </>
                                     )}
                                   </p>
@@ -678,8 +692,8 @@ export default function Calendar() {
         <div className="flex-1 overflow-y-auto px-5 pb-6">
 
           <div className="flex items-center justify-between mb-3">
-            <p className="text-white text-[15px] font-bold">Training streak</p>
-            <p className="text-dark-300 text-xs">Last 12 months</p>
+            <p className="text-white text-[15px] font-bold">{t('calendar.streakTitle')}</p>
+            <p className="text-dark-300 text-xs">{t('calendar.last12Months')}</p>
           </div>
 
           {isLoadingActivity && (
@@ -692,7 +706,7 @@ export default function Calendar() {
                 <div className="flex gap-1.5">
                   {/* Weekday labels */}
                   <div className="flex flex-col gap-[3px] pt-4 flex-shrink-0">
-                    {DAYS.map((dl, i) => (
+                    {weekdayNames.map((dl, i) => (
                       <div key={i} className="h-[13px] text-[9px] text-dark-400 flex items-center">
                         {dl}
                       </div>
@@ -719,7 +733,7 @@ export default function Calendar() {
                             {wk.days.map((d, di) => (
                               <div
                                 key={di}
-                                title={d.future ? '' : `${d.date} · ${d.level ? 'trained' : 'rest'}`}
+                                title={d.future ? '' : `${d.date} · ${d.level ? t('calendar.dayTrained') : t('calendar.dayRest')}`}
                                 className={`w-[13px] h-[13px] rounded-[3px] border
                                   ${d.future
                                     ? 'bg-transparent border-transparent'
@@ -734,20 +748,20 @@ export default function Calendar() {
                 </div>
 
                 <div className="flex items-center justify-end gap-1 mt-3 text-[10px] text-dark-400">
-                  <span>Less</span>
+                  <span>{t('calendar.heatLess')}</span>
                   {[0,1,2,3,4].map(l => (
                     <div key={l} className={`w-3 h-3 rounded-[3px] ${heatClass(l)}`} />
                   ))}
-                  <span>More</span>
+                  <span>{t('calendar.heatMore')}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2.5 mt-4">
                 {[
-                  { label: 'Current streak', value: `${activity.streak.current}d`, color: 'text-brand-teal', sub: "🔥 don't break it" },
-                  { label: 'Longest streak', value: `${activity.streak.longest}d`, color: 'text-brand-orange', sub: 'personal best' },
-                  { label: 'This year', value: `${activity.streak.totalThisYear}`, color: 'text-white', sub: 'workouts logged' },
-                  { label: 'Consistency', value: `${activity.streak.consistencyPct}%`, color: 'text-brand-green', sub: 'of days active' },
+                  { label: t('calendar.currentStreak'), value: t('calendar.days', { count: activity.streak.current }), color: 'text-brand-teal', sub: t('calendar.currentStreakSub') },
+                  { label: t('calendar.longestStreak'), value: t('calendar.days', { count: activity.streak.longest }), color: 'text-brand-orange', sub: t('calendar.longestStreakSub') },
+                  { label: t('calendar.thisYear'), value: `${activity.streak.totalThisYear}`, color: 'text-white', sub: t('calendar.thisYearSub') },
+                  { label: t('calendar.consistency'), value: `${activity.streak.consistencyPct}%`, color: 'text-brand-green', sub: t('calendar.consistencySub') },
                 ].map(c => (
                   <div key={c.label} className="bg-dark-800 border border-dark-600 rounded-card p-3.5">
                     <p className="text-dark-300 text-xs mb-2">{c.label}</p>
@@ -761,12 +775,18 @@ export default function Calendar() {
                 <div className="flex gap-2.5">
                   <span className="text-xl">🔥</span>
                   <div>
-                    <p className="text-brand-teal text-sm font-bold mb-0.5">Keep the chain alive</p>
+                    <p className="text-brand-teal text-sm font-bold mb-0.5">{t('calendar.keepChain')}</p>
                     <p className="text-dark-200 text-xs leading-relaxed">
-                      You're on a {activity.streak.current}-day run. Train today to reach {activity.streak.current + 1}
                       {activity.streak.longest - activity.streak.current > 0
-                        ? ` and stay ${activity.streak.longest - activity.streak.current} days from your record.`
-                        : ' and stay at your all-time best.'}
+                        ? t('calendar.chainRecord', {
+                            days: activity.streak.current,
+                            next: activity.streak.current + 1,
+                            gap: activity.streak.longest - activity.streak.current,
+                          })
+                        : t('calendar.chainBest', {
+                            days: activity.streak.current,
+                            next: activity.streak.current + 1,
+                          })}
                     </p>
                   </div>
                 </div>
@@ -781,11 +801,11 @@ export default function Calendar() {
         <div className="flex-1 overflow-y-auto px-5 pb-6">
 
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-white text-[15px] font-bold">Muscle balance</p>
-            <p className="text-dark-300 text-xs">Sets · last 8 weeks</p>
+            <p className="text-white text-[15px] font-bold">{t('calendar.muscleBalance')}</p>
+            <p className="text-dark-300 text-xs">{t('calendar.setsLast8')}</p>
           </div>
           <p className="text-dark-400 text-xs leading-relaxed mb-3.5">
-            Spot muscles you over- or under-train at a glance.
+            {t('calendar.muscleBlurb')}
           </p>
 
           {isLoadingMuscles && (
@@ -810,7 +830,7 @@ export default function Calendar() {
                       {row.cells.map((n, ci) => (
                         <div
                           key={ci}
-                          title={`${row.name} · week ${ci - 7}: ${n} sets`}
+                          title={t('calendar.cellTooltip', { muscle: row.name, week: ci - 7, sets: n })}
                           className={`flex-1 h-[22px] rounded flex items-center justify-center
                                      text-[10px] font-bold ${cellClass(n)}
                                      ${n > 10 ? 'text-black' : 'text-dark-300'}`}
@@ -827,7 +847,7 @@ export default function Calendar() {
                 <div className="flex gap-2.5">
                   <span className="text-xl">⚠️</span>
                   <div>
-                    <p className="text-brand-yellow text-sm font-bold mb-0.5">Imbalance detected</p>
+                    <p className="text-brand-yellow text-sm font-bold mb-0.5">{t('calendar.imbalance')}</p>
                     <p className="text-dark-200 text-xs leading-relaxed">{muscles.muscleInsight}</p>
                   </div>
                 </div>
@@ -848,16 +868,16 @@ export default function Calendar() {
           label="run-detail"
           fallback={retry => (
             <div className="fixed inset-0 z-[70] bg-dark-900 flex flex-col items-center justify-center gap-3 px-8 text-center">
-              <p className="text-[15px] font-bold text-white">This run wouldn't open</p>
-              <p className="text-[12.5px] text-dark-300">The map failed to download. Nothing is lost.</p>
+              <p className="text-[15px] font-bold text-white">{t('calendar.runFailTitle')}</p>
+              <p className="text-[12.5px] text-dark-300">{t('calendar.runFailBody')}</p>
               <div className="flex gap-2 mt-1">
                 <button onClick={retry}
                   className="px-4 py-2.5 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold">
-                  Try again
+                  {t('common.tryAgain')}
                 </button>
                 <button onClick={() => setOpenRun(null)}
                   className="px-4 py-2.5 rounded-btn border border-dark-600 bg-dark-800 text-dark-200 text-[13px] font-bold">
-                  Close
+                  {t('common.close')}
                 </button>
               </div>
             </div>
@@ -908,12 +928,10 @@ export default function Calendar() {
           <div className="relative w-full max-w-[340px] bg-dark-800 border border-dark-600
                           rounded-card p-5">
             <p className="text-white text-base font-bold">
-              Remove set {confirmDeleteSet.set.setNumber}?
+              {t('calendar.removeSetTitle', { number: confirmDeleteSet.set.setNumber })}
             </p>
             <p className="text-dark-400 text-xs mt-2 leading-relaxed">
-              {confirmDeleteSet.exerciseName}. The workout is re-scored and the
-              fatigue it caused is rebuilt, so your readiness and muscle map
-              will change. This cannot be undone.
+              {t('calendar.removeSetBody', { exercise: confirmDeleteSet.exerciseName })}
             </p>
 
             {mutateError && <p className="text-brand-red text-xs mt-3">{mutateError}</p>}
@@ -925,7 +943,7 @@ export default function Calendar() {
                 className="flex-1 py-3 rounded-btn bg-dark-700 border border-dark-600
                            text-dark-200 text-sm font-bold disabled:opacity-40"
               >
-                Keep it
+                {t('common.keepIt')}
               </button>
               <button
                 onClick={handleDeleteSet}
@@ -933,7 +951,7 @@ export default function Calendar() {
                 className="flex-1 py-3 rounded-btn bg-brand-red text-white text-sm font-bold
                            active:scale-95 transition-transform disabled:opacity-40"
               >
-                {mutating ? 'Removing…' : 'Remove'}
+                {mutating ? t('calendar.removing') : t('common.remove')}
               </button>
             </div>
           </div>
@@ -947,10 +965,11 @@ export default function Calendar() {
           <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmDelete(null)} />
           <div className="relative w-full max-w-[340px] bg-dark-800 border border-dark-600
                           rounded-card p-5">
-            <p className="text-white text-base font-bold">Delete {confirmDelete.label}?</p>
+            <p className="text-white text-base font-bold">
+              {t('calendar.deleteTitle', { label: confirmDelete.label })}
+            </p>
             <p className="text-dark-400 text-xs mt-2 leading-relaxed">
-              Every set in it is removed, and the fatigue it caused is reversed —
-              your readiness and muscle map will change. This cannot be undone.
+              {t('calendar.deleteBody')}
             </p>
 
             {mutateError && (
@@ -964,7 +983,7 @@ export default function Calendar() {
                 className="flex-1 py-3 rounded-btn bg-dark-700 border border-dark-600
                            text-dark-200 text-sm font-bold disabled:opacity-40"
               >
-                Keep it
+                {t('common.keepIt')}
               </button>
               <button
                 onClick={handleDeleteSession}
@@ -972,7 +991,7 @@ export default function Calendar() {
                 className="flex-1 py-3 rounded-btn bg-brand-red text-white text-sm font-bold
                            active:scale-95 transition-transform disabled:opacity-40"
               >
-                {mutating ? 'Deleting…' : 'Delete'}
+                {mutating ? t('common.deleting') : t('common.delete')}
               </button>
             </div>
           </div>
