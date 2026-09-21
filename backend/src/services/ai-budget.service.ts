@@ -27,17 +27,27 @@ import { log } from '../lib/logger'
  * over-reports (send fewer messages) rather than under-reports (spend money).
  */
 const MODEL_PRICES: Record<string, { input: number; output: number }> = {
-  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
-  'gemini-2.5-flash':      { input: 0.30, output: 2.50 },
-  'gemini-2.0-flash':      { input: 0.10, output: 0.40 },
-  'gpt-4o-mini':           { input: 0.15, output: 0.60 },
+  // Empty, and correct that way: the app runs on free endpoints — NVIDIA's
+  // hosted catalogue, a local Ollama — where `isUnmetered` returns zero before
+  // this table is ever read. The Gemini and OpenAI rows that were here went
+  // with those providers; a rate card nobody bills against only goes stale.
+  // Add a row, or set AI_PRICE_INPUT_PER_M / AI_PRICE_OUTPUT_PER_M, when
+  // pointing the coach at something metered.
 }
+
+/**
+ * What an unpriced model on a metered endpoint is billed at, per million
+ * tokens. Deliberately above any current frontier rate: an unknown model must
+ * over-report so the cap trips early and the athlete sends fewer messages,
+ * never under-report and quietly spend real money.
+ */
+const FALLBACK_PRICE = { input: 5, output: 15 }
 
 /**
  * Providers whose hosted allowance is not billed per token.
  *
  * NVIDIA's build.nvidia.com and a local Ollama both cost nothing per call, so
- * pricing them against Gemini's rate card would trip the daily budget after a
+ * pricing them against a paid rate card would trip the daily budget after a
  * few dozen messages for spend that never happened. `AI_PRICE_*` still
  * overrides this, and the per-minute rate limit still applies either way — the
  * runaway-loop guard is not a money guard and must not be switched off with one.
@@ -63,9 +73,11 @@ const priceFor = (modelName?: string) => {
   const known = MODEL_PRICES[key]
   if (known) return known
 
-  // Unknown model: assume the priciest entry rather than guessing low
+  // Unknown model: the priciest entry, or the fallback when the table is
+  // empty. `reduce` without an initial value throws on an empty array, which
+  // would turn "nobody priced this model" into a 500 on every chat message.
   return Object.values(MODEL_PRICES).reduce((worst, price) =>
-    price.output > worst.output ? price : worst
+    price.output > worst.output ? price : worst, FALLBACK_PRICE
   )
 }
 

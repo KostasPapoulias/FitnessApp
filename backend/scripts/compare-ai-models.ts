@@ -32,7 +32,9 @@ const DEFAULT_CANDIDATES = [
   'nvidia/nemotron-3.5-lightning-30b-a3b',
   'nvidia/nemotron-nano-3-30b-a3b',
   'mistralai/mistral-nemotron',
-  'openai/gpt-oss-120b',
+  // gpt-oss-120b was here and is gone: NVIDIA retired it on 2026-09-03 and the
+  // endpoint answers 410 for it. The 20b is what remains of that family.
+  'openai/gpt-oss-20b',
   'moonshotai/kimi-k2.6',
   'deepseek-ai/deepseek-v4-flash-0731',
 ]

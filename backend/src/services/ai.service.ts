@@ -1,4 +1,7 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
+import type OpenAI from 'openai'
+import type {
+  ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam,
+} from 'openai/resources/chat/completions'
 import prisma from '../lib/prisma'
 import { getAiClient, resolveAiProvider } from '../lib/aiProvider'
 import { getUserReadiness } from './readiness.service'
@@ -257,10 +260,131 @@ Be encouraging and honest. Keep responses concise — this is a mobile app.
  * exercise, check the history, draft, explain". The cap exists because a
  * confused model will otherwise keep calling tools, and every call is billed.
  */
-const MAX_TOOL_ROUNDS = 4
+const MAX_TOOL_ROUNDS = 3
 
 /** Reply used when the model produced only tool calls and never any prose. */
 const FALLBACK_WITH_PROPOSAL = 'I have put a draft together — have a look and tap it if it works for you.'
+
+/**
+ * What every request to the model carries, beyond the messages.
+ *
+ * These were all unset, which is how a chat message could take minutes: no
+ * ceiling on the output, and whatever each provider happens to default to for
+ * sampling.
+ *
+ * TEMPERATURE is low on purpose. Model cards for reasoning models publish 1.0,
+ * and that figure belongs to their thinking mode — creative sampling is
+ * recovered by the reasoning pass before anything is said. This coach answers
+ * from live numbers and calls tools with real exercise ids, where creativity
+ * shows up as an invented id or a leg day recommended after a leg day. The
+ * question has a correct answer, so the sampling is tightened to find it.
+ *
+ * THINKING is off. With it on, the reasoning tokens come out of the same
+ * `max_tokens` budget and land in a separate `reasoning_content` field — so
+ * the app, which reads `content`, gets an empty reply while the tokens are
+ * spent. Off, the model writes its answer where the app looks for it.
+ *
+ * All overridable per deployment, because the right values are provider- and
+ * model-specific and finding them should not need a release.
+ */
+const SAMPLING = {
+  temperature: Number(process.env.AI_TEMPERATURE ?? 0.3),
+  top_p: Number(process.env.AI_TOP_P ?? 0.9),
+  max_tokens: Number(process.env.AI_MAX_TOKENS ?? 1024),
+}
+
+/** Thinking stays off unless a deployment deliberately turns it back on. */
+const ENABLE_THINKING = process.env.AI_ENABLE_THINKING === 'true'
+
+/**
+ * Sampling plus anything provider-specific.
+ *
+ * `chat_template_kwargs` is NVIDIA's way of reaching the chat template and is
+ * not part of the chat-completions API, so it is sent only to NVIDIA: strict
+ * endpoints reject a body key they do not know, which would turn a tuning
+ * option into a 400 on every message.
+ */
+const requestTuning = (providerName: string) => ({
+  ...SAMPLING,
+  ...(providerName === 'nvidia'
+    ? { chat_template_kwargs: { enable_thinking: ENABLE_THINKING } }
+    : {}),
+})
+
+/**
+ * The coach, with every instruction about tools taken out.
+ *
+ * AI_PERSONA is most of a page on when to call what, and the salvage call
+ * below offers no tools at all. Sent that prompt with nothing to call, the
+ * model wrote the call it wanted to make out as JSON and that became the
+ * reply the athlete read. It needs to be told what it is doing instead.
+ */
+const SALVAGE_PERSONA = `
+You are SomaTrack AI — a personal fitness and recovery coach assistant.
+Be encouraging but honest, and keep it short — this is a mobile app.
+
+You have no tools in this reply. Everything that could be looked up already has
+been, and is quoted for you below. Write the answer itself: ordinary prose for
+the athlete to read — no JSON, no function call, no mention of tools or of
+looking anything up.
+
+Never state a weight, date or count that is not in what you were given. Do not
+say anything has been saved, scheduled or created, and do not tell them to tap,
+accept or review a card — there is none.
+`.trim()
+
+/**
+ * Last resort when the tool loop ends with nothing to say.
+ *
+ * The transcript is rebuilt rather than continued, and that is the whole
+ * point: an assistant turn holding a tool call is the pattern the model is
+ * copying, so a request that still contains one comes back as another call no
+ * matter what the request declares. Here the lookups are prose, there is no
+ * tool call anywhere to imitate, and the model answers.
+ *
+ * Returns '' if even this produces nothing, leaving the caller's fallback.
+ */
+const answerWithoutTools = async ({
+  userId, client, modelName, providerName, questionTurn, toolTranscript,
+}: {
+  userId: string
+  client: OpenAI
+  modelName: string
+  providerName: string
+  questionTurn: ChatCompletionMessageParam
+  toolTranscript: string[]
+}): Promise<string> => {
+  try {
+    await assertWithinBudget(userId)
+
+    const findings = toolTranscript.length > 0
+      ? `Results of the lookups already carried out for you:\n\n${
+          toolTranscript.map((line, i) => `${i + 1}. ${line}`).join('\n')
+        }\n\nThat is everything available.`
+      : 'No lookups returned anything usable.'
+
+    const result = await client.chat.completions.create({
+      model: modelName,
+      messages: [
+        { role: 'system', content: SALVAGE_PERSONA },
+        questionTurn,
+        {
+          role: 'user',
+          content: `${findings} Answer the athlete's question now, using only this.`,
+        },
+      ],
+      ...requestTuning(providerName),
+    } as ChatCompletionCreateParamsNonStreaming)
+
+    await recordUsage(userId, result.usage, { modelName })
+    return (result.choices[0]?.message?.content ?? '').trim()
+  } catch (error) {
+    // The athlete already has a fallback waiting; a failure here must not turn
+    // a weak answer into a 500.
+    log.error('AI salvage reply failed', error, { model: modelName })
+    return ''
+  }
+}
 
 /**
  * Send a message, letting the coach look things up and draft along the way.
@@ -340,20 +464,32 @@ export const sendMessage = async ({
   let toolCallsUsed = 0
   let replyText = ''
 
+  // Captured before the loop runs: afterwards the tail of `messages` is a tool
+  // result, not the athlete's question. It carries the live body data block,
+  // so the salvage call keeps the numbers even without the transcript.
+  const questionTurn = messages[messages.length - 1]
+
+  // The same tool results, kept as plain text alongside the real transcript.
+  // Only the salvage call below reads it, and it exists because that call
+  // cannot be built out of `messages` — see `answerWithoutTools`.
+  const toolTranscript: string[] = []
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     await assertWithinBudget(userId)
 
-    // The final round drops the tools entirely, so the model has no choice but
-    // to answer. Without this a stuck model returns nothing but calls and the
-    // athlete sees an empty bubble.
+    // The final round drops the tools. Necessary, but — as the salvage path
+    // below documents — not on its own sufficient.
     const isLastRound = round === MAX_TOOL_ROUNDS - 1
     const offerTools = tools && !isLastRound
 
+    // Cast because `chat_template_kwargs` is NVIDIA's, not part of the typed
+    // chat-completions parameters — the SDK forwards unknown body keys as-is.
     const result = await client.chat.completions.create({
       model: modelName,
       messages,
       ...(offerTools ? { tools, tool_choice: 'auto' as const } : {}),
-    })
+      ...requestTuning(provider.name),
+    } as ChatCompletionCreateParamsNonStreaming)
 
     // Bill from the provider's own counts before anything else can throw, and
     // at the price of the model actually used
@@ -362,8 +498,23 @@ export const sendMessage = async ({
     const modelTurn = result.choices[0]?.message
     const calls = modelTurn?.tool_calls ?? []
 
-    if (calls.length === 0) {
+    if (calls.length === 0 || isLastRound) {
       replyText = (modelTurn?.content ?? '').trim()
+
+      // A call arriving in the final round is a call against a schema this
+      // request never sent. Running it would spend a round that no longer
+      // exists and bill for a result nothing can read, so it is dropped — and
+      // because it is dropped, the assistant turn carrying it must not be
+      // pushed either: a tool_call with no matching result is rejected on the
+      // next request, which is what the salvage call would hit.
+      if (!replyText && isLastRound) {
+        log.warn('AI produced no prose in its final round', {
+          model: modelName,
+          finishReason: result.choices[0]?.finish_reason,
+          strandedCalls: calls.length,
+          toolCallsUsed,
+        })
+      }
       break
     }
 
@@ -417,10 +568,13 @@ export const sendMessage = async ({
         }
       }
 
+      const serialised = JSON.stringify(response)
+      toolTranscript.push(`${name}(${call.function.arguments || '{}'}) -> ${serialised}`)
+
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
-        content: JSON.stringify(response),
+        content: serialised,
       })
     }
 
@@ -437,10 +591,32 @@ export const sendMessage = async ({
     }
   }
 
+  // Every round spent on lookups and not one word for the athlete. Dropping
+  // the tools was supposed to prevent this and does not: a model that has
+  // already seen tool calls in the transcript infers the schema from them and
+  // keeps calling whatever the request declares. NVIDIA's endpoint returns
+  // finish_reason 'tool_calls' to a request carrying no tools at all, and
+  // ignores tool_choice 'none' as well — verified 3/3 against
+  // nemotron-3-super. What the transcript contains is what the model copies.
+  //
+  // So the salvage call is built without one: the lookups go back as text.
+  //
+  // Skipped when a draft was staged: SALVAGE_PERSONA states there is no card,
+  // which would be a lie next to one, and FALLBACK_WITH_PROPOSAL already says
+  // the right thing for free.
+  if (!replyText && proposals.length === 0) {
+    replyText = await answerWithoutTools({
+      userId, client, modelName, providerName: provider.name, questionTurn, toolTranscript,
+    })
+  }
+
   if (!replyText) {
     replyText = proposals.length > 0
       ? FALLBACK_WITH_PROPOSAL
       : 'Sorry, I could not generate a response.'
+    log.warn('AI produced no reply at all', {
+      model: modelName, toolCallsUsed, proposals: proposals.length,
+    })
   }
 
   const [, assistantMessage] = await prisma.$transaction([

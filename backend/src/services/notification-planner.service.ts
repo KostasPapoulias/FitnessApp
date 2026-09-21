@@ -265,8 +265,8 @@ Rules:
   a valid plan and better than filler.
 `.trim()
 
-    // Gemini's native `responseSchema` has no portable equivalent — support for
-    // strict structured output varies by provider and by model. `json_object`
+    // A provider-native response schema has no portable equivalent — support
+    // for strict structured output varies by provider and by model. `json_object`
     // is the widely honoured mode, with the shape stated in the prompt as the
     // real instruction. Nothing downstream trusts it either way: every field is
     // validated below, and a malformed reply degrades to an empty plan, which

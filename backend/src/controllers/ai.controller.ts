@@ -8,7 +8,7 @@ import {
 import { AiBudgetError, getUsageToday } from '../services/ai-budget.service'
 import { AiNotConfiguredError } from '../lib/aiProvider'
 import {
-  ProposalError, applyProposal, listPendingProposals, rejectProposal,
+  ProposalError, applyProposal, listThreadProposals, rejectProposal,
 } from '../services/ai-tools.service'
 import prisma from '../lib/prisma'
 import { log } from '../lib/logger'
@@ -173,7 +173,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
 
     // Cards the athlete never acted on come back with the conversation, so
     // something scrolled past is not silently lost on reload.
-    const proposals = await listPendingProposals(req.userId!, thread.id)
+    const proposals = await listThreadProposals(req.userId!, thread.id)
 
     res.json({ success: true, data: { threadId: thread.id, messages, proposals } })
 

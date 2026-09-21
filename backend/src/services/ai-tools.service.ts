@@ -894,18 +894,36 @@ export const rejectProposal = async (userId: string, proposalId: string) => {
  * something they scrolled past. Expired rows are filtered rather than returned
  * greyed out — a card that cannot be tapped is only a reminder of a missed one.
  */
-export const listPendingProposals = async (userId: string, threadId: string) => {
+/**
+ * Every card this thread has produced, for redrawing the conversation.
+ *
+ * Not just the pending ones. A card is part of what was said: reopening a
+ * thread and finding the plan the coach drafted simply gone reads as data
+ * loss, whether it went because the athlete accepted it or because thirty
+ * minutes passed. Applied and expired cards come back in a resolved state so
+ * the transcript still makes sense; rejected ones do not, because "no thanks"
+ * is an answer and re-showing it would be arguing.
+ *
+ * `status` is derived, not just read: a row can still say 'pending' while its
+ * expiresAt has gone by, and offering that as tappable is the stale-draft
+ * problem `expiresAt` exists to prevent.
+ */
+export const listThreadProposals = async (userId: string, threadId: string) => {
   const rows = await prisma.aiProposal.findMany({
-    where: { userId, threadId, status: 'pending', expiresAt: { gt: new Date() } },
+    where: { userId, threadId, status: { in: ['pending', 'applied', 'expired'] } },
     orderBy: { createdAt: 'asc' },
   })
 
+  const now = new Date()
   return rows.map(row => {
     const payload = row.payload as any
     const template = payload?.template
+    const status = row.status === 'pending' && row.expiresAt <= now ? 'expired' : row.status
+
     return {
       id: row.id,
       kind: row.kind,
+      status,
       messageId: row.messageId,
       title: template?.name ?? 'Scheduled workout',
       lines: Array.isArray(template?.exercises)
