@@ -5,10 +5,12 @@ import { useFatigueStore } from '../../store/useFatigueStore'
 import { useNotifications } from '../../hooks/useNotifcations'
 import SaveToCalendar from '../../components/workout/SaveToCalendar'
 import { fmtTime } from './helpers'
+import { AlertTriangleIcon, TrophyIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 interface SnapshotExercise {
   name: string
-  emoji: string
+  modality: string
   count: number
   topWeight: number
   topReps: number
@@ -124,7 +126,7 @@ export default function Finish() {
 
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-14 pb-8 text-center">
-      <div className="text-[56px] leading-none">🏆</div>
+      <TrophyIcon className="w-14 h-14 mx-auto text-brand-teal" />
       <h1 className="text-[26px] font-extrabold mt-3">Workout Complete</h1>
       <p className="text-dark-300 text-sm mt-1">Nice work. Here's how today went.</p>
 
@@ -132,7 +134,7 @@ export default function Finish() {
         <div className="mt-4 text-left flex flex-col gap-2.5 rounded-card border
                         border-brand-red/40 bg-[#2a1a1a] px-4 py-3.5">
           <div className="flex gap-2.5">
-            <span className="text-base">⚠️</span>
+            <AlertTriangleIcon className="w-4 h-4" />
             <p className="flex-1 text-[13px] text-white leading-snug">{saveError}</p>
           </div>
           <button
@@ -174,7 +176,7 @@ export default function Finish() {
             <div key={i}
               className="flex items-center gap-3 bg-dark-800 border border-dark-600
                          rounded-card px-4 py-3.5">
-              <span className="text-xl">{e.emoji}</span>
+              <ModalityIcon modality={e.modality} className="w-5 h-5 text-brand-teal" />
               <div className="flex-1 min-w-0">
                 <p className="text-[14.5px] font-bold truncate">{e.name}</p>
                 <p className="text-xs text-dark-300 mt-0.5">

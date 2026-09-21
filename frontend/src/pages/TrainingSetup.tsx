@@ -4,6 +4,7 @@ import {
   onboardingService, EquipmentOption, MuscleOption, InjuryInput,
 } from '../services/onboarding.service'
 import { useOnboardingStore } from '../store/useOnboardingStore'
+import { BuildingIcon, DumbbellIcon, HouseIcon, ModalityIcon, TreeIcon } from '../components/icons'
 
 // The optional stage: what you can train with, and what you need to train
 // around. Reachable from the Home prompt card and from Profile.
@@ -18,9 +19,9 @@ import { useOnboardingStore } from '../store/useOnboardingStore'
 // Where people train, as whole places rather than parts lists. Picking a
 // preset ticks its equipment — you can then adjust individual items, which is
 // how someone says "commercial gym, but no rower".
-const PRESETS: { id: string; icon: string; label: string; blurb: string; items: string[] }[] = [
+const PRESETS: { id: string; icon: React.ReactNode; label: string; blurb: string; items: string[] }[] = [
   {
-    id: 'gym', icon: '🏢', label: 'Full gym',
+    id: 'gym', icon: <BuildingIcon className="w-6 h-6" />, label: 'Full gym',
     blurb: 'Commercial gym — machines, cables, racks',
     items: ['Barbell', 'Dumbbell', 'Kettlebell', 'EZ Bar', 'Trap Bar', 'Machine',
             'Cable Machine', 'Smith Machine', 'Bench', 'Pull-up Bar', 'Dip Bars',
@@ -29,26 +30,26 @@ const PRESETS: { id: string; icon: string; label: string; blurb: string; items: 
             'Ab Wheel', 'Foam Roller', 'Yoga Mat', 'Bodyweight'],
   },
   {
-    id: 'home', icon: '🏠', label: 'Home setup',
+    id: 'home', icon: <HouseIcon className="w-6 h-6" />, label: 'Home setup',
     blurb: 'Dumbbells, bands, a mat — the usual home kit',
     items: ['Dumbbell', 'Kettlebell', 'Resistance Band', 'Yoga Mat', 'Jump Rope',
             'Ab Wheel', 'Foam Roller', 'Bench', 'Bodyweight'],
   },
   {
-    id: 'park', icon: '🌳', label: 'Calisthenics park',
+    id: 'park', icon: <TreeIcon className="w-6 h-6" />, label: 'Calisthenics park',
     blurb: 'Bars, rings and your own bodyweight',
     items: ['Pull-up Bar', 'Dip Bars', 'Gymnastic Rings', 'Bodyweight',
             'Resistance Band', 'Jump Rope'],
   },
   {
-    id: 'box', icon: '🏋️', label: 'CrossFit box',
+    id: 'box', icon: <DumbbellIcon className="w-6 h-6" />, label: 'CrossFit box',
     blurb: 'Rig, bumpers, rings, rower — and a sled',
     items: ['Barbell', 'Dumbbell', 'Kettlebell', 'Bench', 'Pull-up Bar',
             'Gymnastic Rings', 'Plyo Box', 'Medicine Ball', 'Rower', 'Bike',
             'Jump Rope', 'Sled', 'Battle Ropes', 'Ab Wheel', 'Bodyweight'],
   },
   {
-    id: 'bodyweight', icon: '🤸', label: 'Bodyweight only',
+    id: 'bodyweight', icon: <ModalityIcon modality="Calisthenics" className="w-6 h-6" />, label: 'Bodyweight only',
     blurb: 'No equipment at all',
     items: ['Bodyweight'],
   },

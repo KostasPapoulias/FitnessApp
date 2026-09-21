@@ -1,6 +1,7 @@
 import BottomSheet from '../BottomSheet'
 import SwipeActions from '../SwipeActions'
 import { fmtTime } from '../../pages/Workout/helpers'
+import { PencilIcon, TrashIcon } from '../icons'
 
 /**
  * What one exercise in a recorded session actually contained.
@@ -131,11 +132,11 @@ export default function ExerciseSetsSheet({
             <SwipeActions
               compact
               left={{
-                label: 'Delete', icon: '🗑️', tone: 'danger',
+                label: 'Delete', icon: <TrashIcon className="w-4 h-4" />, tone: 'danger',
                 onSelect: () => onDeleteSet(s),
               }}
               right={{
-                label: 'Edit', icon: '✏️',
+                label: 'Edit', icon: <PencilIcon className="w-4 h-4" />,
                 onSelect: () => onPickSet(s),
               }}
             >

@@ -5,6 +5,7 @@ import { cues } from '../../lib/speech'
 import { fmtTime } from './helpers'
 import { ModalityViewProps, UpNext, LiveStartGate } from './LiveShared'
 import { useModalityVoice } from '../../hooks/useModalityVoice'
+import { ModalityIcon } from '../../components/icons'
 
 function isPerSide(name: string) {
   return /stretch|hip|lunge|pigeon|couch|90|thoracic|shoulder|side|twist|rotation/i.test(name)
@@ -121,7 +122,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
   if (!started) {
     return (
       <LiveStartGate
-        emoji="🧘"
+        icon={<ModalityIcon modality="Mobility" className="w-14 h-14" />}
         label="MOBILITY FLOW"
         title={ex.exercise.name}
         detail={`${selectedExercises.length} poses · breathe slow and ease into each hold. Press start to begin the flow.`}
@@ -208,7 +209,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
 
       {/* cue */}
       <div className="mt-2 flex gap-2 bg-dark-800 border border-dark-600 rounded-card px-4 py-3.5">
-        <span className="text-base">🧘</span>
+        <ModalityIcon modality="Mobility" className="w-4 h-4" />
         <div className="text-[13px] text-dark-200 leading-relaxed">{coaching}</div>
       </div>
 

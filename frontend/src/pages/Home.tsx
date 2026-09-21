@@ -7,6 +7,7 @@ import MuscleMap from '../components/muscle/MuscleMap'
 import { useDeviceTilt } from '../hooks/useDeviceTilt'
 import MuscleFatiguePopup from '../components/muscle/MuscleFatiguePopup'
 import { useT } from '../i18n'
+import { DumbbellIcon, HistoryListIcon, TrendingUpIcon } from '../components/icons'
 
 export default function Home() {
   const { user } = useAuthStore()
@@ -79,7 +80,7 @@ export default function Home() {
                      px-3 py-2 flex items-center gap-2 active:scale-[0.98]
                      transition-transform"
         >
-          <span className="text-sm">📈</span>
+          <TrendingUpIcon className="w-4 h-4 text-brand-teal" />
           <span className="text-white text-xs font-semibold flex-1">{t('home.progress')}</span>
           <span className="text-dark-400 text-sm leading-none">›</span>
         </Link>
@@ -89,7 +90,7 @@ export default function Home() {
                      px-3 py-2 flex items-center gap-2 active:scale-[0.98]
                      transition-transform"
         >
-          <span className="text-sm">📋</span>
+          <HistoryListIcon className="w-4 h-4 text-brand-teal" />
           <span className="text-white text-xs font-semibold flex-1">{t('home.history')}</span>
           <span className="text-dark-400 text-sm leading-none">›</span>
         </Link>
@@ -177,7 +178,7 @@ export default function Home() {
                      rounded-card px-3 py-3 flex items-center gap-3 active:scale-[0.99]
                      transition-transform"
         >
-          <span className="text-lg">🏋️</span>
+          <DumbbellIcon className="w-5 h-5 text-brand-yellow" />
           <div className="flex-1">
             <p className="text-white text-sm font-semibold">{t('home.setupTitle')}</p>
             <p className="text-dark-300 text-xs mt-0.5 leading-relaxed">

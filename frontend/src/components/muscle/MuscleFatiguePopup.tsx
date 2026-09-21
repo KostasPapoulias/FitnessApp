@@ -104,8 +104,15 @@ export default function MuscleFatiguePopup() {
                              : 'bg-dark-700 text-dark-300 border-dark-600'
                            }`}
               >
-                {level === 0 ? '🟢' : level === 35 ? '🟡' : level === 70 ? '🟠' : '🔴'}
-                <br />{level}%
+                {/* A coloured dot, not a coloured emoji: these are the same
+                    four bands the body map and the Home legend paint, and they
+                    have to be the same four colours. */}
+                <span className={`block w-2.5 h-2.5 rounded-full mx-auto mb-1 ${
+                  level === 0 ? 'bg-brand-green' :
+                  level === 35 ? 'bg-brand-yellow' :
+                  level === 70 ? 'bg-brand-orange' : 'bg-brand-red'
+                }`} />
+                {level}%
               </button>
             ))}
           </div>

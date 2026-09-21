@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { templateService } from '../services/template.service'
 import { useWorkoutStore } from '../store/useWorkoutStore'
 import { ScheduledWorkout, WorkoutTemplate } from '../types'
+import { BellIcon } from '../components/icons'
 
 /**
  * Saved plans and the standby queue.
@@ -161,7 +162,7 @@ export default function Plans() {
                     <p className="text-dark-400 text-[12px] mt-0.5">{summarise(slot.template)}</p>
                     {slot.reminderAt && (
                       <p className="text-dark-400 text-[11.5px] mt-1">
-                        🔔 Reminder at {fmtTime(slot.reminderAt)}
+                        <BellIcon className="w-3.5 h-3.5" /> Reminder at {fmtTime(slot.reminderAt)}
                       </p>
                     )}
                   </div>

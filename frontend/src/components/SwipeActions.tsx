@@ -42,7 +42,8 @@ const DEAD_ZONE_PX = 8
 
 export interface SwipeAction {
   label: string
-  icon: string
+  // A node, not a string: these were emoji and are now drawn icons.
+  icon: React.ReactNode
   onSelect: () => void
   /** Red for anything that destroys data; grey otherwise. */
   tone?: 'danger' | 'neutral'

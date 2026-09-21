@@ -5,6 +5,7 @@ import { workoutService } from '../services/workout.service'
 import ChunkBoundary from './ChunkBoundary'
 import { lazyRetry } from '../lib/lazyRetry'
 import { fmtTime } from '../pages/Workout/helpers'
+import { FlagIcon } from './icons'
 
 /**
  * One recorded run, opened from the calendar.
@@ -195,7 +196,7 @@ export default function RunDetail({ setId, title, onClose }: Props) {
                                            ${split.partial
                                              ? 'bg-dark-800 text-dark-400 border border-dark-600'
                                              : 'bg-dark-700 text-dark-200'}`}>
-                            {split.auto ? split.index : '⚑'}
+                            {split.auto ? split.index : <FlagIcon className="w-3.5 h-3.5" />}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[13px] font-semibold">

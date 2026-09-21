@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { exerciseEmoji } from './helpers'
+import { ModalityIcon } from '../../components/icons'
 
 function Step({ children, onClick, disabled }: {
   children: React.ReactNode; onClick: () => void; disabled?: boolean
@@ -58,7 +58,7 @@ export default function MobilityPlan() {
           return (
             <div key={se.exercise.id} className="bg-dark-800 border border-dark-600 rounded-card p-4">
               <div className="flex items-center gap-3 mb-3.5">
-                <span className="text-xl">{exerciseEmoji(se.exercise)}</span>
+                <ModalityIcon modality={se.exercise.modality ?? ''} className="w-5 h-5 text-dark-300" />
                 <div className="flex-1 min-w-0">
                   <p className="text-base font-bold truncate">{se.exercise.name}</p>
                   <p className="text-dark-300 text-xs mt-0.5">{se.exercise.muscles.map(m => m.name).join(' · ') || 'Mobility'}</p>

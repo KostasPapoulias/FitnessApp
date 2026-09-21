@@ -9,6 +9,7 @@ import {
   num, resolveBirthDate, within,
 } from '../components/forms/Fields'
 import { useT } from '../i18n'
+import { CakeIcon, ScaleIcon, TargetIcon } from '../components/icons'
 
 // The gated stage of onboarding.
 //
@@ -312,18 +313,18 @@ function IntroStep({ name }: { name?: string }) {
       <p className="text-dark-300 mt-4 leading-relaxed">{t('onboarding.intro2')}</p>
 
       <ul className="mt-8 flex flex-col gap-3">
-        <IntroPoint icon="⚖️" text={t('onboarding.pointWeight')} />
-        <IntroPoint icon="🎂" text={t('onboarding.pointAge')} />
-        <IntroPoint icon="🎯" text={t('onboarding.pointGoal')} />
+        <IntroPoint icon={<ScaleIcon className="w-5 h-5" />} text={t('onboarding.pointWeight')} />
+        <IntroPoint icon={<CakeIcon className="w-5 h-5" />} text={t('onboarding.pointAge')} />
+        <IntroPoint icon={<TargetIcon className="w-5 h-5" />} text={t('onboarding.pointGoal')} />
       </ul>
     </div>
   )
 }
 
-function IntroPoint({ icon, text }: { icon: string; text: string }) {
+function IntroPoint({ icon, text }: { icon: React.ReactNode; text: string }) {
   return (
     <li className="flex gap-3 items-start">
-      <span className="text-xl leading-none mt-0.5">{icon}</span>
+      <span className="text-brand-teal mt-0.5 flex-shrink-0">{icon}</span>
       <span className="text-dark-300 text-sm leading-relaxed">{text}</span>
     </li>
   )

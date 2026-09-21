@@ -3,8 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { Exercise } from '../../types'
-import { exerciseEmoji } from './helpers'
 import StarIcon from '../../components/workout/StarIcon'
+import { AlertTriangleIcon, SearchIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 // Muscle sub-filters, as label → the muscle names the API actually returns.
 //
@@ -158,7 +159,7 @@ export default function ExerciseList() {
       {/* Search */}
       <div className="px-5 mb-3">
         <div className="bg-dark-800 border border-dark-600 rounded-btn flex items-center gap-3 px-4 py-3">
-          <span className="text-dark-400">🔍</span>
+          <SearchIcon className="w-4 h-4 text-dark-400" />
           <input
             ref={searchRef}
             value={search}
@@ -293,7 +294,7 @@ export default function ExerciseList() {
                     <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center text-xl
                                     flex-shrink-0 overflow-hidden
                                     ${selected ? 'bg-brand-teal/20' : 'bg-dark-700'}`}>
-                      <span>{exerciseEmoji(exercise)}</span>
+                      <ModalityIcon modality={exercise.modality ?? ''} className="w-5 h-5 text-dark-300" />
                       {exercise.thumbnailUrl && (
                         <img
                           src={exercise.thumbnailUrl}
@@ -319,11 +320,15 @@ export default function ExerciseList() {
                         {exercise.equipment.length > 0 ? ` · ${exercise.equipment[0]}` : ''}
                       </p>
                       {exercise.fatigueWarning && (
-                        <p className="text-brand-red text-xs mt-0.5">⚠ High muscle fatigue — not recommended</p>
+                        <p className="text-brand-red text-xs mt-0.5 flex items-center gap-1">
+                          <AlertTriangleIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                          High muscle fatigue — not recommended
+                        </p>
                       )}
                       {exercise.injuryCaution && (
                         <p className="text-brand-yellow text-xs mt-0.5">
-                          ⚠ Loads an area you're working around
+                          <AlertTriangleIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                          Loads an area you're working around
                         </p>
                       )}
                       {/* Says why this one sank to the bottom. Without the

@@ -1,5 +1,6 @@
 import { CoachMode, PaceZone } from '../../lib/paceCoach'
 import { fmtTime } from './helpers'
+import { MicIcon, TargetIcon } from '../../components/icons'
 
 // Both switches stay on screen whatever their state — rendering them only when
 // ON meant turning one off deleted the control that turned it back on.
@@ -69,7 +70,7 @@ export default function CoachControls({
           onClick={() => onCoach(!coachOn)}
           className="w-full flex items-center gap-3 active:scale-[0.99] transition-transform"
         >
-          <span className="text-[16px]">🎯</span>
+          <TargetIcon className="w-4 h-4" />
           <span className="flex-1 min-w-0">
             <span className="block text-[13.5px] font-bold">Pace coach</span>
             <span className="block text-[11.5px] text-dark-300 mt-0.5">
@@ -116,7 +117,7 @@ export default function CoachControls({
         onClick={() => onVoice(!voiceOn)}
         className="w-full px-4 py-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
       >
-        <span className="text-[16px]">🎤</span>
+        <MicIcon className="w-4 h-4" />
         <span className="flex-1 min-w-0">
           <span className="block text-[13.5px] font-bold">Voice commands</span>
           <span className="block text-[11.5px] text-dark-300 mt-0.5">

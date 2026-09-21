@@ -10,6 +10,7 @@ import { workoutService } from '../services/workout.service'
 import ChunkBoundary from '../components/ChunkBoundary'
 import { lazyRetry } from '../lib/lazyRetry'
 import { useT } from '../i18n'
+import { AlertTriangleIcon, FlameIcon, ModalityIcon, PencilIcon, TrashIcon } from '../components/icons'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
 // the calendar itself must not cost a map.
@@ -581,13 +582,13 @@ export default function Calendar() {
                         <SwipeActions
                           left={{
                             label: editingSession === session.id ? t('calendar.editDone') : t('calendar.edit'),
-                            icon: '✏️',
+                            icon: <PencilIcon className="w-4 h-4" />,
                             onSelect: () => setEditingSession(
                               editingSession === session.id ? null : session.id
                             ),
                           }}
                           right={{
-                            label: t('common.delete'), icon: '🗑️', tone: 'danger',
+                            label: t('common.delete'), icon: <TrashIcon className="w-4 h-4" />, tone: 'danger',
                             onSelect: () => setConfirmDelete({
                               id: session.id,
                               label: t('calendar.session', { number: sIdx + 1 }),
@@ -651,7 +652,10 @@ export default function Calendar() {
                               >
                                 <div className="w-10 h-10 bg-dark-700 rounded-xl
                                                 flex items-center justify-center text-lg flex-shrink-0">
-                                  {isCardio ? '🏃' : '💪'}
+                                  <ModalityIcon
+                                    modality={isCardio ? 'Cardio' : 'Strength'}
+                                    className="w-5 h-5 text-brand-teal"
+                                  />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-white font-semibold text-sm">{ex.name}</p>
@@ -773,7 +777,7 @@ export default function Calendar() {
 
               <div className="mt-4 bg-[#0a2a22] border border-brand-teal/30 rounded-card p-3.5">
                 <div className="flex gap-2.5">
-                  <span className="text-xl">🔥</span>
+                  <FlameIcon className="w-5 h-5 text-brand-teal flex-shrink-0" />
                   <div>
                     <p className="text-brand-teal text-sm font-bold mb-0.5">{t('calendar.keepChain')}</p>
                     <p className="text-dark-200 text-xs leading-relaxed">
@@ -845,7 +849,7 @@ export default function Calendar() {
 
               <div className="mt-4 bg-[#2a2000] border border-brand-yellow/35 rounded-card p-3.5">
                 <div className="flex gap-2.5">
-                  <span className="text-xl">⚠️</span>
+                  <AlertTriangleIcon className="w-5 h-5 text-brand-yellow flex-shrink-0" />
                   <div>
                     <p className="text-brand-yellow text-sm font-bold mb-0.5">{t('calendar.imbalance')}</p>
                     <p className="text-dark-200 text-xs leading-relaxed">{muscles.muscleInsight}</p>

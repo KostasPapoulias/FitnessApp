@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { ExerciseCategory, FatigueStatus } from '../../types'
-import { exerciseEmoji } from './helpers'
 import coreImg from '../../assets/core.png'
 import armsImg from '../../assets/arms.png'
 import backImg from '../../assets/back.png'
 import chestImg from '../../assets/Chest.png'
 import quadsImg from '../../assets/quads.png'
 import shouldersImg from '../../assets/Shoulders.png'
+import { SparkleIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 const CATEGORY_IMAGES: Record<string, string> = {
   Legs: quadsImg, Chest: chestImg, Back: backImg,
@@ -124,11 +125,11 @@ export default function BrowseCategories() {
                 <div className="h-[96px] bg-dark-700 flex items-center justify-center">
                   {img
                     ? <img src={img} alt={category.name} className="h-[84px] w-[84px] object-contain" />
-                    : <span className="text-3xl">{exerciseEmoji({ modality })}</span>}
+                    : <ModalityIcon modality={modality} className="w-7 h-7 text-dark-300" />}
                 </div>
                 {category.fatigueStatus === 'recovered' && (
                   <span className="absolute top-2 right-2 bg-brand-teal text-black text-[9px]
-                                   font-bold px-2 py-0.5 rounded-full">AI ✦</span>
+                                   font-bold px-2 py-0.5 rounded-full">AI <SparkleIcon className="w-3 h-3 inline-block align-[-1px]" /></span>
                 )}
                 {selectedFromThis > 0 && (
                   <span className="absolute top-2 left-2 bg-brand-teal text-black w-5 h-5 rounded-full
@@ -160,7 +161,7 @@ export default function BrowseCategories() {
               <div key={se.exercise.id}
                 className="w-8 h-8 bg-brand-teal/20 rounded-lg flex items-center justify-center
                            text-sm border border-brand-teal/30">
-                {exerciseEmoji(se.exercise)}
+                <ModalityIcon modality={se.exercise.modality ?? ''} className="w-4 h-4" />
               </div>
             ))}
             {selectedCount > 3 && (

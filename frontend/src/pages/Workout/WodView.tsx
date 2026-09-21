@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useWorkoutStore, WodFormat } from '../../store/useWorkoutStore'
 import { useLiveCues } from '../../hooks/useLiveCues'
 import { cues } from '../../lib/speech'
-import { fmtTime, exerciseEmoji } from './helpers'
+import { fmtTime,} from './helpers'
 import { ModalityViewProps, LiveStartGate, EffortPrompt } from './LiveShared'
 import { useModalityVoice } from '../../hooks/useModalityVoice'
+import { AlertTriangleIcon, ModalityIcon } from '../../components/icons'
 
 const FORMATS: [WodFormat, string][] = [['amrap', 'AMRAP'], ['fortime', 'For Time'], ['emom', 'EMOM'], ['rounds', 'Rounds']]
 // exIdx -1 marks a demo movement with no WorkoutExercise behind it — nothing to log
@@ -178,7 +179,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
   if (!started) {
     return (
       <LiveStartGate
-        emoji="🔥"
+        icon={<ModalityIcon modality="WOD" className="w-14 h-14" />}
         label="LIVE · WOD"
         title={FORMATS.find(f => f[0] === format)?.[1] ?? 'WOD'}
         detail={`${moves.length} movements${format === 'amrap' || format === 'emom' ? ` · ${fmtTime(CAP)} cap` : ` · ${TARGET} rounds`}. 3… 2… 1… press start.`}
@@ -191,7 +192,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
   if (rating) {
     return (
       <EffortPrompt
-        emoji="🔥"
+        icon={<ModalityIcon modality="WOD" className="w-14 h-14" />}
         label="METCON DONE"
         title="Rate the effort"
         detail="Work density and effort are what make a metcon cost what it does — the clock alone can't tell."
@@ -296,7 +297,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
 
       {nothingToLog && (
         <div className="mt-3.5 flex gap-2.5 px-4 py-3 rounded-card border border-brand-yellow/40 bg-[#2a2410]">
-          <span className="text-base">⚠️</span>
+          <AlertTriangleIcon className="w-4 h-4" />
           <p className="flex-1 text-[12.5px] text-white leading-snug">
             Every movement was skipped, so this is a demo board — the clock works but
             <span className="font-bold"> nothing will be recorded</span>. Go back and add a movement to log it.
@@ -335,7 +336,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
                     <div className="text-[11px] font-bold text-brand-orange mt-0.5">{m.weight} kg</div>
                   )}
                 </div>
-                <span className="text-base">{exerciseEmoji({ modality: 'WOD' })}</span>
+                <ModalityIcon modality="WOD" className="w-4 h-4" />
               </button>
             )
           })}

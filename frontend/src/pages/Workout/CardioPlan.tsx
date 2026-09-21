@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { progressService } from '../../services/progress.service'
-import { exerciseEmoji, fmtTime } from './helpers'
+import { fmtTime } from './helpers'
+import { BarChartIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 type TargetType = 'distance' | 'time'
 
@@ -96,7 +98,7 @@ export default function CardioPlan() {
           className="w-10 h-10 rounded-full border border-dark-600 bg-dark-800 text-lg
                      flex items-center justify-center active:scale-90 transition-transform">←</button>
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-2xl">{exerciseEmoji(activity.exercise)}</span>
+          <ModalityIcon modality={activity.exercise.modality ?? ''} className="w-6 h-6 text-dark-300" />
           <div className="min-w-0">
             <h1 className="text-2xl font-extrabold leading-tight truncate">{activity.exercise.name}</h1>
             <p className="text-dark-300 text-[13px]">Set your target</p>
@@ -106,7 +108,7 @@ export default function CardioPlan() {
 
       {/* recent */}
       <div className="flex gap-2.5 bg-dark-800 border border-dark-600 rounded-card p-3.5 mb-6">
-        <span className="text-base">📊</span>
+        <BarChartIcon className="w-4 h-4" />
         <p className="text-[13px] text-dark-200 leading-relaxed">
           {recent
             ? <>Last time: <span className="text-white font-bold">{recent.distance.toFixed(2)} km</span>

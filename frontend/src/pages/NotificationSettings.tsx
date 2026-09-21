@@ -8,6 +8,8 @@ import {
   deviceTimezone,
   notificationService,
 } from '../services/notification.service'
+import { BellIcon, SmartphoneIcon } from '../components/icons'
+import CoachAvatar from '../components/chat/CoachAvatar'
 
 function Toggle({ value, onChange, disabled }: {
   value: boolean; onChange: (v: boolean) => void; disabled?: boolean
@@ -40,12 +42,12 @@ function Section({ title, subtitle, children }: {
 }
 
 function Row({ icon, label, description, right, dim }: {
-  icon?: string; label: string; description?: string
+  icon?: React.ReactNode; label: string; description?: string
   right?: React.ReactNode; dim?: boolean
 }) {
   return (
     <div className={`flex items-center gap-3 px-3.5 py-3 ${dim ? 'opacity-45' : ''}`}>
-      {icon && <span className="text-lg shrink-0">{icon}</span>}
+      {icon && <span className="shrink-0 text-dark-300">{icon}</span>}
       <div className="flex-1 min-w-0">
         <p className="text-white text-sm font-medium">{label}</p>
         {description && (
@@ -186,7 +188,7 @@ export default function NotificationSettings() {
         subtitle="Delivered even when the app is closed and the phone is locked."
       >
         <Row
-          icon="📲"
+          icon={<SmartphoneIcon className="w-5 h-5" />}
           label="Enable notifications"
           description={pushOn ? 'On for this device' : 'Off — nothing will be sent'}
           right={<Toggle value={pushOn} onChange={handleMaster} disabled={busy} />}
@@ -218,7 +220,7 @@ export default function NotificationSettings() {
         {/* Tier flag rather than a type row: suspension and backoff key off
             coachEnabled, and a separate type row could disagree with it. */}
         <Row
-          icon="🤖"
+          icon={<CoachAvatar className="w-5 h-5" />}
           label="AI coaching nudges"
           description={
             prefs?.coachSuspendedAt
@@ -298,7 +300,7 @@ export default function NotificationSettings() {
           className="w-full px-3.5 py-3.5 text-left text-sm font-medium
                      disabled:opacity-45 active:bg-dark-700"
         >
-          🔔 Send a test notification
+          <BellIcon className="w-4 h-4" /> Send a test notification
         </button>
       </Section>
 

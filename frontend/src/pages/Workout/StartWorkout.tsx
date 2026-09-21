@@ -7,6 +7,7 @@ import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
 import { ScheduledWorkout } from '../../types'
 import { workoutService, ActiveSession } from '../../services/workout.service'
 import { MessageKey, useT } from '../../i18n'
+import { MicIcon, TargetIcon } from '../../components/icons'
 
 // ── modality catalogue (id → dictionary keys), matching the prototype ──
 type ModId = 'strength' | 'calisthenics' | 'cardio' | 'mobility' | 'wod'
@@ -206,7 +207,7 @@ export default function StartWorkout() {
                      border border-dashed border-dark-600 text-left
                      active:scale-[0.99] transition-transform"
         >
-          <span className="text-[15px]">🎤</span>
+          <MicIcon className="w-4 h-4" />
           <span className="flex-1 min-w-0">
             <span className="block text-[12.5px] text-dark-200">
               {t('start.voiceSamples')}
@@ -238,7 +239,7 @@ export default function StartWorkout() {
             className="w-full mb-6 flex items-center gap-3 bg-dark-800 border border-dark-600
                        rounded-card px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
           >
-            <span className="text-[17px]">🎯</span>
+            <TargetIcon className="w-[18px] h-[18px]" />
             <span className="flex-1 min-w-0">
               <span className="block text-sm font-semibold">{t('start.paceCoach')}</span>
               <span className="block text-xs text-dark-300 mt-0.5">

@@ -122,10 +122,11 @@ export function RpeRow({ value, onPick }: { value: number; onPick: (n: number) =
 // fatigue model with no measure of how hard the session actually was — the one
 // input that separates a recovery jog from a threshold run.
 export function EffortPrompt({
-  emoji, label, title, detail, summary, initial = 7, confirmLabel = 'Save & Finish',
+  icon, label, title, detail, summary, initial = 7, confirmLabel = 'Save & Finish',
   busy, onConfirm,
 }: {
-  emoji: string
+  /** The modality's mark, drawn by the caller at the size this screen wants. */
+  icon: React.ReactNode
   label: string
   title: string
   detail: string
@@ -140,7 +141,7 @@ export function EffortPrompt({
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-10 pb-8 flex flex-col">
       <div className="text-center">
-        <div className="text-[52px] leading-none">{emoji}</div>
+        <div className="flex justify-center text-brand-teal">{icon}</div>
         <div className="flex items-center justify-center gap-1.5 text-brand-teal text-xs
                         font-bold tracking-widest mt-3">
           <span className="w-2 h-2 rounded-full bg-brand-teal" /> {label}
@@ -189,9 +190,10 @@ export function EffortPrompt({
 
 // ── pre-live "get ready, press Start" gate ──
 export function LiveStartGate({
-  emoji, label, title, detail, onStart, onBack, children,
+  icon, label, title, detail, onStart, onBack, children,
 }: {
-  emoji: string
+  /** The modality's mark, drawn by the caller at the size this screen wants. */
+  icon: React.ReactNode
   label: string
   title: string
   detail: string
@@ -207,7 +209,7 @@ export function LiveStartGate({
 }) {
   return (
     <div className="flex-1 bg-dark-900 text-white flex flex-col items-center justify-center px-8 text-center">
-      <div className="text-[64px] leading-none mb-4">{emoji}</div>
+      <div className="flex justify-center mb-4 text-brand-teal">{icon}</div>
       <div className="flex items-center gap-1.5 text-brand-teal text-xs font-bold tracking-widest mb-2">
         <span className="w-2 h-2 rounded-full bg-brand-teal" /> {label}
       </div>

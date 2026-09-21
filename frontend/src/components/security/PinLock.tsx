@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { securityService } from '../../services/security.service'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useT } from '../../i18n'
+import { LockIcon } from '../icons'
 
 /**
  * Full-screen PIN gate.
@@ -63,7 +64,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     <div className="fixed inset-0 z-50 bg-dark-900 text-white flex flex-col
                     items-center [justify-content:safe_center] overflow-y-auto px-8
                     pt-[calc(2rem+var(--safe-top))] pb-[calc(2rem+var(--safe-bottom))]">
-      <div className="text-[44px] leading-none mb-4">🔒</div>
+      <LockIcon className="w-11 h-11 mb-4 text-brand-teal" />
       <h1 className="text-xl font-extrabold">{t('pin.title')}</h1>
       <p className="text-dark-300 text-[13px] mt-1.5 text-center max-w-[260px]">
         {error ?? t('pin.locked')}

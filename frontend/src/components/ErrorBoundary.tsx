@@ -1,6 +1,7 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
 import { reportClientError } from '../lib/clientErrors'
 import { dismissBoot } from '../boot'
+import { AlertTriangleIcon } from './icons'
 
 /**
  * The last thing between a render throw and a white screen.
@@ -104,7 +105,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="w-full max-w-[430px] flex flex-col items-center text-center">
           <div className="w-14 h-14 rounded-full bg-brand-red/10 flex items-center justify-center mb-5">
             <span className="text-2xl" role="img" aria-label="">
-              ⚠️
+              <AlertTriangleIcon className="w-8 h-8 text-brand-yellow" />
             </span>
           </div>
 

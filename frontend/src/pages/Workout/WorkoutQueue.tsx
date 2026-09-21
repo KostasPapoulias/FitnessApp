@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { rpeColor, exerciseEmoji, cycleRpe } from './helpers'
+import { rpeColor, cycleRpe } from './helpers'
+import { ModalityIcon } from '../../components/icons'
 
 const STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
   done:     { label: 'Done',        color: '#4ADE80', dot: '#4ADE80' },
@@ -92,7 +93,7 @@ export default function WorkoutQueue() {
                 <span className="text-dark-400 cursor-grab flex-shrink-0 leading-none">⋮⋮</span>
                 <div className="w-10 h-10 rounded-[10px] bg-dark-700 flex items-center
                                 justify-center text-xl flex-shrink-0">
-                  {exerciseEmoji(e.exercise)}
+                  <ModalityIcon modality={e.exercise.modality ?? ''} className="w-5 h-5 text-dark-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[15.5px] font-bold leading-tight truncate"

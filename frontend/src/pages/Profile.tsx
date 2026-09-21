@@ -22,6 +22,11 @@ import {
   notificationService,
 } from '../services/notification.service'
 import { LANGUAGE_NAMES, LOCALES, useT } from '../i18n'
+import CoachAvatar from '../components/chat/CoachAvatar'
+import {
+  BellIcon, DownloadIcon, DumbbellIcon, GlobeIcon, HistoryListIcon, LockIcon,
+  MoonIcon, NutritionIcon, RulerIcon, TrashIcon, TrendingUpIcon, UserIcon,
+} from '../components/icons'
 import { useLocaleStore } from '../store/useLocaleStore'
 
 //   Reusable row components 
@@ -108,7 +113,9 @@ function TrainingLoadCard({ load, systemicFatigue }: {
 }
 
 function SettingsRow({ icon, label, sublabel, color = 'text-white', right, onClick }: {
-  icon: string; label: string; sublabel?: string
+  // A node, not a string: most rows are an emoji, but the AI row shows the
+  // coach's actual avatar.
+  icon: React.ReactNode; label: string; sublabel?: string
   color?: string; right?: React.ReactNode; onClick?: () => void
 }) {
   return (
@@ -117,7 +124,7 @@ function SettingsRow({ icon, label, sublabel, color = 'text-white', right, onCli
       className="w-full flex items-center gap-3 px-4 py-1.5
                  active:bg-dark-700 transition-colors text-left"
     >
-      <span className="text-lg">{icon}</span>
+      <span className="w-5 flex items-center justify-center text-dark-300">{icon}</span>
       <div className="flex-1">
         <p className={`text-sm font-medium ${color}`}>{label}</p>
         {sublabel && <p className="text-dark-400 text-xs mt-0.5">{sublabel}</p>}
@@ -786,7 +793,7 @@ export default function Profile() {
           </p>
 
           <SettingsRow
-            icon="📈"
+            icon={<TrendingUpIcon />}
             label={t('profile.progress')}
             sublabel={t('profile.progressSub')}
             onClick={() => navigate('/progress')}
@@ -795,7 +802,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="📋"
+            icon={<HistoryListIcon />}
             label={t('profile.history')}
             sublabel={t('profile.historySub')}
             onClick={() => navigate('/history')}
@@ -882,7 +889,7 @@ export default function Profile() {
           </p>
 
           <SettingsRow
-            icon="👤"
+            icon={<UserIcon />}
             label={t('profile.editProfile')}
             sublabel={t('profile.editProfileSub')}
             onClick={() => setShowEditModal(true)}
@@ -891,7 +898,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="🏋️"
+            icon={<DumbbellIcon />}
             label={t('profile.trainingSetup')}
             sublabel={equipmentIds.length > 0 || injuries.length > 0
               ? `${tn('profile.trainingSetupEquipment', equipmentIds.length)} · ${tn('profile.trainingSetupInjuries', injuries.length)}`
@@ -903,7 +910,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="😴"
+            icon={<MoonIcon />}
             label={t('profile.logSleep')}
             sublabel={profileData?.today?.sleepDuration
               ? t('profile.logSleepLast', { hours: sleepHours(profileData.today.sleepDuration) })
@@ -914,7 +921,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="🥗"
+            icon={<NutritionIcon />}
             label={t('profile.logNutrition')}
             sublabel={profileData?.today?.protein
               ? t('profile.logNutritionToday', { grams: Math.round(profileData.today.protein) })
@@ -925,7 +932,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="📏"
+            icon={<RulerIcon />}
             label={t('profile.units')}
             sublabel={settings?.preferredUnit === 'imperial'
               ? t('profile.unitsImperial')
@@ -946,7 +953,7 @@ export default function Profile() {
               is written in its own language, so it can be found by someone
               who cannot read the one currently showing. */}
           <SettingsRow
-            icon="🌐"
+            icon={<GlobeIcon />}
             label={t('common.language')}
             right={
               <SegmentedControl
@@ -960,7 +967,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="🤖"
+            icon={<CoachAvatar className="w-5 h-5" />}
             label={t('profile.aiConsent')}
             sublabel={settings?.aiConsentEnabled === false
               // Says what actually changes. "Allow AI to use your fitness data"
@@ -985,7 +992,7 @@ export default function Profile() {
           {/* One entry point rather than three scattered toggles — what to be
               notified about, how often and quiet hours all live together now. */}
           <SettingsRow
-            icon="🔔"
+            icon={<BellIcon />}
             label={t('profile.notifications')}
             sublabel={
               !pushEnabled ? t('profile.notificationsOff') :
@@ -1000,7 +1007,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="🔒"
+            icon={<LockIcon />}
             label={t('profile.security')}
             sublabel={t('profile.securitySub')}
             right={<span className="text-dark-400 text-lg">›</span>}
@@ -1010,7 +1017,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon="📊"
+            icon={<DownloadIcon />}
             label={t('profile.export')}
             sublabel={t('profile.exportSub')}
             onClick={() => alert(t('profile.exportSoon'))}
@@ -1021,7 +1028,7 @@ export default function Profile() {
         <div className="bg-dark-800 rounded-card border border-dark-600 overflow-hidden">
           {!showDeleteConfirm ? (
             <SettingsRow
-              icon="🗑️"
+              icon={<TrashIcon className="w-5 h-5 text-brand-red" />}
               label={t('profile.delete')}
               sublabel={t('profile.deleteSub')}
               color="text-brand-red"

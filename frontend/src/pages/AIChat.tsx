@@ -9,6 +9,7 @@ import { BOTTOM_NAV_HEIGHT, PHONE_MAX_WIDTH, SIDEBAR_WIDTH } from '../constants/
 import { NEW_THREAD } from '../constants/chat'
 import { AiProposal, Message } from '../types'
 import ProposalCard from '../components/chat/ProposalCard'
+import CoachAvatar from '../components/chat/CoachAvatar'
 import { useT } from '../i18n'
 
 export default function AIChat() {
@@ -133,7 +134,15 @@ export default function AIChat() {
       }
       setMessages(prev => [...prev, aiMsg])
       if (data.proposals?.length > 0) {
-        setProposals(prev => [...prev, ...data.proposals])
+        // Stamped with the id of the message just added, because the server
+        // binds them to the stored assistant row only after it has replied —
+        // the copies returned here carry no messageId yet. Without this the
+        // card has nothing to sit next to and falls to the end of the thread,
+        // which is where it used to jump to on every later message.
+        setProposals(prev => [
+          ...prev,
+          ...data.proposals.map((p: AiProposal) => ({ ...p, messageId: p.messageId ?? aiMsg.id })),
+        ])
       }
     } catch (err: any) {
       // 429 is the daily AI budget or the per-minute rate limit. The server
@@ -152,6 +161,14 @@ export default function AIChat() {
       setIsLoading(false)
     }
   }
+
+  const proposalsFor = (messageId: string) =>
+    proposals.filter(p => p.messageId === messageId)
+
+  // Cards with no message of their own, kept so nothing silently disappears.
+  const orphanProposals = proposals.filter(
+    p => !p.messageId || !messages.some(m => m.id === p.messageId)
+  )
 
   const readinessColor =
     readinessScore >= 70 ? '#4ADE80' :
@@ -199,11 +216,7 @@ export default function AIChat() {
           ←
         </button>
 
-        <div className="w-9 h-9 bg-brand-teal/20 border border-brand-teal/40
-                        rounded-full flex items-center justify-center text-lg
-                        flex-shrink-0">
-          🤖
-        </div>
+        <CoachAvatar className="w-9 h-9" />
 
         <div className="flex-1 min-w-0">
           <h1 className="text-white text-base font-bold">{t('ai.title')}</h1>
@@ -229,22 +242,35 @@ export default function AIChat() {
         ) : messages.length === 0 && proposals.length === 0 ? (
           <div className="flex flex-col items-center justify-center
                           min-h-[200px] text-center px-4">
-            <div className="text-5xl mb-4">🤖</div>
+            <CoachAvatar className="w-16 h-16 mb-4" />
             <p className="text-white font-bold text-lg mb-2">{t('ai.emptyTitle')}</p>
             <p className="text-dark-400 text-sm">{t('ai.emptyBody')}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            {/* Each card sits under the reply that drafted it, not at the end
+                of the thread. Anchored by `messageId`, which the server stores
+                when it saves the reply, so it survives a reopen and stays put
+                when the conversation continues past it — floating them at the
+                bottom made a plan look like it was drafted in answer to
+                whatever was asked last. */}
             {messages.map(msg => (
-              <MessageBubble key={msg.id} message={msg} intl={intl} />
+              <div key={msg.id} className="flex flex-col gap-4">
+                <MessageBubble message={msg} intl={intl} />
+                {proposalsFor(msg.id).map(proposal => (
+                  <ProposalCard
+                    key={proposal.id}
+                    proposal={proposal}
+                    onResolved={id => setProposals(prev => prev.filter(p => p.id !== id))}
+                  />
+                ))}
+              </div>
             ))}
-            {/* Drafted plans sit after the conversation: they belong to the
-                latest reply, and anchoring them mid-thread would put a live
-                action behind whatever the athlete has since scrolled past.
-                Rendered on `proposals` alone, not only alongside messages: a
-                thread whose history came back with a pending card but no
-                messages used to fall into the empty state and drop the card. */}
-            {proposals.map(proposal => (
+            {/* Anything the messages could not claim: a card whose message is
+                older than the twenty this thread replays, or a thread that came
+                back with a pending card and no messages at all. Dropping these
+                would lose a plan the athlete can still accept. */}
+            {orphanProposals.map(proposal => (
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}
@@ -256,11 +282,7 @@ export default function AIChat() {
 
         {isLoading && (
           <div className="flex gap-3 mt-4">
-            <div className="w-8 h-8 bg-brand-teal/20 border border-brand-teal/40
-                            rounded-full flex items-center justify-center
-                            text-sm flex-shrink-0">
-              🤖
-            </div>
+            <CoachAvatar className="w-8 h-8" />
             <div className="bg-dark-800 border border-dark-600 rounded-2xl
                             rounded-tl-none px-4 py-3 flex items-center gap-1">
               {[0, 150, 300].map(delay => (
@@ -343,11 +365,7 @@ function MessageBubble({ message, intl }: { message: Message; intl: string }) {
 
   return (
     <div className="flex gap-3">
-      <div className="w-8 h-8 bg-brand-teal/20 border border-brand-teal/40
-                      rounded-full flex items-center justify-center
-                      text-sm flex-shrink-0 mt-1">
-        🤖
-      </div>
+      <CoachAvatar className="w-8 h-8 mt-1" />
       <div className="max-w-[85%]">
         <div className="bg-dark-800 border border-dark-600 rounded-2xl
                         rounded-tl-none px-4 py-3">

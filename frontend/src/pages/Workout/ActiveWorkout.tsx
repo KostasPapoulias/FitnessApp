@@ -21,6 +21,7 @@ import type { LogPayload, ModalityVoiceHandler } from './LiveShared'
 import {
   rpeColor, rpeTint, rpeLabel, fmtTime, RpeMode, summariseSession,
 } from './helpers'
+import { AlertTriangleIcon, ListIcon, MicIcon, MicOffIcon, NoteIcon, WifiOffIcon } from '../../components/icons'
 
 export default function ActiveWorkout() {
   const navigate = useNavigate()
@@ -340,7 +341,7 @@ export default function ActiveWorkout() {
   const endArmedBanner = endArmed ? (
     <div className="fixed top-3 left-4 right-4 z-[60] flex items-center gap-3 px-4 py-3.5
                     rounded-card border border-brand-yellow/50 bg-[#2a2410] shadow-lg">
-      <span className="text-base">🎤</span>
+      <MicIcon className="w-4 h-4" />
       <p className="flex-1 text-[13px] text-white leading-snug">
         Say <span className="font-bold">"end workout"</span> again to finish, or ignore this to keep going.
       </p>
@@ -408,7 +409,7 @@ export default function ActiveWorkout() {
     return (
       <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center max-w-[320px]">
-          <div className="text-4xl mb-4">⚠️</div>
+          <AlertTriangleIcon className="w-9 h-9 mb-4 mx-auto text-brand-yellow" />
           <p className="text-white font-semibold mb-2">Couldn't start the workout</p>
           <p className="text-dark-300 text-[13px] mb-6">{startError}</p>
           <button
@@ -464,14 +465,14 @@ export default function ActiveWorkout() {
   const errorToast = logError ? (
     <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
                     rounded-card border border-brand-red/50 bg-[#2a1a1a] shadow-lg">
-      <span className="text-base">⚠️</span>
+      <AlertTriangleIcon className="w-4 h-4" />
       <p className="flex-1 text-[13px] text-white leading-snug">{logError}</p>
       <button onClick={clearErrors} className="text-dark-300 text-lg leading-none px-1">×</button>
     </div>
   ) : queuedSetCount > 0 ? (
     <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
                     rounded-card border border-brand-orange/40 bg-[#2a2118] shadow-lg">
-      <span className="text-base">📶</span>
+      <WifiOffIcon className="w-4 h-4" />
       <p className="flex-1 text-[13px] text-white leading-snug">
         {queuedSetCount === 1 ? '1 set is' : `${queuedSetCount} sets are`} saved on this phone.
         {' '}They will upload when you have a signal.
@@ -562,7 +563,7 @@ export default function ActiveWorkout() {
                      bg-dark-800 text-white text-[13px] font-semibold flex-shrink-0 ml-3
                      active:scale-95 transition-transform"
         >
-          ☰ All exercises
+          <ListIcon className="w-4 h-4" /> All exercises
         </button>
       </div>
 
@@ -733,7 +734,7 @@ export default function ActiveWorkout() {
       <div className="grid grid-cols-2 gap-2.5 mt-3.5">
         <button className="py-3.5 rounded-btn border border-dark-600 bg-dark-800
                            text-sm font-semibold active:scale-95 transition-transform">
-          📝 Note
+          <NoteIcon className="w-4 h-4" /> Note
         </button>
         <button
           onClick={handleFinish}
@@ -824,7 +825,9 @@ function VoiceStrip({
                  border bg-dark-800 text-left transition-colors active:scale-[0.99]"
       style={{ borderColor: border }}
     >
-      <span className="text-base">{blocked || broken ? '🚫' : '🎤'}</span>
+      {blocked || broken
+        ? <MicOffIcon className="w-4 h-4" />
+        : <MicIcon className="w-4 h-4" />}
       <span className="flex-1 min-w-0">
         <span className="block text-[13.5px] truncate" style={{ color }}>{message}</span>
         {/* The recovery line. Only after a miss, and it names a phrase that

@@ -4,6 +4,7 @@ import { progressService } from '../services/progress.service'
 import { E1rmPoint, MuscleFatigueHistory, ProgressSummary, StrengthEntry } from '../types'
 import TrendChart from '../components/progress/TrendChart'
 import VolumeBars from '../components/progress/VolumeBars'
+import { StarFilledIcon } from '../components/icons'
 
 /**
  * The progress screen.
@@ -217,7 +218,7 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
                       singleHint="log it once more and a trend appears here."
                     />
                     <p className="px-4 pb-3 text-dark-400 text-[11px] leading-relaxed">
-                      ★ marks a new best. Estimated from weight, reps and RPE — it
+                      <StarFilledIcon className="w-3 h-3 inline-block align-[-1px] text-brand-yellow" /> marks a new best. Estimated from weight, reps and RPE — it
                       is not a tested max.
                     </p>
                   </>

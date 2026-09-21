@@ -38,20 +38,14 @@ export function cycleRpe(n: number, delta = 1): number {
   return ((n - 1 + delta + 10) % 10) + 1
 }
 
-// ── Exercise emoji (the data model has no icon field) ─────────────────────
-export function exerciseEmoji(ex?: Pick<Exercise, 'modality'>): string {
-  switch (ex?.modality) {
-    case 'Cardio':       return '🏃'
-    case 'Mobility':     return '🧘'
-    case 'Calisthenics': return '🤸'
-    case 'Strength':     return '🏋️'
-    default:             return '💪'
-  }
-}
+// The emoji this file used to map modalities to now lives in
+// `components/icons.tsx` as ModalityIcon. It stays there rather than here
+// because this is a .ts file and an icon is JSX — which is also why the
+// session summary below carries the modality and lets the screen draw it.
 
 // ── Finish-screen summary ─────────────────────────────────────────────────
 export interface FinishSnapshot {
-  exercises: { name: string; emoji: string; count: number; topWeight: number; topReps: number }[]
+  exercises: { name: string; modality: string; count: number; topWeight: number; topReps: number }[]
   muscles: string[]
   setsLogged: number
   elapsed: number
@@ -78,7 +72,7 @@ export function summariseSession(
         (a, b) => (b.weight > a.weight ? b : a), doneSets[0] ?? { weight: 0, reps: 0 })
       return {
         name: se.exercise.name,
-        emoji: exerciseEmoji(se.exercise),
+        modality: se.exercise.modality ?? '',
         count: doneSets.length,
         topWeight: best?.weight ?? 0,
         topReps: best?.reps ?? 0,

@@ -16,6 +16,7 @@ import PaceSheet from './PaceSheet'
 import CoachControls from './CoachControls'
 import ChunkBoundary from '../../components/ChunkBoundary'
 import { lazyRetry, warmChunk } from '../../lib/lazyRetry'
+import { FlagIcon, LockIcon, ModalityIcon } from '../../components/icons'
 
 // MapLibre is the heaviest thing the app can load. Split out so it is fetched
 // only when someone actually starts an outdoor session — a lifting workout
@@ -415,7 +416,8 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     .slice(0, 4)
     .map((sp: Split) => ({
       key: `${sp.auto ? 'km' : 'lap'}-${sp.index}`,
-      badge: sp.auto ? String(sp.index) : '⚑',
+      // A number for an automatic split, the flag for one the athlete marked.
+      badge: sp.auto ? String(sp.index) : <FlagIcon className="w-3.5 h-3.5" />,
       label: sp.auto ? `Km ${sp.index}` : `Lap · ${(sp.meters / 1000).toFixed(2)} km`,
       pace: `${fmtTime(splitPace(sp))} /km`,
       time: fmtTime(sp.seconds),
@@ -460,7 +462,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   if (!started) {
     return (
       <LiveStartGate
-        emoji="🏃"
+        icon={<ModalityIcon modality="Cardio" className="w-14 h-14" />}
         label="LIVE · CARDIO"
         title={activity}
         detail={goalLabel
@@ -535,7 +537,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   if (rating) {
     return (
       <EffortPrompt
-        emoji="🏃"
+        icon={<ModalityIcon modality="Cardio" className="w-14 h-14" />}
         label={`${activity.toUpperCase()} DONE`}
         title="Rate the effort"
         detail="Recovery is driven by how hard that felt, not just how long it took."
@@ -586,7 +588,9 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           <span className="w-2 h-2 rounded-full bg-brand-red animate-pulse" />
           {running ? 'LIVE · RUNNING' : 'PAUSED · RUNNING'}
         </div>
-        <div className="text-[13px] text-dark-300 font-semibold">🏃 {activity}</div>
+        <div className="text-[13px] text-dark-300 font-semibold flex items-center justify-center gap-1.5">
+          <ModalityIcon modality="Cardio" className="w-4 h-4" /> {activity}
+        </div>
       </div>
 
       {/* Recovered after a reload or an OS kill mid-run.
@@ -956,7 +960,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         <button onClick={run.lap}
           className="py-4 rounded-btn border border-dark-600 bg-dark-800 text-white text-[15px] font-bold
                      active:scale-95 transition-transform">
-          ⚑ Lap
+          <FlagIcon className="w-4 h-4" /> Lap
         </button>
       </div>
 
@@ -976,7 +980,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           }}
           className="w-full mt-2.5 py-3.5 rounded-btn border border-dark-600 bg-dark-800
                      text-white text-sm font-bold active:scale-95 transition-transform">
-          🔒 Lock screen
+          <LockIcon className="w-4 h-4" /> Lock screen
         </button>
       )}
 

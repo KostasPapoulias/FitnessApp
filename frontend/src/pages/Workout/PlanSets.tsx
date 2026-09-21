@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { templateService } from '../../services/template.service'
-import { rpeColor, exerciseEmoji, cycleRpe } from './helpers'
+import { rpeColor, cycleRpe } from './helpers'
+import { LightbulbIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 // How each suggestion was arrived at. Shown because a number that changes
 // itself is unsettling unless the athlete can see the reasoning — and because
@@ -131,7 +133,7 @@ export default function PlanSets() {
         {/* Tip */}
         <div className="flex gap-2.5 bg-[#0a2a22] border border-brand-teal/25
                         rounded-card p-3.5 mb-4">
-          <span className="text-base leading-snug">💡</span>
+          <LightbulbIcon className="w-4 h-4 flex-shrink-0" />
           <p className="text-dark-200 text-[12.5px] leading-relaxed">
             {suggestionsLoading
               ? 'Checking what you lifted last time…'
@@ -155,7 +157,7 @@ export default function PlanSets() {
                 <div className="flex items-center gap-3 px-4 pt-4 pb-3">
                   <div className="w-10 h-10 rounded-[10px] bg-dark-700 flex items-center
                                   justify-center text-xl flex-shrink-0">
-                    {exerciseEmoji(ex)}
+                    <ModalityIcon modality={ex.modality ?? ''} className="w-5 h-5 text-dark-300" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-base font-bold leading-tight truncate">{ex.name}</p>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { NoteIcon } from '../icons'
 
 /**
  * The athlete's own note against one exercise, during the live workout.
@@ -71,7 +72,7 @@ export default function ExerciseNotes({ value, onSave }: Props) {
         className="mt-3 w-full flex items-start gap-2 text-left px-3 py-2.5 rounded-btn
                    border border-dashed border-dark-600 active:scale-[0.99] transition-transform"
       >
-        <span className="text-dark-400 text-[13px] leading-5 flex-shrink-0">🗒</span>
+        <NoteIcon className="w-4 h-4 text-dark-400 flex-shrink-0 mt-0.5" />
         <span className={`flex-1 min-w-0 text-[13px] leading-5 ${has ? 'text-dark-200' : 'text-dark-400'}`}>
           {has ? value : 'Add a note'}
         </span>

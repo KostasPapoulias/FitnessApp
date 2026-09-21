@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { PinStatus, securityService } from '../services/security.service'
 import { useAuthStore } from '../store/useAuthStore'
 import { rememberPinEnabled } from '../hooks/useAppLock'
+import { KeyIcon, LockIcon, SignOutIcon } from '../components/icons'
 
 function Section({ title, subtitle, children }: {
   title: string; subtitle?: string; children: React.ReactNode
@@ -119,7 +120,7 @@ export default function SecuritySettings() {
       >
         {mode === 'idle' && (
           <div className="flex items-center gap-3 px-3.5 py-3">
-            <span className="text-lg">🔒</span>
+            <LockIcon className="w-5 h-5 text-dark-300" />
             <div className="flex-1">
               <p className="text-sm font-medium">PIN lock</p>
               <p className="text-dark-300 text-[11.5px] mt-0.5">
@@ -207,7 +208,7 @@ export default function SecuritySettings() {
         ) : (
           <button onClick={() => setMode('password')}
             className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-dark-700">
-            <span className="text-lg">🔑</span>
+            <KeyIcon className="w-5 h-5 text-dark-300" />
             <span className="flex-1 text-sm font-medium">Change password</span>
             <span className="text-dark-400 text-lg">›</span>
           </button>
@@ -221,7 +222,7 @@ export default function SecuritySettings() {
         <button onClick={signOutEverywhere} disabled={busy}
           className="w-full flex items-center gap-3 px-3.5 py-3 text-left
                      active:bg-dark-700 disabled:opacity-40">
-          <span className="text-lg">🚪</span>
+          <SignOutIcon className="w-5 h-5 text-dark-300" />
           <span className="flex-1 text-sm font-medium text-brand-red">
             Sign out everywhere
           </span>

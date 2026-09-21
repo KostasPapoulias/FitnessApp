@@ -352,7 +352,7 @@ export const en = {
   'calendar.dayTrained': 'trained',
   'calendar.dayRest': 'rest',
   'calendar.currentStreak': 'Current streak',
-  'calendar.currentStreakSub': '🔥 don’t break it',
+  'calendar.currentStreakSub': 'don’t break it',
   'calendar.longestStreak': 'Longest streak',
   'calendar.longestStreakSub': 'personal best',
   'calendar.thisYear': 'This year',
@@ -430,6 +430,9 @@ export const en = {
   'proposal.addPlan': 'Add to my plans',
   'proposal.noThanks': 'No thanks',
   'proposal.failed': 'Could not add that. Try asking again.',
+  'proposal.expired': 'DRAFT EXPIRED',
+  'proposal.expiredNote': 'This draft was based on how recovered you were at the time, so it can no longer be added. Ask again for a fresh one.',
+  'proposal.inYourPlans': 'In your plans →',
   'proposal.savedNoOpen': 'Saved, but the planner could not be opened. It is in your plans.',
 
   //  Start Workout

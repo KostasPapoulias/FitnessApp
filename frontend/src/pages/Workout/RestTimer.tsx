@@ -4,6 +4,7 @@ import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
 import { hapticCountdownTick } from '../../lib/haptics'
 import { announce } from '../../lib/speech'
 import { rpeColor } from './helpers'
+import { SpeakerIcon, VibrateIcon } from '../../components/icons'
 
 interface RestTimerProps {
   seconds: number
@@ -211,7 +212,9 @@ export default function RestTimer({
           off and on devices that cannot vibrate at all. */}
       {(haptic || audio) && (
         <div className="mt-3.5 flex items-center gap-2.5 px-3.5 py-3 rounded-btn border border-dashed border-dark-600">
-          <span className="text-[15px]">{haptic ? '📳' : '🔊'}</span>
+          {haptic
+            ? <VibrateIcon className="w-4 h-4" />
+            : <SpeakerIcon className="w-4 h-4" />}
           <span className="text-[12.5px] text-dark-300">
             {haptic && audio ? 'Phone will vibrate and call the next set'
               : haptic ? 'Phone will vibrate when rest ends'

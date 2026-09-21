@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { aiService } from '../services/ai.service'
 import { settingsService } from '../services/settings.service'
 import { useFatigueStore } from '../store/useFatigueStore'
 import { NEW_THREAD } from '../constants/chat'
 import { MessageKey, useT } from '../i18n'
+import CoachAvatar from '../components/chat/CoachAvatar'
+import { DumbbellIcon, FlameIcon, MessageIcon, MoonIcon, TargetIcon, TrendingUpIcon, ZapIcon } from '../components/icons'
 
 // The text is also what gets SENT, so a Greek screen asks the coach in Greek.
-const SUGGESTED_PROMPTS: { emoji: string; key: MessageKey }[] = [
-  { emoji: '💪', key: 'ai.promptTrainToday' },
-  { emoji: '🔴', key: 'ai.promptRest' },
-  { emoji: '📈', key: 'ai.promptProgress' },
-  { emoji: '😴', key: 'ai.promptRecovery' },
-  { emoji: '🎯', key: 'ai.promptGoal' },
-  { emoji: '⚡', key: 'ai.promptOvertraining' },
+const SUGGESTED_PROMPTS: { icon: ReactNode; key: MessageKey }[] = [
+  { icon: <DumbbellIcon className="w-5 h-5" />, key: 'ai.promptTrainToday' },
+  { icon: <MoonIcon className="w-5 h-5" />, key: 'ai.promptRest' },
+  { icon: <TrendingUpIcon className="w-5 h-5" />, key: 'ai.promptProgress' },
+  { icon: <FlameIcon className="w-5 h-5" />, key: 'ai.promptRecovery' },
+  { icon: <TargetIcon className="w-5 h-5" />, key: 'ai.promptGoal' },
+  { icon: <ZapIcon className="w-5 h-5" />, key: 'ai.promptOvertraining' },
 ]
 
 interface Thread {
@@ -105,8 +107,7 @@ export default function AIChatHub() {
             could do. */}
         {aiConsent === false ? (
           <div className="bg-dark-800 border border-dark-600 rounded-card p-4 mb-5">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">🙈</span>
+            <div className="mb-2">
               <span className="text-dark-200 text-sm font-semibold">
                 {t('ai.noDataTitle')}
               </span>
@@ -126,7 +127,7 @@ export default function AIChatHub() {
                           rounded-card p-4 mb-5">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="text-lg">🤖</span>
+                <CoachAvatar className="w-6 h-6" />
                 <span className="text-brand-teal text-sm font-semibold">
                   {t('ai.knowsState')}
                 </span>
@@ -145,7 +146,8 @@ export default function AIChatHub() {
                     <span key={m.muscleId}
                       className="bg-brand-red/20 border border-brand-red/40
                                  text-brand-red text-xs px-2 py-1 rounded-full">
-                      {m.muscleName} 🔴 {Math.round(m.fatigueLevel)}%
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-red mr-1.5 align-middle" />
+                      {m.muscleName} {Math.round(m.fatigueLevel)}%
                     </span>
                   ))}
                 </div>
@@ -171,7 +173,7 @@ export default function AIChatHub() {
                            active:border-brand-teal/50 active:bg-brand-teal/5
                            disabled:opacity-50"
               >
-                <span className="text-xl block mb-1.5">{prompt.emoji}</span>
+                <span className="block mb-1.5 text-brand-teal">{prompt.icon}</span>
                 <span className="text-dark-200 text-xs leading-relaxed">
                   {t(prompt.key)}
                 </span>
@@ -219,7 +221,7 @@ export default function AIChatHub() {
                                         border-brand-teal/20 rounded-xl
                                         flex items-center justify-center
                                         text-lg flex-shrink-0">
-                          💬
+                          <MessageIcon className="w-5 h-5 text-brand-teal" />
                         </div>
 
                         {/* Info */}

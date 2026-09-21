@@ -289,6 +289,13 @@ export interface ScheduledWorkout {
 export interface AiProposal {
   id: string
   kind: 'create_template' | 'schedule_workout' | 'create_exercise'
+  /**
+   * pending — still tappable. applied — already added, shown so the thread
+   * keeps its history. expired — too old to apply, shown for the same reason.
+   * Absent on a card the server has just returned from a send, which is
+   * pending by definition.
+   */
+  status?: 'pending' | 'applied' | 'expired'
   title: string
   lines: string[]
   scheduledFor: string | null

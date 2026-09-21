@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SelectedExercise, useWorkoutStore } from '../../store/useWorkoutStore'
 import SaveToCalendar from '../../components/workout/SaveToCalendar'
-import { exerciseEmoji, rpeColor, rpeTint, rpeWord, summariseSession } from './helpers'
+import { rpeColor, rpeTint, rpeWord, summariseSession } from './helpers'
+import { ModalityIcon } from '../../components/icons'
 
 const IcCheck = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -252,7 +253,7 @@ function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
       <div className="flex items-center gap-3 px-4 pt-4 pb-3">
         <div className="w-10 h-10 rounded-[10px] bg-dark-700 flex items-center
                         justify-center text-xl flex-shrink-0">
-          {exerciseEmoji(ex)}
+          <ModalityIcon modality={ex.modality ?? ''} className="w-5 h-5 text-dark-300" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-base font-bold leading-tight truncate">{ex.name}</p>

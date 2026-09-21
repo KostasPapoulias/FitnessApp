@@ -1,5 +1,6 @@
 import { ReactNode, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../../i18n'
+import { StarFilledIcon } from '../icons'
 
 /**
  * The app's one line chart.
@@ -304,7 +305,7 @@ export default function TrendChart({
                   </td>
                   <td className="py-1.5 text-right text-white tabular-nums">
                     {format(point.value)}
-                    {point.marked && <span className="text-brand-yellow ml-1">★</span>}
+                    {point.marked && <StarFilledIcon className="w-3 h-3 inline-block align-[-1px] ml-1 text-brand-yellow" />}
                   </td>
                 </tr>
               ))}

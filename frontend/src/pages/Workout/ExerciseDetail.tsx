@@ -4,7 +4,8 @@ import { exerciseService } from '../../services/exercise.service'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import ExerciseHistoryCard from '../../components/progress/ExerciseHistoryCard'
 import StarIcon from '../../components/workout/StarIcon'
-import { exerciseEmoji } from './helpers'
+import { SparkleIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 export default function ExerciseDetail() {
   const navigate = useNavigate()
@@ -122,13 +123,13 @@ export default function ExerciseDetail() {
                 onError={e => { e.currentTarget.style.display = 'none' }}
               />
             ) : (
-              <div className="text-5xl mb-3">{exerciseEmoji(exercise)}</div>
+              <ModalityIcon modality={exercise.modality ?? ''} className="w-12 h-12 mb-3 mx-auto text-brand-teal" />
             )}
             <h2 className="text-white text-2xl font-bold">{exercise.name}</h2>
             <div className="flex justify-center gap-2 mt-3 flex-wrap">
               <span className="bg-brand-teal text-black text-xs font-bold
                                px-3 py-1 rounded-full">
-                AI ✦ Recommended
+                AI <SparkleIcon className="w-3 h-3 inline-block align-[-1px]" /> Recommended
               </span>
               <span className="bg-dark-700 text-dark-300 text-xs px-3 py-1 rounded-full">
                 {exercise.modality}

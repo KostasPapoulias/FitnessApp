@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { rpeColor, rpeWord, exerciseEmoji, fmtTime } from './helpers'
+import { rpeColor, rpeWord, fmtTime } from './helpers'
 import {
   ModalityViewProps, LiveHeader, SegmentBar, RpeRow, UpNext,
 } from './LiveShared'
 import { useModalityVoice } from '../../hooks/useModalityVoice'
+import { ListIcon } from '../../components/icons'
+import { ModalityIcon } from '../../components/icons'
 
 // Heuristic: does this movement read as an isometric hold?
 function isHold(name: string) {
@@ -159,7 +161,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
       {/* name + queue */}
       <div className="flex items-center justify-between gap-3 mt-4">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-2xl">{exerciseEmoji(ex.exercise)}</span>
+          <ModalityIcon modality={ex.exercise.modality ?? ''} className="w-6 h-6 text-dark-300" />
           <div className="min-w-0">
             <div className="text-[22px] font-extrabold leading-tight truncate">{ex.exercise.name}</div>
             <div className="text-[12.5px] text-dark-300 mt-0.5 truncate">{muscle}</div>
@@ -173,7 +175,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
                      bg-dark-800 text-white text-[13px] font-semibold flex-shrink-0
                      active:scale-95 transition-transform"
         >
-          ☰ All
+          <ListIcon className="w-4 h-4" /> All
         </button>
       </div>
 

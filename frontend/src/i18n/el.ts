@@ -359,7 +359,7 @@ export const el: Record<MessageKey, string> = {
   'calendar.dayTrained': 'προπόνηση',
   'calendar.dayRest': 'ξεκούραση',
   'calendar.currentStreak': 'Τρέχον σερί',
-  'calendar.currentStreakSub': '🔥 μην το σπάσεις',
+  'calendar.currentStreakSub': 'μην το σπάσεις',
   'calendar.longestStreak': 'Μεγαλύτερο σερί',
   'calendar.longestStreakSub': 'προσωπικό ρεκόρ',
   'calendar.thisYear': 'Φέτος',
@@ -437,6 +437,9 @@ export const el: Record<MessageKey, string> = {
   'proposal.addPlan': 'Πρόσθεσε στα πλάνα μου',
   'proposal.noThanks': 'Όχι, ευχαριστώ',
   'proposal.failed': 'Δεν προστέθηκε. Ζήτησέ το ξανά.',
+  'proposal.expired': 'ΤΟ ΠΡΟΧΕΙΡΟ ΕΛΗΞΕ',
+  'proposal.expiredNote': 'Αυτό το πρόχειρο βασίστηκε στην τότε κατάστασή σου, οπότε δεν προστίθεται πια. Ζήτησε καινούριο.',
+  'proposal.inYourPlans': 'Στα πλάνα σου →',
   'proposal.savedNoOpen': 'Αποθηκεύτηκε, αλλά ο σχεδιασμός δεν άνοιξε. Θα το βρεις στα πλάνα σου.',
 
   //  Start Workout
