@@ -50,12 +50,61 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [pin]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The length cap is checked inside the updater, not against `pin`: the
+  // keyboard listener below outlives renders, and a fast typist can land two
+  // keys before React re-renders, so a closure over `pin` would let a ninth
+  // digit through.
   const press = (key: string) => {
     setError(null)
     if (key === '⌫') return setPin(p => p.slice(0, -1))
-    if (key === '' || pin.length >= 8) return
-    setPin(p => p + key)
+    if (key === '') return
+    setPin(p => (p.length >= 8 ? p : p + key))
   }
+
+  // Which pad key to light up while its keyboard twin is held, so typing on a
+  // desktop still shows the same feedback a tap does.
+  const [litKey, setLitKey] = useState<string | null>(null)
+
+  // Desktop: type the PIN on the keyboard. Listens on window rather than a
+  // focused input — there is no input here, and focusing one would raise the
+  // soft keyboard on a phone over the pad it already has.
+  useEffect(() => {
+    if (busy) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Leave browser and OS shortcuts alone (Ctrl+R, Cmd+1 switching tabs…)
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      let key: string | null = null
+      if (/^[0-9]$/.test(e.key)) {
+        // Holding a digit would otherwise auto-repeat a whole PIN of it
+        if (e.repeat) { e.preventDefault(); return }
+        key = e.key
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        key = '⌫'
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        setError(null)
+        setPin('')
+        return
+      }
+      if (key === null) return
+
+      e.preventDefault()
+      press(key)
+      setLitKey(key)
+    }
+    const onKeyUp = () => setLitKey(null)
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      // The keyup may land while busy, with no listener to hear it
+      setLitKey(null)
+    }
+  }, [busy])
 
   // Scrolls rather than clipping the keypad: in landscape, or with large text,
   // the pad is taller than the viewport. `safe center` keeps the top reachable
@@ -88,7 +137,9 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
             disabled={busy || key === ''}
             className={`h-[62px] rounded-full text-[22px] font-semibold
                         active:scale-90 transition-transform disabled:opacity-30
-                        ${key === '' ? 'invisible' : 'bg-dark-800 border border-dark-600'}`}
+                        ${key === '' ? 'invisible'
+                          : litKey === key ? 'bg-dark-800 border border-brand-teal scale-90'
+                          : 'bg-dark-800 border border-dark-600'}`}
           >
             {key}
           </button>
