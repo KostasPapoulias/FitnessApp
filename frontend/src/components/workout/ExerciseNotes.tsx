@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { NoteIcon } from '../icons'
 
 /**
- * The athlete's own note against one exercise, during the live workout.
+ * The athlete's own note against one exercise, during the live workout —
+ * and afterwards in the calendar's sets sheet, so a note can be added or
+ * corrected once the session is history.
  *
  * Collapsed to a single line until it is wanted. The live screen is the one
  * place in the app where the athlete is mid-set and looking at a phone on a
@@ -26,7 +29,18 @@ interface Props {
   onSave: (notes: string) => Promise<boolean>
 }
 
-export default function ExerciseNotes({ value, onSave }: Props) {
+/**
+ * Lets the live screen's own Note button open this, since the two sit at
+ * opposite ends of a scrolling page and the button is the one under the
+ * athlete's thumb.
+ */
+export interface ExerciseNotesHandle {
+  open: () => void
+}
+
+const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNotes(
+  { value, onSave }, ref
+) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const [status, setStatus] = useState<'idle' | 'saving' | 'failed'>('idle')
@@ -40,18 +54,24 @@ export default function ExerciseNotes({ value, onSave }: Props) {
   }, [value, open])
 
   const openEditor = () => {
-    setOpen(true)
-    // Focus after the textarea exists. Without the frame delay this runs
-    // against the collapsed markup and does nothing.
-    requestAnimationFrame(() => {
-      const el = areaRef.current
-      if (!el) return
-      el.focus()
-      // Caret at the end, not at the start — this is almost always an edit of
-      // an existing note rather than a rewrite of it.
-      el.setSelectionRange(el.value.length, el.value.length)
-    })
+    // flushSync rather than a frame delay: the textarea has to exist before
+    // this handler returns, because iOS raises the keyboard only for a focus()
+    // that happens inside the tap that caused it. Focusing a frame later left
+    // the field open, the caret in it, and no keyboard — which reads exactly
+    // like a note you cannot type into.
+    flushSync(() => setOpen(true))
+
+    const el = areaRef.current
+    if (!el) return
+    el.focus()
+    // Caret at the end, not at the start — this is almost always an edit of
+    // an existing note rather than a rewrite of it.
+    el.setSelectionRange(el.value.length, el.value.length)
+    // The button that opens this can be a screen away from the field.
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
+
+  useImperativeHandle(ref, () => ({ open: openEditor }))
 
   const commit = async () => {
     setOpen(false)
@@ -117,4 +137,6 @@ export default function ExerciseNotes({ value, onSave }: Props) {
       </div>
     </div>
   )
-}
+})
+
+export default ExerciseNotes

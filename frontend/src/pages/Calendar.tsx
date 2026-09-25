@@ -10,7 +10,7 @@ import { workoutService } from '../services/workout.service'
 import ChunkBoundary from '../components/ChunkBoundary'
 import { lazyRetry } from '../lib/lazyRetry'
 import { useT } from '../i18n'
-import { AlertTriangleIcon, FlameIcon, ModalityIcon, PencilIcon, TrashIcon } from '../components/icons'
+import { AlertTriangleIcon, FlameIcon, ModalityIcon, NoteIcon, PencilIcon, TrashIcon } from '../components/icons'
 
 // Pulls MapLibre in with it, so it is loaded only when a route is opened —
 // the calendar itself must not cost a map.
@@ -217,6 +217,36 @@ export default function Calendar() {
         .find(s => s.id === openExercise.sessionId)
         ?.exercises[openExercise.index] ?? null
     : null
+
+  /**
+   * Save a note from the day view, then patch it into the loaded day.
+   *
+   * No reload afterwards, unlike every other edit here: a note is not a
+   * fatigue input, so nothing else on the screen can have changed, and
+   * re-reading the day and the month is two round trips to learn that.
+   * Resolves false rather than throwing so ExerciseNotes can say "Not synced".
+   */
+  const handleSaveNotes = async (sessionId: string, exercise: any, notes: string) => {
+    if (!exercise.workoutExerciseId) return false
+    try {
+      await workoutService.updateExerciseNotes(sessionId, exercise.workoutExerciseId, notes)
+    } catch {
+      return false
+    }
+    // The server stores a cleared note as null — mirror that, so the day row
+    // does not render an empty note strip.
+    const stored = notes.trim() || null
+    setDayDetail(prev => prev && {
+      ...prev,
+      sessions: prev.sessions.map(s => s.id !== sessionId ? s : {
+        ...s,
+        exercises: s.exercises.map(e =>
+          e.workoutExerciseId === exercise.workoutExerciseId ? { ...e, notes: stored } : e
+        ),
+      }),
+    })
+    return true
+  }
 
   const handleDeleteSet = async () => {
     if (!confirmDeleteSet) return
@@ -678,6 +708,22 @@ export default function Calendar() {
                                 <span className="text-dark-500 text-base">›</span>
                               </button>
 
+                              {/* The note under its sets, clamped — the whole
+                                  of it is in the sheet this row opens. Part of
+                                  the same tap target, so it never reads as a
+                                  second thing to press. */}
+                              {ex.notes && (
+                                <button
+                                  onClick={() => setOpenExercise({ sessionId: session.id, index: idx })}
+                                  className="w-full flex items-start gap-2 px-4 pb-3.5 -mt-1 text-left"
+                                >
+                                  <NoteIcon className="w-3.5 h-3.5 text-dark-400 flex-shrink-0 mt-[3px]" />
+                                  <span className="text-dark-300 text-xs leading-5 line-clamp-2 break-words min-w-0">
+                                    {ex.notes}
+                                  </span>
+                                </button>
+                              )}
+
                             </div>
                           )
                         })}
@@ -906,6 +952,7 @@ export default function Calendar() {
           onPickSet={set => setEditingSet({ set, exerciseName: openExerciseData.name })}
           onDeleteSet={set => setConfirmDeleteSet({ set, exerciseName: openExerciseData.name })}
           onOpenRun={setId => setOpenRun({ setId, title: openExerciseData.name })}
+          onSaveNotes={notes => handleSaveNotes(openExercise.sessionId, openExerciseData, notes)}
           onClose={() => setOpenExercise(null)}
         />
       )}

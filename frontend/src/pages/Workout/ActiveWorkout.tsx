@@ -9,7 +9,8 @@ import { announce, alert as speakAlert, cues } from '../../lib/speech'
 import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { ROTATING_EXAMPLES } from '../../constants/voiceCommands'
 import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
-import ExerciseNotes from '../../components/workout/ExerciseNotes'
+import ExerciseNotes, { ExerciseNotesHandle } from '../../components/workout/ExerciseNotes'
+import PreviousNote from '../../components/workout/PreviousNote'
 import SaveToCalendar from '../../components/workout/SaveToCalendar'
 import SessionStatus from '../../components/workout/SessionCard'
 import RestTimer from './RestTimer'
@@ -25,6 +26,8 @@ import { AlertTriangleIcon, ListIcon, MicIcon, MicOffIcon, NoteIcon, WifiOffIcon
 
 export default function ActiveWorkout() {
   const navigate = useNavigate()
+  // Lets the Note button at the bottom of the screen open the field at the top.
+  const notesRef = useRef<ExerciseNotesHandle>(null)
   const {
     selectedExercises, sessionId, sessionStartTime,
     currentExerciseIndex, currentSetIndex, completedSets,
@@ -570,7 +573,11 @@ export default function ActiveWorkout() {
       {/* Under the name, above the set progress: the note is about the exercise
           as a whole, not the set in front of you, and putting it below the
           current-set card would put it off-screen on a short phone. */}
+      {/* Last time's note directly above today's field, so the two read as
+          one thread about the movement. */}
+      <PreviousNote key={`prev-${ex.id}`} exerciseId={ex.id} />
       <ExerciseNotes
+        ref={notesRef}
         // Remounts when the exercise changes, so a draft can never be carried
         // from one movement onto the next.
         key={currentExercise.workoutExerciseId ?? ex.id}
@@ -732,8 +739,13 @@ export default function ActiveWorkout() {
 
       {/* Note + End */}
       <div className="grid grid-cols-2 gap-2.5 mt-3.5">
-        <button className="py-3.5 rounded-btn border border-dark-600 bg-dark-800
-                           text-sm font-semibold active:scale-95 transition-transform">
+        {/* Opens the note field above rather than being its own editor: this
+            button had no handler at all and did nothing when pressed. */}
+        <button
+          onClick={() => notesRef.current?.open()}
+          className="py-3.5 rounded-btn border border-dark-600 bg-dark-800
+                     text-sm font-semibold active:scale-95 transition-transform
+                     flex items-center justify-center gap-1.5">
           <NoteIcon className="w-4 h-4" /> Note
         </button>
         <button

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { progressService } from '../../services/progress.service'
 import { ExerciseHistory, ExerciseHistoryEntry, ExerciseHistorySet } from '../../types'
 import { fmtTime } from '../../pages/Workout/helpers'
+import { NoteIcon } from '../icons'
 
 /**
  * What this athlete has actually done with one movement.
@@ -182,9 +183,16 @@ function Entry({ entry, isOpen, onToggle }: {
       >
         <div className="min-w-0">
           <p className="text-white text-xs font-semibold">{fmtDate(entry.dateTime)}</p>
-          <p className="text-dark-400 text-[11px] mt-0.5">
+          <p className="text-dark-400 text-[11px] mt-0.5 flex items-center gap-1">
             {entry.sets.length} set{entry.sets.length === 1 ? '' : 's'}
             {entry.e1rm != null && ` · est. ${entry.e1rm}kg`}
+            {/* Marks the entries worth opening while they are collapsed —
+                otherwise a note is only found by opening every one. */}
+            {entry.notes && (
+              <span role="img" aria-label="Has a note" className="flex-shrink-0 ml-0.5">
+                <NoteIcon className="w-3 h-3 text-brand-teal" />
+              </span>
+            )}
           </p>
         </div>
         <span className={`text-dark-400 text-base leading-none flex-shrink-0 transition-transform
@@ -204,8 +212,21 @@ function Entry({ entry, isOpen, onToggle }: {
               </span>
             </div>
           ))}
+          {entry.notes && <NoteLine text={entry.notes} />}
         </div>
       )}
+    </div>
+  )
+}
+
+/** The athlete's note under the sets it was written about. */
+function NoteLine({ text }: { text: string }) {
+  return (
+    <div className="mt-2 pt-2 border-t border-dark-600 flex items-start gap-2">
+      <NoteIcon className="w-3.5 h-3.5 text-dark-400 flex-shrink-0 mt-0.5" />
+      <p className="text-dark-200 text-xs leading-5 whitespace-pre-wrap break-words min-w-0">
+        {text}
+      </p>
     </div>
   )
 }

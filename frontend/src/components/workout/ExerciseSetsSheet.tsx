@@ -1,5 +1,6 @@
 import BottomSheet from '../BottomSheet'
 import SwipeActions from '../SwipeActions'
+import ExerciseNotes from './ExerciseNotes'
 import { fmtTime } from '../../pages/Workout/helpers'
 import { PencilIcon, TrashIcon } from '../icons'
 
@@ -29,11 +30,16 @@ interface Props {
   onPickSet: (set: any) => void
   onDeleteSet: (set: any) => void
   onOpenRun: (setId: string) => void
+  /**
+   * Resolves false if the write failed. Absent for an entry with no
+   * workoutExerciseId to write to, which leaves the note read-only.
+   */
+  onSaveNotes?: (notes: string) => Promise<boolean>
   onClose: () => void
 }
 
 export default function ExerciseSetsSheet({
-  exercise, editable, onPickSet, onDeleteSet, onOpenRun, onClose,
+  exercise, editable, onPickSet, onDeleteSet, onOpenRun, onSaveNotes, onClose,
 }: Props) {
   const sets = exercise.sets ?? []
   const cardioSets = sets.filter((s: any) => s.cardio)
@@ -186,6 +192,23 @@ export default function ExerciseSetsSheet({
           )}
         </>
       )}
+
+      {/* Below the sets, for every modality — a note is about the exercise as
+          a whole, and it is read after the numbers it explains. Editable here
+          at any time, not only in edit mode: notes are not a fatigue input,
+          so changing one rewrites nothing, and adding "that was the day my
+          knee went" afterwards is exactly when people think of it. */}
+      {onSaveNotes && exercise.workoutExerciseId ? (
+        <ExerciseNotes
+          key={exercise.workoutExerciseId}
+          value={exercise.notes ?? ''}
+          onSave={onSaveNotes}
+        />
+      ) : exercise.notes ? (
+        <p className="mt-3 text-dark-200 text-[13px] leading-5 whitespace-pre-wrap break-words">
+          {exercise.notes}
+        </p>
+      ) : null}
     </BottomSheet>
   )
 }

@@ -161,6 +161,8 @@ export interface ExerciseHistoryEntry {
   /** Heaviest single set, for the one-line summary. */
   topWeight: number | null
   totalVolume: number
+  /** What the athlete wrote against the exercise that day, if anything. */
+  notes: string | null
 }
 
 export interface ExerciseHistory {
@@ -171,6 +173,15 @@ export interface ExerciseHistory {
   bestE1rm: number | null
   /** Total finished sessions containing this exercise, which may exceed `entries`. */
   sessionCount: number
+  /**
+   * The most recent note written against this exercise, from any session.
+   *
+   * Separate from `entries[0].notes` because notes are rare: the last session
+   * usually has none, and "last time" on the live screen asks for limit=1. A
+   * note from three sessions ago about a sore shoulder is still the one worth
+   * showing before the next set.
+   */
+  lastNote: { text: string; dateTime: string } | null
 }
 
 /**
@@ -192,7 +203,7 @@ export const getExerciseHistory = async (
 ): Promise<ExerciseHistory> => {
   const take = Math.min(Math.max(Math.trunc(limit) || 10, 1), MAX_HISTORY_PAGE)
 
-  const [profile, estimate, sessionCount, workoutExercises] = await Promise.all([
+  const [profile, estimate, sessionCount, workoutExercises, lastNoted] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId }, select: { weight: true } }),
     prisma.exerciseStrengthEstimate.findUnique({
       where: { userId_exerciseId: { userId, exerciseId } },
@@ -204,6 +215,7 @@ export const getExerciseHistory = async (
     prisma.workoutExercise.findMany({
       where: { exerciseId, session: { userId, duration: { not: null } } },
       select: {
+        notes: true,
         session: { select: { id: true, dateTime: true } },
         sets: {
           orderBy: { setNumber: 'asc' },
@@ -220,6 +232,13 @@ export const getExerciseHistory = async (
       },
       orderBy: { session: { dateTime: 'desc' } },
       take,
+    }),
+    // In the same batch rather than derived from `workoutExercises`: that list
+    // is capped at `take`, and the note worth surfacing may sit past it.
+    prisma.workoutExercise.findFirst({
+      where: { exerciseId, notes: { not: null }, session: { userId, duration: { not: null } } },
+      select: { notes: true, session: { select: { dateTime: true } } },
+      orderBy: { session: { dateTime: 'desc' } },
     }),
   ])
 
@@ -281,6 +300,7 @@ export const getExerciseHistory = async (
       e1rm: bestE1rm > 0 ? Math.round(bestE1rm * 10) / 10 : null,
       topWeight: topWeight > 0 ? Math.round(topWeight * 10) / 10 : null,
       totalVolume: Math.round(totalVolume),
+      notes: workoutExercise.notes,
     }
   })
 
@@ -290,5 +310,8 @@ export const getExerciseHistory = async (
     lastPerformedAt: entries[0]?.dateTime ?? null,
     bestE1rm: estimate ? Math.round(estimate.e1rm * 10) / 10 : null,
     sessionCount,
+    lastNote: lastNoted?.notes
+      ? { text: lastNoted.notes, dateTime: lastNoted.session.dateTime.toISOString() }
+      : null,
   }
 }

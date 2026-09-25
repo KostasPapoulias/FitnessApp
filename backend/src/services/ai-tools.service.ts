@@ -101,7 +101,7 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
   {
     name: 'get_workout_history',
     description:
-      'Past training sessions with their exercises and sets. Use for questions about what was done, when, and how heavy.',
+      'Past training sessions with their exercises and sets, plus any note the athlete wrote against an exercise (pain, form, how it felt). Use for questions about what was done, when, how heavy, and how it went.',
     parameters: {
       type: 'object',
       properties: {
@@ -398,6 +398,10 @@ export const executeReadTool = async (
           notes: s.notes,
           exercises: s.workoutExercises.map(we => ({
             name: we.exercise.name,
+            // The athlete's own words about the movement — "left knee twinged",
+            // "grip gave out before the back did". The sets say what happened;
+            // this is often the only record of why.
+            notes: we.notes,
             sets: we.sets.map(set => ({
               reps: set.strength?.reps ?? set.calisthenics?.reps ?? set.wod?.reps ?? null,
               weightKg: set.strength?.weight ?? set.calisthenics?.addedWeight ?? null,

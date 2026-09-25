@@ -317,7 +317,11 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
           avgRpe:       session.avgRpe,
           notes:        session.notes,
           exercises: session.workoutExercises.map(we => ({
+            // The id travels so the note can be edited from the day view — the
+            // notes PATCH is addressed by (session, workoutExercise).
+            workoutExerciseId: we.id,
             name:       we.exercise.name,
+            notes:      we.notes,
             categories: we.exercise.categoryLinks.map(cl => cl.category.name),
             muscles:    we.exercise.muscleLinks.map(ml => ml.muscle.name),
             sets:       we.sets.map(s => ({
