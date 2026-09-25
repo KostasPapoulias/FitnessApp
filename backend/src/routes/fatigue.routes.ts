@@ -17,9 +17,6 @@ router.get('/current', getCurrentFatigue);
  * @route GET /api/fatigue/load
  * @protected
  * @returns acute vs chronic training load (fitness / fatigue / form)
- *
- * Declared before the `/:muscleId` route below — as a GET it would not collide
- * today, but a future GET /:muscleId would swallow "load" as an id.
  */
 router.get('/load', getTrainingLoadSummary);
 

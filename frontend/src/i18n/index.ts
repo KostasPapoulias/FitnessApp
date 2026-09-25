@@ -7,20 +7,13 @@ import { INTL_LOCALE, Locale } from './locales'
 export * from './locales'
 export type { MessageKey }
 
-// A typed dictionary rather than i18next. With two languages the library's
-// runtime buys nothing, and this way a key missing from el.ts — or a typo'd
-// key at a call site — fails `tsc` instead of rendering the key on a phone.
+// A typed dictionary: a key missing from el.ts, or a typo'd key, fails `tsc`.
 
 const DICTIONARIES: Record<Locale, Record<MessageKey, string>> = { en, el }
 
 export type Params = Record<string, string | number>
 
-/**
- * Keys with both a `_one` and an `_other` form, named without the suffix.
- * English and Greek pluralise the same way (one / everything else), so two
- * forms cover both; Intl.PluralRules still picks, so a third language with
- * more forms would only need its own keys.
- */
+/** Keys with `_one` and `_other` forms, named without the suffix. */
 export type PluralKey = {
   [K in MessageKey]: K extends `${infer B}_one` ? (`${B}_other` extends MessageKey ? B : never) : never
 }[MessageKey]
@@ -46,12 +39,7 @@ export const translatePlural = (
   return translate(locale, `${key}_${form}` as MessageKey, { count, ...params })
 }
 
-/**
- * A message with React nodes in its placeholders — a bold email address, a
- * link. Splitting the sentence into "before" and "after" keys instead would
- * fix the English word order into the Greek, and Greek puts the object
- * somewhere else.
- */
+/** A message with React nodes in its placeholders, keeping each language's word order. */
 export const translateRich = (
   locale: Locale, key: MessageKey, nodes: Record<string, ReactNode>
 ): ReactNode =>
@@ -64,11 +52,7 @@ export const translateRich = (
 
 const DECIMALS = new Map<string, Intl.NumberFormat>()
 
-/**
- * A fixed-precision number in the reader's notation — 7,5 in Greek. Grouping
- * is off so a value that printed "2500" before still does; only the decimal
- * separator changes.
- */
+/** A fixed-precision number in the reader's notation (7,5 in Greek), no grouping. */
 export const formatDecimal = (locale: Locale, value: number, digits = 1): string => {
   const id = `${locale}:${digits}`
   let format = DECIMALS.get(id)
@@ -83,10 +67,7 @@ export const formatDecimal = (locale: Locale, value: number, digits = 1): string
   return format.format(value)
 }
 
-/**
- * Translation for components. Subscribes to the language, so a switch in
- * Profile re-renders every screen that called it.
- */
+/** Translation for components; re-renders on a language switch. */
 export const useT = () => {
   const locale = useLocaleStore(s => s.locale)
   return useMemo(() => ({
@@ -98,20 +79,11 @@ export const useT = () => {
       translatePlural(locale, key, count, params),
     tx: (key: MessageKey, nodes: Record<string, ReactNode>) => translateRich(locale, key, nodes),
     num: (value: number, digits = 1) => formatDecimal(locale, value, digits),
-    /**
-     * Uppercase for an eyebrow label. Locale-aware because Greek drops the
-     * accent when uppercased — ΤΡΙ, not ΤΡΊ — and a plain toUpperCase() keeps
-     * it, which reads as a typo to a Greek reader.
-     */
+    /** Locale-aware uppercase (Greek drops accents when uppercased). */
     upper: (text: string) => text.toLocaleUpperCase(INTL_LOCALE[locale]),
   }), [locale])
 }
 
-/**
- * Translation outside React — stores, plain helpers. Reads the language at
- * call time and subscribes to nothing: whatever renders the result must use
- * `useT` itself, or it will keep the old language until something else
- * re-renders it.
- */
+/** Translation outside React; reads the language at call time and subscribes to nothing. */
 export const t = (key: MessageKey, params?: Params): string =>
   translate(useLocaleStore.getState().locale, key, params)

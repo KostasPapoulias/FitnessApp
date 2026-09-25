@@ -27,14 +27,7 @@ export default function ExerciseDetail() {
       .finally(() => setIsLoading(false))
   }, [exerciseId])
 
-  /**
-   * Optimistic, and rolled back if the write fails.
-   *
-   * The star has to answer the tap on the frame it happens — a gym connection
-   * can take a second to round-trip, and a control that waits for the server
-   * before moving reads as broken. Reverting on failure is what keeps that
-   * honest: the alternative is a star that says "saved" when nothing was.
-   */
+  /** Optimistic toggle, rolled back if the write fails. */
   const toggleFavorite = async () => {
     if (!exerciseId) return
     const next = !isFavorite
@@ -85,9 +78,7 @@ export default function ExerciseDetail() {
           ←
         </button>
         <h1 className="text-white text-xl font-bold flex-1">Exercise Detail</h1>
-        {/* Filled vs outline rather than lit vs dim: a yellow star at reduced
-            opacity still reads as "on" at a glance, which is how this button
-            managed to look functional for as long as it did. */}
+        {/* Filled vs outline, so the two states are unmistakable */}
         <button
           onClick={toggleFavorite}
           aria-pressed={isFavorite}
@@ -104,16 +95,7 @@ export default function ExerciseDetail() {
         {/* Hero */}
         <div className="mx-3 bg-dark-800 rounded-card overflow-hidden border border-dark-600">
           <div className="bg-[#0d2218] p-6 text-center border-b border-dark-600">
-            {/* The animation, where there is one. A GIF rather than a video
-                element: the source library ships GIFs, they are ~95 KB, and
-                they loop on their own — a <video> would need a poster, a
-                muted/playsinline pair, and would still refuse to autoplay on
-                some phones.
-
-                `media` is an array on the API response because the schema
-                allows more than one row per exercise; the seed writes exactly
-                one. Falling back to the emoji keeps the WOD movements and
-                outdoor cardio looking deliberate rather than broken. */}
+            {/* The animation (GIF), or the modality icon when there is none */}
             {exercise.media?.[0]?.videoUrl ? (
               <img
                 src={exercise.media[0].videoUrl}
@@ -204,11 +186,7 @@ export default function ExerciseDetail() {
             </div>
           )}
 
-          {/* Your history.
-              Replaces a "Personal Best" block whose third tile was a hardcoded
-              dash and whose "times logged" counted abandoned sessions. This
-              reads the athlete's own sets — the estimate the app actually uses,
-              the top set behind it, and what they did the last few times. */}
+          {/* The athlete's own history with this exercise */}
           <ExerciseHistoryCard exerciseId={exerciseId} />
         </div>
       </div>

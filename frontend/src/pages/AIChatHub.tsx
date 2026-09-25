@@ -8,7 +8,7 @@ import { MessageKey, useT } from '../i18n'
 import CoachAvatar from '../components/chat/CoachAvatar'
 import { DumbbellIcon, FlameIcon, MessageIcon, MoonIcon, TargetIcon, TrendingUpIcon, ZapIcon } from '../components/icons'
 
-// The text is also what gets SENT, so a Greek screen asks the coach in Greek.
+// Sent as the message itself, so it is in the screen's language.
 const SUGGESTED_PROMPTS: { icon: ReactNode; key: MessageKey }[] = [
   { icon: <DumbbellIcon className="w-5 h-5" />, key: 'ai.promptTrainToday' },
   { icon: <MoonIcon className="w-5 h-5" />, key: 'ai.promptRest' },
@@ -34,9 +34,7 @@ export default function AIChatHub() {
   const [threads,     setThreads]     = useState<Thread[]>([])
   const [isLoading,   setIsLoading]   = useState(true)
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
-  // Undefined until the answer arrives. Defaulting to `true` would flash the
-  // "AI knows your current state" card at someone who turned that off, which is
-  // the one audience it must never be shown to.
+  // Undefined until known, so the "AI knows your state" card never flashes for consent-off users
   const [aiConsent,   setAiConsent]   = useState<boolean | undefined>(undefined)
 
   useEffect(() => {
@@ -48,14 +46,11 @@ export default function AIChatHub() {
   useEffect(() => {
     settingsService.getSettings()
       .then(s => setAiConsent(s.aiConsentEnabled))
-      // A failed read leaves the card hidden rather than guessing. The gate is
-      // enforced server-side either way; this only decides what to promise.
+      // On failure keep the card hidden (the server enforces consent anyway)
       .catch(() => setAiConsent(undefined))
   }, [])
 
-  // Open the compose screen without persisting anything. The thread is
-  // created server-side on the first message, so backing out of an unused
-  // chat leaves no trace.
+  // Opens the compose screen; the thread is created with the first message
   const startChat = (firstMessage?: string) => {
     navigate(`/ai/chat/${NEW_THREAD}`, { state: { firstMessage } })
   }
@@ -99,12 +94,7 @@ export default function AIChatHub() {
 
       <div className="flex-1 overflow-y-auto px-5 pb-8">
 
-        {/* Body state card.
-            Consent-off swaps it out entirely rather than dimming it: the card's
-            whole claim is "AI knows your current state", and with the data
-            withheld that is simply untrue. Showing the readiness number beside
-            a coach that cannot see it is the most misleading thing this screen
-            could do. */}
+        {/* Body state card — replaced entirely when AI data consent is off */}
         {aiConsent === false ? (
           <div className="bg-dark-800 border border-dark-600 rounded-card p-4 mb-5">
             <div className="mb-2">

@@ -14,36 +14,31 @@ import {
 } from './ai-tools.service'
 import { log } from '../lib/logger'
 
-// Build the fatigue context string that gets sent to ChaGPT
+/**
+ * The live body-data block sent with each chat message: profile, equipment,
+ * injuries, readiness and fatigue, training load, sleep, nutrition and recent
+ * sessions. Readiness comes from the same service the app screens use.
+ */
 export const buildUserContext = async (userId: string): Promise<string> => {
-  // Same readiness calculation the Home/Profile screens show, so the AI
-  // never quotes a different number than the UI.
   const {
     readinessScore: readiness, muscles: effectiveFatigue, fitnessLevel, systemicFatigue,
     sleep, sleepNote,
   } = await getUserReadiness(userId)
 
-  // Weeks-long trend, not today's soreness — this is what tells the coach
-  // whether to push, hold, or back off.
+  // Weeks-long load trend
   const load = await getTrainingLoad(userId)
 
-  // Sleep comes back with readiness rather than being fetched again — the score
-  // above already has it folded in, and a second query could disagree with the
-  // one the score was computed from.
-
-  // Get latest nutrition
+  // Sleep comes from the readiness result, so it matches the score
   const nutrition = await prisma.nutritionLog.findFirst({
     where: { userId },
     orderBy: { logDate: 'desc' }
   })
 
-  // Get user profile
   const profile = await prisma.userProfile.findUnique({
     where: { userId }
   })
 
-  // What they can train with, and what they are training around. Without this
-  // the coach happily prescribed barbell work to someone training at home.
+  // What they can train with and what to work around
   const [equipment, injuries] = await Promise.all([
     prisma.userEquipment.findMany({
       where: { userId },
@@ -57,7 +52,7 @@ export const buildUserContext = async (userId: string): Promise<string> => {
 
   const age = resolveAge(profile?.birthDate, profile?.age)
 
-  // Get recent sessions (last 3)
+  // Last 3 sessions
   const recentSessions = await prisma.workoutSession.findMany({
     where: { userId },
     include: {
@@ -69,7 +64,6 @@ export const buildUserContext = async (userId: string): Promise<string> => {
     take: 3
   })
 
-  // Format fatigue by status
   const highFatigue   = effectiveFatigue.filter(f => f.effectiveLevel >= 70)
   const modFatigue    = effectiveFatigue.filter(f => f.effectiveLevel >= 35 && f.effectiveLevel < 70)
   const recovered     = effectiveFatigue.filter(f => f.effectiveLevel < 35)
@@ -171,8 +165,7 @@ ${recentSessions.length > 0
   return context
 }
 
-// Static instructions — safe to pin at the front of the conversation, since
-// nothing here goes stale.
+// Static coach instructions, pinned as the system message.
 export const AI_PERSONA = `
 You are SomaTrack AI — a personal fitness and recovery coach assistant.
 You have access to the user's real-time body data. Always use this data
@@ -222,13 +215,8 @@ alter their security settings. If asked, say so plainly and offer what you can.
 `.trim()
 
 /**
- * The persona used when the athlete has turned "AI Data Consent" off.
- *
- * Consent-off degrades the coach rather than removing it: the chat still
- * answers, but with no body data block and no tools at all, so there is
- * physically nothing for it to read or draft. This prompt exists so it says so
- * up front instead of confabulating numbers to fill the silence — a coach that
- * invents a readiness score is worse than one that admits it is blindfolded.
+ * Persona when AI data consent is off: no body data and no tools, and it must
+ * say so rather than invent numbers.
  */
 export const AI_PERSONA_NO_DATA = `
 You are SomaTrack AI — a fitness and recovery coach assistant.
@@ -253,39 +241,16 @@ Therefore:
 Be encouraging and honest. Keep responses concise — this is a mobile app.
 `.trim()
 
-/**
- * How many model round trips one message may take.
- *
- * A round trip is a lookup and a re-think, and four is enough for "find the
- * exercise, check the history, draft, explain". The cap exists because a
- * confused model will otherwise keep calling tools, and every call is billed.
- */
+/** Model round trips per message; caps runaway tool loops. */
 const MAX_TOOL_ROUNDS = 3
 
-/** Reply used when the model produced only tool calls and never any prose. */
+/** Reply when the model staged a draft but wrote no prose. */
 const FALLBACK_WITH_PROPOSAL = 'I have put a draft together — have a look and tap it if it works for you.'
 
 /**
- * What every request to the model carries, beyond the messages.
- *
- * These were all unset, which is how a chat message could take minutes: no
- * ceiling on the output, and whatever each provider happens to default to for
- * sampling.
- *
- * TEMPERATURE is low on purpose. Model cards for reasoning models publish 1.0,
- * and that figure belongs to their thinking mode — creative sampling is
- * recovered by the reasoning pass before anything is said. This coach answers
- * from live numbers and calls tools with real exercise ids, where creativity
- * shows up as an invented id or a leg day recommended after a leg day. The
- * question has a correct answer, so the sampling is tightened to find it.
- *
- * THINKING is off. With it on, the reasoning tokens come out of the same
- * `max_tokens` budget and land in a separate `reasoning_content` field — so
- * the app, which reads `content`, gets an empty reply while the tokens are
- * spent. Off, the model writes its answer where the app looks for it.
- *
- * All overridable per deployment, because the right values are provider- and
- * model-specific and finding them should not need a release.
+ * Request settings for every model call, overridable per deployment. Low
+ * temperature: answers come from live numbers and real ids. Thinking off:
+ * its tokens consume `max_tokens` and land outside `content`.
  */
 const SAMPLING = {
   temperature: Number(process.env.AI_TEMPERATURE ?? 0.3),
@@ -293,16 +258,12 @@ const SAMPLING = {
   max_tokens: Number(process.env.AI_MAX_TOKENS ?? 1024),
 }
 
-/** Thinking stays off unless a deployment deliberately turns it back on. */
+/** Thinking stays off unless explicitly enabled. */
 const ENABLE_THINKING = process.env.AI_ENABLE_THINKING === 'true'
 
 /**
- * Sampling plus anything provider-specific.
- *
- * `chat_template_kwargs` is NVIDIA's way of reaching the chat template and is
- * not part of the chat-completions API, so it is sent only to NVIDIA: strict
- * endpoints reject a body key they do not know, which would turn a tuning
- * option into a 400 on every message.
+ * Sampling plus provider-specific options. `chat_template_kwargs` is sent to
+ * NVIDIA only — strict endpoints reject unknown keys.
  */
 const requestTuning = (providerName: string) => ({
   ...SAMPLING,
@@ -312,12 +273,8 @@ const requestTuning = (providerName: string) => ({
 })
 
 /**
- * The coach, with every instruction about tools taken out.
- *
- * AI_PERSONA is most of a page on when to call what, and the salvage call
- * below offers no tools at all. Sent that prompt with nothing to call, the
- * model wrote the call it wanted to make out as JSON and that became the
- * reply the athlete read. It needs to be told what it is doing instead.
+ * Persona for the no-tools salvage call. The main persona talks about tools,
+ * which led the model to write tool calls as its reply.
  */
 const SALVAGE_PERSONA = `
 You are SomaTrack AI — a personal fitness and recovery coach assistant.
@@ -334,15 +291,8 @@ accept or review a card — there is none.
 `.trim()
 
 /**
- * Last resort when the tool loop ends with nothing to say.
- *
- * The transcript is rebuilt rather than continued, and that is the whole
- * point: an assistant turn holding a tool call is the pattern the model is
- * copying, so a request that still contains one comes back as another call no
- * matter what the request declares. Here the lookups are prose, there is no
- * tool call anywhere to imitate, and the model answers.
- *
- * Returns '' if even this produces nothing, leaving the caller's fallback.
+ * Last resort when the tool loop produced no prose: a fresh request with the
+ * lookup results as plain text and no tool calls to imitate. Returns '' on failure.
  */
 const answerWithoutTools = async ({
   userId, client, modelName, providerName, questionTurn, toolTranscript,
@@ -379,21 +329,16 @@ const answerWithoutTools = async ({
     await recordUsage(userId, result.usage, { modelName })
     return (result.choices[0]?.message?.content ?? '').trim()
   } catch (error) {
-    // The athlete already has a fallback waiting; a failure here must not turn
-    // a weak answer into a 500.
+    // The caller has a fallback; never turn this into a 500
     log.error('AI salvage reply failed', error, { model: modelName })
     return ''
   }
 }
 
 /**
- * Send a message, letting the coach look things up and draft along the way.
- *
- * The loop is: ask → the model may call tools → run the reads, stage the
- * drafts → ask again with the results → repeat until it answers in prose.
- * Budget is re-checked before every round trip rather than once at the top,
- * because one message can now cost several calls and a tool loop must not be
- * able to overshoot a cap that was checked when it was still cheap.
+ * Send a chat message. The model may call tools: reads run immediately, writes
+ * become proposal cards. Loops until it answers in prose, re-checking the
+ * budget before every round trip.
  */
 export const sendMessage = async ({
   userId,
@@ -406,48 +351,30 @@ export const sendMessage = async ({
   message: string
   history: { role: 'user' | 'assistant'; content: string }[]
 }): Promise<{ reply: string; proposals: ProposalSummary[] }> => {
-  // Throws AiNotConfiguredError when no provider is set, which the controller
-  // turns into a clear 503 rather than a stack trace.
+  // Throws AiNotConfiguredError when no provider is set (the controller returns 503)
   const provider = resolveAiProvider()
   const client = getAiClient(provider)
 
-  // The consent gate. Absent row reads as consent given, matching the column
-  // default — the switch is opt-OUT, and an account whose settings row went
-  // missing must not silently lose its coach.
+  // AI data consent; a missing settings row reads as consent (the column default)
   const settings = await prisma.settings.findUnique({
     where: { userId },
     select: { aiConsentEnabled: true },
   })
   const personalised = settings?.aiConsentEnabled ?? true
 
-  // Consent off means the body data block is never built. Skipping it is the
-  // point: none of those queries run, so nothing personal is read, let alone
-  // sent to Google.
+  // Consent off: the body-data block is never built, so nothing personal is read
   const systemContext = personalised ? await buildUserContext(userId) : null
 
   const modelName = provider.model
-  // Withheld rather than declared-and-refused. A model that cannot see a tool
-  // cannot call it, so consent-off needs no per-call enforcement further down
-  // and there is no path by which a read tool runs against this user's rows.
+  // Consent off: no tools are offered, so none can run
   const tools = personalised ? toolsForChatCompletions() : undefined
 
-  // Live data goes LAST, not first. Older assistant turns assert concrete
-  // numbers ("your readiness is 58%"), and a context block pinned at the
-  // top of the thread loses to them on recency — the model kept quoting
-  // stale scores. Freshest data closest to the question wins.
-  // Consent-off replays no transcript either, which costs real continuity — a
-  // follow-up like "what about for beginners?" loses what it refers to.
-  //
-  // It is the only version where the privacy claim is true rather than merely
-  // instructed. Assistant turns written while consent was ON quote concrete
-  // readiness scores and lifted weights, so replaying them would feed exactly
-  // the data the switch was flipped to withhold, and the prompt telling the
-  // model to ignore them is a request, not a guarantee.
+  // Live data goes with the latest message, where it outweighs stale numbers in
+  // older turns. Consent off also replays no history, since earlier replies quote
+  // personal data.
   const replayHistory = personalised ? history : []
 
-  // The persona moves from a faked first user turn to a real system message —
-  // the one place the chat-completions shape is genuinely better than what it
-  // replaced, since a system role is what every provider trains against.
+  // Persona as a real system message
   const messages: ChatCompletionMessageParam[] = [
     { role: 'system', content: personalised ? AI_PERSONA : AI_PERSONA_NO_DATA },
     ...replayHistory.map(item => ({
@@ -464,26 +391,20 @@ export const sendMessage = async ({
   let toolCallsUsed = 0
   let replyText = ''
 
-  // Captured before the loop runs: afterwards the tail of `messages` is a tool
-  // result, not the athlete's question. It carries the live body data block,
-  // so the salvage call keeps the numbers even without the transcript.
+  // The athlete's question with its data block, captured before tool turns are appended
   const questionTurn = messages[messages.length - 1]
 
-  // The same tool results, kept as plain text alongside the real transcript.
-  // Only the salvage call below reads it, and it exists because that call
-  // cannot be built out of `messages` — see `answerWithoutTools`.
+  // Tool results as plain text, for the salvage call
   const toolTranscript: string[] = []
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     await assertWithinBudget(userId)
 
-    // The final round drops the tools. Necessary, but — as the salvage path
-    // below documents — not on its own sufficient.
+    // The final round offers no tools
     const isLastRound = round === MAX_TOOL_ROUNDS - 1
     const offerTools = tools && !isLastRound
 
-    // Cast because `chat_template_kwargs` is NVIDIA's, not part of the typed
-    // chat-completions parameters — the SDK forwards unknown body keys as-is.
+    // Cast: `chat_template_kwargs` is not in the SDK's typed parameters
     const result = await client.chat.completions.create({
       model: modelName,
       messages,
@@ -491,8 +412,7 @@ export const sendMessage = async ({
       ...requestTuning(provider.name),
     } as ChatCompletionCreateParamsNonStreaming)
 
-    // Bill from the provider's own counts before anything else can throw, and
-    // at the price of the model actually used
+    // Bill from the provider's own token counts, at the model actually used
     await recordUsage(userId, result.usage, { modelName })
 
     const modelTurn = result.choices[0]?.message
@@ -501,12 +421,8 @@ export const sendMessage = async ({
     if (calls.length === 0 || isLastRound) {
       replyText = (modelTurn?.content ?? '').trim()
 
-      // A call arriving in the final round is a call against a schema this
-      // request never sent. Running it would spend a round that no longer
-      // exists and bill for a result nothing can read, so it is dropped — and
-      // because it is dropped, the assistant turn carrying it must not be
-      // pushed either: a tool_call with no matching result is rejected on the
-      // next request, which is what the salvage call would hit.
+      // A call in the final round is dropped (and its turn not pushed — an
+      // unanswered tool_call would be rejected by the next request)
       if (!replyText && isLastRound) {
         log.warn('AI produced no prose in its final round', {
           model: modelName,
@@ -518,8 +434,7 @@ export const sendMessage = async ({
       break
     }
 
-    // Echo the model's own turn back before answering it — a tool result with
-    // no matching call in the transcript is rejected by the API.
+    // The model's own turn must precede its tool results
     messages.push(modelTurn as ChatCompletionMessageParam)
 
     const budgetLeft = Math.max(0, MAX_TOOL_CALLS_PER_MESSAGE - toolCallsUsed)
@@ -528,8 +443,7 @@ export const sendMessage = async ({
     toolCallsUsed += allowed.length
 
     for (const call of allowed) {
-      // Only function calls carry a name and arguments; anything else in the
-      // union is a shape this app never declared and cannot execute.
+      // Only function calls are supported
       if (call.type !== 'function') {
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'Unsupported tool type.' }) })
         continue
@@ -538,9 +452,7 @@ export const sendMessage = async ({
       const name = call.function.name
       let response: object
 
-      // Arguments arrive as a JSON *string* here rather than a parsed object,
-      // and a model that emits malformed JSON must be told so rather than
-      // taking the whole message down with a SyntaxError.
+      // Arguments arrive as a JSON string; malformed JSON is reported back to the model
       let args: Record<string, any> = {}
       let argsValid = true
       try {
@@ -561,8 +473,7 @@ export const sendMessage = async ({
         try {
           response = await executeReadTool(userId, name, args)
         } catch (error) {
-          // A failed lookup is reported to the model, not thrown: it can say
-          // it could not check rather than the whole message erroring out.
+          // A failed lookup is reported to the model, not thrown
           log.error('AI tool failed', error, { tool: name })
           response = { error: 'That lookup failed.' }
         }
@@ -578,8 +489,7 @@ export const sendMessage = async ({
       })
     }
 
-    // Every call in the assistant turn must be answered, refused ones included:
-    // the API rejects a transcript where a tool_call has no matching result.
+    // Every tool_call needs a result, refused ones included
     for (const call of refused) {
       messages.push({
         role: 'tool',
@@ -591,19 +501,9 @@ export const sendMessage = async ({
     }
   }
 
-  // Every round spent on lookups and not one word for the athlete. Dropping
-  // the tools was supposed to prevent this and does not: a model that has
-  // already seen tool calls in the transcript infers the schema from them and
-  // keeps calling whatever the request declares. NVIDIA's endpoint returns
-  // finish_reason 'tool_calls' to a request carrying no tools at all, and
-  // ignores tool_choice 'none' as well — verified 3/3 against
-  // nemotron-3-super. What the transcript contains is what the model copies.
-  //
-  // So the salvage call is built without one: the lookups go back as text.
-  //
-  // Skipped when a draft was staged: SALVAGE_PERSONA states there is no card,
-  // which would be a lie next to one, and FALLBACK_WITH_PROPOSAL already says
-  // the right thing for free.
+  // No prose after every round: some endpoints keep emitting tool calls even
+  // with no tools offered, so salvage with a fresh tool-free request.
+  // Skipped when a draft was staged — the fallback text covers that.
   if (!replyText && proposals.length === 0) {
     replyText = await answerWithoutTools({
       userId, client, modelName, providerName: provider.name, questionTurn, toolTranscript,
@@ -628,8 +528,7 @@ export const sendMessage = async ({
     }),
   ])
 
-  // Bind the cards to the message that produced them, so reopening the thread
-  // shows them attached to the right reply rather than floating at the end.
+  // Attach the cards to the reply that produced them
   if (proposals.length > 0) {
     await prisma.aiProposal.updateMany({
       where: { id: { in: proposals.map(p => p.id) } },
@@ -640,9 +539,8 @@ export const sendMessage = async ({
   return { reply: replyText, proposals }
 }
 
-// Get or create a thread for the user
+// The user's latest thread, created if none exists.
 export const getOrCreateThread = async (userId: string) => {
-  // Use latest thread or create new one
   let thread = await prisma.chatThread.findFirst({
     where: { userId },
     orderBy: { createdAt: 'desc' }
@@ -657,12 +555,9 @@ export const getOrCreateThread = async (userId: string) => {
   return thread
 }
 
-// Get thread history formatted for ChatGPT
+// The thread's last 20 messages, oldest first.
 export const getThreadHistory = async (threadId: string) => {
-  // Newest first, then reversed back into reading order. Ordering ascending and
-  // taking 20 returns the OLDEST twenty messages of the thread — so a long
-  // conversation kept re-sending its opening exchanges and never the turn the
-  // user was actually replying to, while paying for the tokens either way.
+  // Newest 20, then reversed into reading order
   const messages = await prisma.aIChat.findMany({
     where: { threadId },
     orderBy: { dateTime: 'desc' },

@@ -9,8 +9,7 @@ const router = Router()
 
 router.use(verifyToken)
 
-// Static and nested paths first: '/scheduled/list' would otherwise be captured
-// by '/:id' and looked up as a template with the id "scheduled".
+// Static paths before '/:id', which would otherwise capture them
 /**
  * @route GET /api/templates/scheduled/list
  * @protected

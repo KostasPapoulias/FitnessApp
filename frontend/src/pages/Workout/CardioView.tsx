@@ -18,15 +18,8 @@ import ChunkBoundary from '../../components/ChunkBoundary'
 import { lazyRetry, warmChunk } from '../../lib/lazyRetry'
 import { FlagIcon, LockIcon, ModalityIcon } from '../../components/icons'
 
-// MapLibre is the heaviest thing the app can load. Split out so it is fetched
-// only when someone actually starts an outdoor session — a lifting workout
-// never touches it.
-//
-// Through lazyRetry and a ChunkBoundary because this fetch happens the instant
-// Start is pressed, outdoors, on cellular. When it failed, the page boundary
-// caught "Importing a module script failed" and took the entire live workout
-// with it — the run kept recording in IndexedDB while the athlete was looking
-// at an empty exercise list. A map is worth none of that.
+// MapLibre is heavy: loaded only for outdoor sessions, through lazyRetry and a
+// ChunkBoundary so a failed fetch on cellular can't take down the live workout
 const loadRouteMap = () => import('../../components/RouteMap')
 const RouteMap = lazyRetry(loadRouteMap)
 
@@ -34,17 +27,10 @@ const stepBtn =
   'w-[34px] h-[34px] rounded-[9px] border border-dark-600 bg-dark-700 text-white ' +
   'text-lg font-bold flex items-center justify-center active:scale-90 transition-transform flex-shrink-0'
 
-/** kcal per metre, matching the estimate this screen has always used. */
+/** kcal per metre for the calorie estimate. */
 const KCAL_PER_METRE = 0.058
 
-/**
- * How each coaching zone reads on screen.
- *
- * 'idle' is not a zone the coach can be in — it is what the strip shows before
- * the rolling window has enough to say anything, which is the first minute of
- * every run. Showing "on target" through that would be a guess dressed as a
- * measurement.
- */
+/** How each coaching zone reads on screen; 'idle' is the first minute, before the window can judge. */
 const ZONE: Record<CoachMode, Record<PaceZone | 'idle', { label: string; color: string }>> = {
   follow: {
     on: { label: 'On target', color: '#00D4AA' },
@@ -52,8 +38,7 @@ const ZONE: Record<CoachMode, Record<PaceZone | 'idle', { label: string; color: 
     fast: { label: 'Ahead of target', color: '#FACC15' },
     idle: { label: 'Finding your pace', color: '#AAAAAA' },
   },
-  // A dial is never "finding" anything — it is set or it is not, from the first
-  // second. And it is the SETTING that is wrong, not the athlete.
+  // A dial is set from the first second; it's the setting that's off, not the athlete
   dial: {
     on: { label: 'Dial matches target', color: '#00D4AA' },
     slow: { label: 'Dial set too slow', color: '#F97316' },
@@ -62,61 +47,34 @@ const ZONE: Record<CoachMode, Record<PaceZone | 'idle', { label: string; color: 
   },
 }
 
-/**
- * The map's own box, shared by the map and by both of its placeholders so they
- * cannot disagree about how tall the slot is. An explicit height rather than
- * h-full on purpose — see the wrapper below.
- */
+/** Shared by the map and its placeholders so the slot height can't disagree. */
 const MAP_BOX = 'w-full h-[190px]'
 
+/** Live cardio: GPS route and pace, a manual speed dial, or a rep counter, per the movement. */
 export default function CardioView({ onFinish, registerVoice }: ModalityViewProps) {
   const { selectedExercises, currentExerciseIndex, cardioTarget, completeSet } = useWorkoutStore()
   const exercise = selectedExercises[currentExerciseIndex]?.exercise
   const activity = exercise?.name ?? 'Outdoor Run'
 
   /**
-   * What measures this movement, and therefore what this screen is.
-   *
-   *   'gps'     a map, a route, a followed pace — and a manual fallback for the
-   *             treadmill, because the same Running entry covers both
-   *   'machine' a pace but nothing to measure it: the dial only, no route, and
-   *             no location permission ever requested
-   *   'reps'    no distance at any effort — a counter, and no pace
-   *
-   * Falls back to 'gps' when absent, which is what every cardio session did
-   * before the field existed: an exercise still sitting in an older cache must
-   * not lose its map.
+   * What measures this movement: 'gps' (map + route, manual fallback),
+   * 'machine' (dial only, never asks for location) or 'reps' (a counter, no pace).
+   * Absent → 'gps', for exercises cached before the field existed.
    */
   const tracking = exercise?.cardioTracking ?? 'gps'
   const repUnit = exercise?.repUnit ?? 'reps'
 
-  /**
-   * What this movement is typically done at, in m/s, and the dial built from it.
-   *
-   * The dial used to be a fixed 1.8-4.6 m/s with a 2.85 m/s default — a
-   * runner's range with a jogging default, applied to everything. On a fan bike
-   * (reference 28 km/h, 7.78 m/s) the maximum was 16.6 km/h, so the movement's
-   * own baseline was not merely a bad default, it was unreachable: every air
-   * bike session opened at a jogging speed and logged the distance to match,
-   * which is why the average pace read around 5:30 instead of 2:08. Walking on
-   * a treadmill at 4 km/h was equally inexpressible from the other end.
-   *
-   * 10 km/h for a movement with no reference speed, which is what the old
-   * default was worth anyway.
-   */
+  /** The movement's typical speed (m/s); the dial is built around it. 10 km/h when unknown. */
   const referenceMps = (exercise?.referenceSpeedKmh ?? 10) / 3.6
   const dial = {
     min: referenceMps * 0.35,
     max: referenceMps * 1.8,
-    // Proportional, so the number of taps from one end to the other is the same
-    // whatever the movement. A fixed 0.15 m/s is a fifth of a walking pace and
-    // a fiftieth of a fan bike's.
+    // Proportional, so the dial has the same number of taps for any movement
     step: referenceMps * 0.05,
   }
 
-  // Decided once, at construction. The tracker opens a location watch the
-  // instant it mounts, so switching afterwards would raise the OS prompt for a
-  // session that can never use a fix.
+  // Fixed at mount: the tracker starts a location watch immediately, so a
+  // non-GPS movement must never open one
   const run = useRunTracker(activity, tracking === 'gps' ? 'gps' : 'manual')
   const wakeLock = useWakeLock()
 
@@ -126,21 +84,11 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   const [locked, setLocked] = useState(false)
   /** Set once the athlete has answered the recovered-run prompt. */
   const [keptRecovered, setKeptRecovered] = useState(false)
-  // m/s, the dial. Opens on what the movement is actually done at.
+  // m/s, the dial; opens at the movement's reference speed
   const [manualPace, setManualPace] = useState(referenceMps)
-  // The exercise can change under a mounted screen, and a dial left on the
-  // previous movement's speed is worse than one that resets: it silently
-  // measures a bike session at a jogging pace. Keyed on the reference so an
-  // adjustment the athlete made is not undone on every render.
+  // Reset the dial when the exercise changes, or a bike is measured at a jogging pace
   useEffect(() => { setManualPace(referenceMps) }, [referenceMps])
-  /**
-   * Counted work, for a movement with no distance at any effort.
-   *
-   * Held here and written once at the end, like every other cardio number: the
-   * count is not a stream of events to be logged as they happen, it is one
-   * quantity the athlete reports. Tapping it forty times must not be forty
-   * writes.
-   */
+  /** Counted work for a movement with no distance; written once at the end. */
   const [repCount, setRepCount] = useState(0)
   const [summary, setSummary] = useState<RunSummary | null>(null)
 
@@ -148,8 +96,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   const km = meters / 1000
   const cals = meters * KCAL_PER_METRE
 
-  // A run is the longest stretch in the app with the phone in a pocket or on an
-  // armband, so a split that only exists on screen is a split nobody sees.
+  // The phone is in a pocket, so splits are spoken as well as shown
   const cue = useLiveCues()
 
   const {
@@ -157,30 +104,13 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     voice, setVoice, setPacePlan, setAudio,
   } = useSessionPrefsStore()
 
-  /**
-   * Whether a pace exists to coach.
-   *
-   * Reads `cardioTracking`, not `referenceSpeedKmh`. The old check used the
-   * latter and got the stair climber wrong in one direction and a
-   * missing-from-the-array exercise wrong in the other: `undefined !== null` is
-   * true, so an out-of-range index counted as paced.
-   */
+  /** Whether there is a pace to coach. */
   const paced = tracking !== 'reps'
 
-  /**
-   * Which coach. The GPS one judges a measurement that drifts on its own; the
-   * dial one judges a setting that changes instantly and exactly. Same machine,
-   * different constants and different words — see CoachMode.
-   */
+  /** GPS coach judges a drifting measurement; dial coach judges an exact setting (see CoachMode). */
   const coachMode: CoachMode = source === 'gps' ? 'follow' : 'dial'
 
-  /**
-   * The coach's own switch for THIS run.
-   *
-   * Separate from the stored preference: silencing it at kilometre six is about
-   * this run, not about never wanting one again. The stored flag decides
-   * whether it starts on.
-   */
+  /** The coach switch for this run only; the stored preference sets its initial state. */
   const [coachOn, setCoachOn] = useState(paceCoach)
   useEffect(() => { setCoachOn(paceCoach) }, [paceCoach])
   const [paceSheet, setPaceSheet] = useState(false)
@@ -195,21 +125,13 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     running: run.running,
     plan,
     mode: coachMode,
-    // The setting on a dial, the measurement on GPS. Feeding the rolling
-    // window in manual mode had the coach correcting the athlete against a
-    // number they had typed, then rewarding them for changing it.
+    // The dial's setting in manual mode — coaching against a typed number is meaningless
     paceSec: coachMode === 'dial' ? dialPaceSec : run.rollingPaceSec,
     meters: run.meters,
     elapsedSec: run.elapsedSec,
   })
 
-  /**
-   * Turning the coach on turns audio cues on with it.
-   *
-   * Speaking is the only thing the coach does. Leaving it possible to switch on
-   * a coach that cannot be heard produces a switch that visibly does nothing,
-   * which is indistinguishable from a broken feature.
-   */
+  /** Turning the coach on also turns audio cues on; it can only speak. */
   const enableCoach = (on: boolean) => {
     setCoachOn(on)
     if (on && !audio) setAudio(true)
@@ -217,18 +139,11 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
 
   const planLabel = describePlan(plan)
 
-  // Announce each kilometre as it lands.
-  //
-  // Keyed off the split COUNT, not the distance: `meters` updates several times
-  // a second and any threshold test on it either fires repeatedly or misses the
-  // crossing entirely. `advanceSplits` already decides where a kilometre ends,
-  // so the list growing is the event — and it is the same event the on-screen
-  // list renders, which means the two can never disagree.
+  // Announce each kilometre, keyed on the split count (the same event the list renders)
   const announcedSplits = useRef(0)
   useEffect(() => {
     if (splits.length <= announcedSplits.current) {
-      // A resumed run rehydrates its splits from IndexedDB; those already
-      // happened, so adopt the count rather than reading four kilometres out.
+      // Resumed splits already happened: adopt the count without announcing
       announcedSplits.current = splits.length
       return
     }
@@ -239,8 +154,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     cue.say(cues.kmSplit(latest.index, splitPace(latest)))
   }, [splits]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Same shape for hand-marked laps, which are a separate list on a separate
-  // origin — merged only for display, so they need their own watcher.
+  // Same for hand-marked laps, a separate list
   const announcedLaps = useRef(0)
   useEffect(() => {
     if (laps.length <= announcedLaps.current) { announcedLaps.current = laps.length; return }
@@ -251,29 +165,21 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     cue.say(cues.lapMarked(latest.index))
   }, [laps]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The effort dial only feeds distance when there is no GPS to feed it.
-  // Destructured so this tracks the dial, not every render of the screen.
+  // The dial feeds distance only without GPS
   const { setManualSpeed } = run
-  // Zero for a counted movement, which is the whole reason it is passed at all
-  // here. The tracker accrues `manualSpeed x elapsed` every tick while in
-  // manual mode, so leaving the default 2.85 m/s in place would have logged a
-  // ten-minute rope session as 1.7 km covered and fed that distance straight
-  // into the fatigue model as if it were ground.
+  // Zero for a counted movement, or elapsed time would accrue phantom distance
+  // that feeds the fatigue model
   useEffect(() => {
     setManualSpeed(tracking === 'reps' ? 0 : manualPace)
   }, [manualPace, tracking, setManualSpeed])
 
-  // Fetch the map while the athlete is still standing at the start gate. By the
-  // time Start is pressed it is in the module cache, so the one request most
-  // likely to fail has already happened — with a phone that is stationary and
-  // still in whatever signal the door had.
+  // Prefetch the map at the start gate, while the signal is still good
   useEffect(() => {
     if (tracking === 'gps' && source === 'gps') warmChunk(loadRouteMap)
   }, [tracking, source])
 
   const beginRun = () => {
-    // Must happen inside the tap: iOS refuses a wake lock that is not tied to a
-    // user gesture, and an effect runs after paint, outside that window.
+    // Inside the tap: iOS grants a wake lock only from a user gesture
     wakeLock.request()
     run.start()
     cue.buzz('logged')
@@ -281,8 +187,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   }
 
   const endRun = () => {
-    // Stop the GPS and freeze the numbers before the RPE prompt, so a slow
-    // rating does not keep adding metres to a run that finished.
+    // Freeze the numbers before the RPE prompt so a slow rating adds no distance
     setSummary(run.stop())
     cue.buzz('complete')
     wakeLock.release()
@@ -290,17 +195,13 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     setRating(true)
   }
 
-  // Log a SetCardio (distance in km, time in seconds) so history + fatigue
-  // record it. The RPE comes from the athlete — an easy jog and a threshold
-  // effort of the same length are not the same training load.
+  // Log the SetCardio (km, seconds) with the athlete's RPE
   const endSession = async (rpe: number) => {
-    // Ref guard: the summary-set request keeps this button on screen, so a
-    // second tap would log the run twice and finish twice.
+    // Ref guard against a double tap logging the run twice
     if (endingRef.current) return
     endingRef.current = true
     setEnding(true)
-    // A failed summary set must not strand the user in the tracker — the
-    // Finish screen surfaces the error either way.
+    // A failed summary set must not strand the user; Finish surfaces the error
     const loggedKm = Math.round(((summary?.meters ?? meters) / 1000) * 100) / 100
     const loggedSec = summary?.elapsedSec ?? elapsedSec
     await completeSet({
@@ -308,20 +209,12 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       time: loggedSec,
       rpe,
       restSeconds: 0,
-      // The count, where one exists. This is what lets the fatigue model tell a
-      // continuous ten minutes of rope from a broken one — see cardioHse.
+      // Lets the fatigue model tell a continuous effort from a broken one (see cardioHse)
       reps: tracking === 'reps' && repCount > 0 ? repCount : undefined,
-      // The route, the splits and the pace the run was actually done at. Without
-      // this the calendar has a distance and nothing else to show for the hour.
-      //
-      // Skipped entirely for a counted movement: a RunTrack with zero distance,
-      // no route and no splits is a row the calendar will offer to open as a
-      // run and then show nothing for.
+      // Route, splits and pace for the calendar; skipped for a counted movement
       run: tracking === 'reps' ? undefined : (summary ?? undefined),
     })
-    // Confirmation that it persisted, on the same two channels a logged set
-    // uses — a run is one write at the very end, so this is the only signal
-    // that an hour of work actually landed.
+    // The only confirmation that the run was saved
     cue.buzz('logged')
     const loggedMin = Math.max(1, Math.round(loggedSec / 60))
     cue.say(tracking === 'reps'
@@ -330,32 +223,20 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     onFinish()
   }
 
-  /**
-   * Counts per minute, or null before there is enough to divide by.
-   *
-   * Null rather than 0: at eight seconds in, a count of two is 15/min, which is
-   * a true division and a meaningless number. The em dash says "not yet"; a
-   * figure would have said "this is your cadence".
-   */
+  /** Counts per minute; null for the first 20 s, when the division is meaningless. */
   const repRate = elapsedSec >= 20 && repCount > 0
     ? Math.round(repCount / (elapsedSec / 60))
     : null
 
-  /** What the athlete is doing right now — falls to zero the moment they stop. */
+  /** Current pace; falls to zero when the athlete stops. */
   const livePaceSecPerKm = paceFromSpeed(source === 'manual' ? manualPace : speedMps)
   /**
-   * What the run will be remembered as.
-   *
-   * The finish summary uses this and not the live pace: by the time anyone taps
-   * End they have stopped moving, the smoothed speed has decayed to zero, and
-   * the live pace with it — which is why every finished run reported 00:00.
+   * The run's average pace, used by the finish summary (the live pace has
+   * decayed to zero by the time End is tapped). From the tracker, not
+   * recomputed here (see avgPaceSec).
    */
-  // From the tracker, not recomputed here: dividing the continuous `meters` by
-  // a whole-second `elapsedSec` sawtoothed the result by ~10s/km. See avgPaceSec.
   const avgPaceSecPerKm = summary?.avgPaceSec ?? run.avgPaceSec
-  // Relative to the movement, not in absolute m/s. The old thresholds were
-  // running speeds, so every fan-bike setting read "Threshold" and every
-  // walking one read "Recovery" — a label that never changes says nothing.
+  // Relative to the movement's reference speed, so the effort label means something on any machine
   const effortRatio = referenceMps > 0 ? manualPace / referenceMps : 1
   const effortLabel =
     effortRatio >= 1.15 ? 'Threshold'
@@ -367,20 +248,9 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       Math.round((v + steps * dial.step) * 100) / 100)))
 
   /**
-   * Why GPS is not available, or null if it is.
-   *
-   * This exists because "Back to GPS" looked like a dead button. Tapping it
-   * opened a watch, the watch errored, and `onGeolocationError` put the source
-   * straight back to manual — so the screen returned to the dial within a
-   * second and nothing said why. Three causes, and only one of them is
-   * something the athlete can do anything about:
-   *
-   *   insecure context — the page is on plain http, and Chrome refuses
-   *     `deviceorientation` and geolocation there outright. A dev server
-   *     reached over the LAN by IP is the usual case and no permission grant
-   *     will ever fix it.
-   *   denied — a real permission refusal, which system settings can undo.
-   *   unavailable — no geolocation API at all.
+   * Why GPS is unavailable, or null. Shown so "Back to GPS" doesn't look dead:
+   * insecure context (plain http — no grant fixes it), denied (fixable in
+   * settings), or unavailable (no API).
    */
   const gpsRefusal: { title: string; detail: string } | null =
     typeof window !== 'undefined' && !window.isSecureContext
@@ -409,21 +279,20 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     idle: { ok: false, label: 'GPS idle' },
   }[status]
 
-  // Kilometres and hand-marked laps are two different lists kept on two
-  // different origins; they are only merged for display, newest first.
+  // Kilometres and hand-marked laps merged for display, newest first
   const shownSplits = [...splits, ...laps]
     .sort((a, b) => b.endMeters - a.endMeters)
     .slice(0, 4)
     .map((sp: Split) => ({
       key: `${sp.auto ? 'km' : 'lap'}-${sp.index}`,
-      // A number for an automatic split, the flag for one the athlete marked.
+      // A number for an automatic split, a flag for a marked lap
       badge: sp.auto ? String(sp.index) : <FlagIcon className="w-3.5 h-3.5" />,
       label: sp.auto ? `Km ${sp.index}` : `Lap · ${(sp.meters / 1000).toFixed(2)} km`,
       pace: `${fmtTime(splitPace(sp))} /km`,
       time: fmtTime(sp.seconds),
     }))
 
-  // goal from the plan
+  // Goal from the plan
   const goalLabel = cardioTarget
     ? cardioTarget.type === 'distance' ? `${cardioTarget.value} km` : fmtTime(cardioTarget.value)
     : null
@@ -434,19 +303,14 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     : 0
 
   // ── start gate ──
-  // The phone is in a pocket or on an armband for the whole of this, which is
-  // the strongest case for voice anywhere in the app. Above the early returns
-  // because it is a hook and those are conditional.
+  // Voice control; above the early returns because it is a hook
   useModalityVoice(registerVoice, command => {
     switch (command.kind) {
       case 'pauseRest':
         run.pause()
         return true
       case 'resumeRest':
-        // Resuming re-requests the wake lock for the same reason the button
-        // does: iOS only grants one from a gesture, and a long pause has
-        // usually outlived the last grant. A refusal is not fatal — the run
-        // keeps going, the screen may just sleep.
+        // Re-request the wake lock (gesture only on iOS); a refusal isn't fatal
         wakeLock.request()
         run.resume()
         return true
@@ -470,11 +334,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           : 'Free run. Press start when you begin moving.'}
         onStart={beginRun}
       >
-        {/* The source, chosen BEFORE the clock starts.
-            It used to be reachable only from the live screen, so anyone who
-            knew they were on a treadmill had to start a GPS session, watch it
-            hunt for a fix, and then switch. It is also the one decision that
-            changes which coach runs, and the coach is configured right below. */}
+        {/* Source chosen before the clock starts; it also decides which coach runs */}
         {tracking === 'gps' && (
           <div className="grid grid-cols-2 gap-2 mb-3">
             {([
@@ -577,9 +437,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   return (
     <div
       className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4"
-      // A pull-to-refresh in a standalone PWA reloads the page. The run is
-      // recovered from IndexedDB if that happens, but not losing it in the
-      // first place is better.
+      // Stop pull-to-refresh from reloading the page mid-run
       style={{ overscrollBehavior: 'none' }}
     >
       {/* header */}
@@ -593,11 +451,8 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         </div>
       </div>
 
-      {/* Recovered after a reload or an OS kill mid-run.
-          Shown until it is answered, not only when the wake lock is missing: a
-          resumed session arrives carrying a distance, a clock and a track from
-          before, and silently adopting all three is how a stale run from an hour
-          ago turns up looking like a short route nobody just ran. */}
+      {/* Recovered after a reload or OS kill: shown until answered, so a stale
+          run isn't silently adopted */}
       {run.recovered && !keptRecovered && (
         <div className="w-full mt-3 rounded-btn border border-brand-teal/40 bg-[#0a2a22] px-3.5 py-2.5">
           <p className="text-[12px] font-bold text-brand-teal">Run recovered</p>
@@ -609,7 +464,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           <div className="flex gap-2 mt-2.5">
             <button
               onClick={() => {
-                // Inside the tap: iOS grants a wake lock only from a gesture.
+                // Inside the tap: iOS grants a wake lock only from a gesture
                 wakeLock.request()
                 setKeptRecovered(true)
               }}
@@ -650,13 +505,10 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         </div>
       )}
 
-      {/* stats — average pace sits beside the live one, because they answer
-          different questions: "am I holding it?" and "what did I do?" */}
+      {/* stats — live pace beside the average */}
       <div className="grid grid-cols-4 gap-1.5 mt-4">
         {(tracking === 'reps'
-          // Pace and distance are both zero here and always will be. Showing
-          // "0.00 km" and "00:00 now / km" is not a neutral omission — it reads
-          // as a tracker that has stopped working.
+          // No pace or distance for a counted movement; zeros would look broken
           ? [
               { v: String(repCount), u: repUnit },
               { v: repRate === null ? '—' : String(repRate), u: `${repUnit} / min`, accent: true },
@@ -679,11 +531,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         ))}
       </div>
 
-      {/* Coach and microphone, always on screen.
-          The first version hid each control once it was switched off, so
-          turning the mic off removed the only thing that could turn it back on
-          — the way out was to end the session. A switch you can only press once
-          is not a switch. */}
+      {/* Coach and microphone, always shown so either can be switched back on */}
       {paced && (
         <div className="mt-3">
           <CoachControls
@@ -702,17 +550,10 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         </div>
       )}
 
-      {/* route map
-          The height lives on the map itself, not on this wrapper. A map sized
-          with h-full depends on every ancestor resolving a definite height, and
-          when one of them does not the percentage collapses to zero — MapLibre
-          then silently substitutes its own 300px default, renders a full canvas
-          into a 2px-tall clipped box, and reports no error at all. An explicit
-          height cannot fail that way. */}
+      {/* route map — the height is explicit on the map (MAP_BOX): with h-full a
+          collapsed ancestor gives MapLibre a 0px box and it fails silently */}
       {tracking === 'reps' ? (
-        /* The counter takes the map's slot. Nothing on a rope has a route, so
-           the alternative was an empty grey box where a map goes, which reads
-           as a map that failed rather than as one that does not apply. */
+        /* The counter takes the map's slot */
         <div className="w-full mt-3.5 bg-dark-800 border border-dark-600 rounded-card px-4 py-4">
           <div className="flex items-baseline justify-between">
             <div className="text-[10px] tracking-wide text-dark-400">
@@ -760,8 +601,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
             ))}
           </div>
 
-          {/* Said plainly, because the alternative is an athlete assuming the
-              app is counting for them and reporting nothing. */}
+          {/* Said plainly, so nobody assumes the app is counting for them */}
           <p className="text-[11px] text-dark-500 mt-2.5 leading-snug">
             Optional. Left at zero the set is scored on its duration — a count
             only sharpens it, by separating a continuous ten minutes from a
@@ -798,8 +638,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
               getPoints={run.getPoints}
               pointCount={run.pointCount}
               follow={running}
-              // Where the phone says it is, which is the only thing the map has
-              // to go on until a fix clears the accuracy filter.
+              // The raw position, until a fix passes the accuracy filter
               center={run.position ? [run.position.lng, run.position.lat] : null}
               className={MAP_BOX}
             />
@@ -835,9 +674,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       </div>
       )}
 
-      {/* the dial — whenever nothing is measuring distance for us, EXCEPT a
-          counted movement, where there is no distance to measure at all and a
-          speed control would be a knob wired to nothing. */}
+      {/* the dial — whenever nothing measures distance, except a counted movement */}
       {tracking === 'reps' ? null : source === 'manual' ? (
         <div className="mt-3.5 bg-dark-800 border border-dark-600 rounded-card px-4 py-3.5">
           <div className="flex items-center justify-between">
@@ -845,24 +682,14 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
               <div className="text-[10px] tracking-wide text-dark-400">SPEED YOU'RE SETTING BY HAND</div>
               <div className="text-base font-bold mt-0.5">{effortLabel}</div>
             </div>
-            {/*
-              + is faster, and that is not negotiable even though the number
-              between the buttons goes DOWN when it is pressed.
-              The card is headed by a speed and an effort tier; having + drop
-              the effort from Tempo to Easy so that a pace could count upward
-              made the one control on screen disagree with both labels above
-              it. Pace is shown because pace is what the coach speaks; the
-              buttons follow the effort, which is what the athlete is choosing.
-            */}
+            {/* + is faster (follows the effort), even though the pace number goes down */}
             <div className="flex items-center gap-2">
               <button className={stepBtn} aria-label="Slower" onClick={() => effort(-1)}>−</button>
               <div className="min-w-[68px] text-center">
                 <div className="text-[15px] font-extrabold tabular-nums">
                   {fmtTime(livePaceSecPerKm)}/km
                 </div>
-                {/* Both units, because neither alone is readable on every
-                    machine: a treadmill is set in km/h, a runner thinks in
-                    pace, and 2:08/km on a fan bike means nothing to anyone. */}
+                {/* Both units: treadmills use km/h, runners think in pace */}
                 <div className="text-[10px] text-dark-400 tabular-nums mt-0.5">
                   {(manualPace * 3.6).toFixed(1)} km/h
                 </div>
@@ -871,13 +698,10 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
             </div>
           </div>
 
-          {/* Only where a fix could ever have helped. On an erg or in a pool
-              this button offers a permission prompt in exchange for nothing. */}
+          {/* Only where a GPS fix could help */}
           {tracking === 'gps' && (
             gpsRefusal ? (
-              // Still tappable: a permission can be granted while this is on
-              // screen, and the retry is the only way to find out. What it must
-              // not do is look like a switch that works.
+              // Still tappable: permission may be granted meanwhile, and a retry is the only check
               <button
                 onClick={run.useGps}
                 className="w-full mt-3 px-3 py-2.5 rounded-btn border border-dark-600
@@ -932,7 +756,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
                               text-xs font-extrabold text-dark-200">{sp.badge}</div>
               <div className="flex-1 min-w-0">
                 <div className="text-[13.5px] font-semibold">{sp.label}</div>
-                {/* The pace is the point of a split; the raw time is context. */}
+                {/* The pace matters most; the raw time is context */}
                 <div className="text-[11px] text-dark-400 tabular-nums mt-0.5">{sp.pace}</div>
               </div>
               <div className="text-sm font-extrabold tabular-nums">{sp.time}</div>
@@ -946,8 +770,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       <div className="grid grid-cols-2 gap-2.5 mt-4">
         <button onClick={() => {
           if (running) return run.pause()
-          // Resuming is a gesture, and a paused run has usually been paused
-          // long enough for the lock to have gone with it.
+          // Resuming is a gesture; a long pause has usually lost the lock
           wakeLock.request()
           run.resume()
         }}
@@ -964,17 +787,12 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         </button>
       </div>
 
-      {/* Not for a counted movement. The lock screen is built around a distance
-          and a pace, and it would show 0.00 km and 00:00 for the whole session
-          — and the count needs taps, so locking the screen defeats it. The wake
-          lock is still taken at Start, which is the part that mattered. */}
+      {/* Not for a counted movement: the lock screen shows distance and pace,
+          and counting needs taps */}
       {tracking !== 'reps' && (
         <button
           onClick={() => {
-            // Re-requested here and not just at Start. By the time anyone locks
-            // the screen the original lock is routinely gone — every trip to the
-            // home screen or the music controls drops it — and this tap is a
-            // fresh user gesture, which is the only thing iOS grants one from.
+            // Re-requested here: the Start lock is often gone by now, and this tap is a gesture
             wakeLock.request()
             setLocked(true)
           }}

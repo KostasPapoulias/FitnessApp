@@ -1,14 +1,7 @@
 import BottomSheet from '../BottomSheet'
 import { VOICE_COMMAND_GROUPS } from '../../constants/voiceCommands'
 
-/**
- * The full command list, on demand.
- *
- * A coach mark teaches once and never returns; this is the part someone can go
- * back to in week three when they can remember that half-plates work but not
- * how to say it. Reachable from the Smart Features card and from the live strip
- * itself, so it is never more than one tap from the place it is needed.
- */
+/** The full voice-command reference, opened from the live voice strip or the Smart Features card. */
 export default function VoiceCommandSheet({ onClose }: { onClose: () => void }) {
   return (
     <BottomSheet

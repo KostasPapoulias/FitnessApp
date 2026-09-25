@@ -5,15 +5,8 @@ import { fmtTime } from '../../pages/Workout/helpers'
 import { NoteIcon } from '../icons'
 
 /**
- * What this athlete has actually done with one movement.
- *
- * ExerciseDetail rendered a description and three stat tiles, one of which was a
- * hardcoded dash — so the screen you open immediately before performing an
- * exercise could not tell you what you did last time. That is the moment the
- * data is worth the most, and every set of it was already in Postgres.
- *
- * The most recent entry is expanded on arrival. "What did I lift last time" is
- * the question being asked, and making it a tap is making the answer optional.
+ * The athlete's own history with one exercise: best e1RM, top set, average
+ * RPE and recent sessions (the latest expanded on arrival).
  */
 
 const fmtDate = (iso: string) => {
@@ -25,13 +18,7 @@ const fmtDate = (iso: string) => {
   return `${label} · ${days} days ago`
 }
 
-/**
- * One set as a single line, in whatever units its modality actually recorded.
- *
- * A set has exactly one modality row behind it, so the fields not belonging to
- * it are null — printing "0 kg" or "0 km" for those is how a run ends up
- * looking like a failed lift.
- */
+/** One set as a line, in the units its modality recorded (never "0 kg" for a run). */
 const describeSet = (set: ExerciseHistorySet): string => {
   const parts: string[] = []
 
@@ -73,7 +60,7 @@ export default function ExerciseHistoryCard({ exerciseId }: { exerciseId: string
       .then(data => {
         if (cancelled) return
         setHistory(data)
-        // Most recent entry open on arrival — see the note above.
+        // Most recent entry open on arrival
         setOpenId(data.entries[0]?.sessionId ?? null)
       })
       .catch(() => { if (!cancelled) setFailed(true) })
@@ -81,8 +68,7 @@ export default function ExerciseHistoryCard({ exerciseId }: { exerciseId: string
     return () => { cancelled = true }
   }, [exerciseId])
 
-  // Averaged across the sets that carry a rating, not across all of them — RPE
-  // is optional, and counting an unrated set as zero drags the mean down.
+  // Averaged over rated sets only; RPE is optional
   const avgRpe = useMemo(() => {
     if (!history) return null
     const rated = history.entries.flatMap(e => e.sets.map(s => s.rpe)).filter((r): r is number => r != null)
@@ -104,9 +90,7 @@ export default function ExerciseHistoryCard({ exerciseId }: { exerciseId: string
     )
   }
 
-  // A failed read is said out loud rather than shown as an empty history — "you
-  // have never done this" and "we could not check" are different claims, and the
-  // wrong one would send someone into a session with no reference point.
+  // A failed read is shown as an error, never as an empty history
   if (failed || !history) {
     return (
       <div className="p-4">
@@ -186,8 +170,7 @@ function Entry({ entry, isOpen, onToggle }: {
           <p className="text-dark-400 text-[11px] mt-0.5 flex items-center gap-1">
             {entry.sets.length} set{entry.sets.length === 1 ? '' : 's'}
             {entry.e1rm != null && ` · est. ${entry.e1rm}kg`}
-            {/* Marks the entries worth opening while they are collapsed —
-                otherwise a note is only found by opening every one. */}
+            {/* Flags entries that carry a note */}
             {entry.notes && (
               <span role="img" aria-label="Has a note" className="flex-shrink-0 ml-0.5">
                 <NoteIcon className="w-3 h-3 text-brand-teal" />

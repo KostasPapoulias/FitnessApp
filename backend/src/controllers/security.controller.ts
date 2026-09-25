@@ -7,13 +7,8 @@ import { revokeAllTokens } from '../services/token-version.service'
 import { log } from '../lib/logger'
 
 /**
- * Screen lock and session control.
- *
- * A word on what the PIN is and is not. It gates the app on a device that is
- * already signed in — the case where someone picks up an unlocked phone. It is
- * NOT a second authentication factor: the API token still lives on the device,
- * so anyone who can read storage bypasses it entirely. Treated as what it is,
- * it is genuinely useful; sold as more than that, it would be misleading.
+ * PIN screen lock and session control. The PIN gates an already signed-in
+ * device; it is not a second authentication factor.
  */
 
 const PIN_ROUNDS = 10
@@ -21,8 +16,7 @@ const PIN_ROUNDS = 10
 const MAX_PIN_ATTEMPTS = 5
 const LOCKOUT_MINUTES = 5
 
-// GET /api/security/pin
-// Whether a PIN is set, and whether entry is currently locked out
+// GET /api/security/pin — whether a PIN is set and whether entry is locked out
 export const getPinStatus = async (req: AuthRequest, res: Response) => {
   try {
     const settings = await prisma.settings.findUnique({
@@ -36,7 +30,7 @@ export const getPinStatus = async (req: AuthRequest, res: Response) => {
     res.json({
       success: true,
       data: {
-        // Never the hash itself, only whether one exists
+        // Only whether a hash exists
         enabled: Boolean(settings?.pinHash),
         locked,
         lockedUntil: locked ? lockedUntil : null,
@@ -49,9 +43,7 @@ export const getPinStatus = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// PUT /api/security/pin
-// Set or change the PIN. Changing one requires the current PIN; the account
-// password is the way back in if it has been forgotten.
+// PUT /api/security/pin — set or change the PIN
 export const setPin = async (req: AuthRequest, res: Response) => {
   try {
     const { pin, currentPin, password } = req.body
@@ -67,8 +59,7 @@ export const setPin = async (req: AuthRequest, res: Response) => {
       select: { pinHash: true },
     })
 
-    // Replacing an existing PIN needs proof of the old one, or the password.
-    // Without this, anyone holding an unlocked phone could simply set their own.
+    // Replacing an existing PIN needs the old PIN or the account password
     if (settings?.pinHash) {
       const byPin = typeof currentPin === 'string' &&
         await bcrypt.compare(currentPin, settings.pinHash)
@@ -91,11 +82,7 @@ export const setPin = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Hashed once. Both branches of an upsert are evaluated when the object is
-    // built — only one is used — so the inline version ran bcrypt TWICE on
-    // every call and threw one result away. bcrypt is deliberately slow (that
-    // is the point of it), so this was ~100 ms of pure waste per request, and
-    // unlike a round trip it is CPU on the server rather than time on the wire.
+    // Hashed once, outside the upsert (both branches would be evaluated)
     const pinHash = await bcrypt.hash(pin, PIN_ROUNDS)
 
     await prisma.settings.upsert({
@@ -115,9 +102,7 @@ export const setPin = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// DELETE /api/security/pin
-// Removing the lock requires the PIN or the password, for the same reason
-// setting it over an existing one does.
+// DELETE /api/security/pin — requires the PIN or the password
 export const removePin = async (req: AuthRequest, res: Response) => {
   try {
     const { pin, password } = req.body
@@ -158,9 +143,7 @@ export const removePin = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// POST /api/security/pin/verify
-// Unlock the app. Verified server-side rather than by comparing in the client,
-// so the correct PIN is never sitting in the bundle or in device storage.
+// POST /api/security/pin/verify — verified server-side only
 export const verifyPin = async (req: AuthRequest, res: Response) => {
   try {
     const { pin } = req.body
@@ -189,8 +172,7 @@ export const verifyPin = async (req: AuthRequest, res: Response) => {
     const valid = typeof pin === 'string' && await bcrypt.compare(pin, settings.pinHash)
 
     if (!valid) {
-      // A four-digit PIN is 10,000 guesses. Counting failures server-side is
-      // what makes that number mean anything.
+      // Count failures server-side; lock after MAX_PIN_ATTEMPTS
       const attempts = settings.pinFailedAttempts + 1
       const lock = attempts >= MAX_PIN_ATTEMPTS
 
@@ -228,8 +210,7 @@ export const verifyPin = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// POST /api/security/sign-out-everywhere
-// Invalidates every token this account holds, including the caller's.
+// POST /api/security/sign-out-everywhere — revokes every token, including the caller's
 export const signOutEverywhere = async (req: AuthRequest, res: Response) => {
   try {
     await revokeAllTokens(req.userId!)
@@ -240,10 +221,7 @@ export const signOutEverywhere = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// PUT /api/security/password
-// Changing the password revokes every existing token — a password change that
-// leaves old sessions working has not really changed anything for someone whose
-// token was stolen.
+// PUT /api/security/password — also revokes every existing token
 export const changePassword = async (req: AuthRequest, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body

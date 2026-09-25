@@ -1,14 +1,6 @@
 /**
- * The shape a finished run travels and is stored in.
- *
- * Deliberately its own type rather than the tracker's RunSummary. A summary
- * carries the live TrackPoint array — timestamps, accuracies, altitudes, one
- * entry per fix — which is what the tracker needs while running and is several
- * times the size of anything a history screen can use. What crosses the wire is
- * the drawn route and the numbers, nothing else.
- *
- * The same type comes back out of the API, so the run detail screen and the
- * live screen agree on what a run is by construction.
+ * A finished run as sent to and returned by the API: the drawn route and the
+ * numbers, without the tracker's raw fixes.
  */
 
 import { RouteSegment, Split } from './geo'
@@ -25,14 +17,13 @@ export interface RunPayload {
   source: string
   /** Gap-segmented [lng, lat] pairs. Empty for a manual session. */
   route: RouteSegment[]
-  /** [[west, south], [east, north]] — lets the map frame the run without
-   *  walking the whole route first. */
+  /** [[west, south], [east, north]], for framing the map. */
   bounds: [[number, number], [number, number]] | null
   splits: Split[]
   laps: Split[]
 }
 
-/** Everything the tracker knows, minus what only the tracker needs. */
+/** Strip a tracker summary down to the payload. */
 export const toRunPayload = (summary: {
   startedAt: number
   meters: number

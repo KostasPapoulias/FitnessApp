@@ -1,6 +1,2 @@
-/**
- * Route sentinel for a chat that hasn't been persisted yet.
- * `/ai/chat/new` renders the compose screen; the real thread id replaces it
- * in the URL once the first message comes back from the server.
- */
+/** Route id for a chat not yet persisted; replaced by the real thread id after the first reply. */
 export const NEW_THREAD = 'new'

@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-// Fatigue-model tuning lives in its own module so it can also be applied
-// without running the whole seed — see scripts/apply-fatigue-tuning.ts.
+// Seeds the reference tables and the exercise catalogue; safe to re-run.
+// Tuning also applies on its own via scripts/apply-fatigue-tuning.ts.
 import {
   MUSCLE_HALF_LIVES,
   DAMAGE_OVERRIDES,
@@ -16,7 +16,7 @@ import {
   referenceCadenceFor,
   repUnitFor,
 } from './fatigue-tuning';
-// The catalogue itself — content, edited far more often than this file.
+// The catalogue content.
 import {
   MODALITIES,
   CATEGORIES,
@@ -28,13 +28,8 @@ import {
 const prisma = new PrismaClient();
 
 // ── batching ───────────────────────────────────────────────────────────────
-// The dev database is remote, so a round trip costs ~290 ms. The catalogue is
-// past 160 exercises with roughly 800 links between them; one statement each,
-// sent one at a time, is around ten minutes of pure network latency and a
-// connection the proxy will drop long before the end (P1017).
-//
-// So: read in bulk, write in bulk, and send the unavoidable per-row updates as
-// array transactions, which Prisma pipelines into a single request.
+// The database is remote, so reads and writes are done in bulk, and per-row
+// updates go as pipelined array transactions.
 const chunk = <T>(items: T[], size: number): T[][] => {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -49,10 +44,7 @@ const runBatched = async (
 };
 
 // ── validation ─────────────────────────────────────────────────────────────
-// Every one of these has a silent failure mode. A muscle name that does not
-// exist means the link is never created and the movement quietly stops feeding
-// the fatigue model; a tuning key that matches nothing leaves the exercise on
-// its modality default. Both look exactly like working software.
+// Unknown muscle names or tuning keys fail silently, so they are checked here.
 const validateCatalogue = (): void => {
   const problems: string[] = [];
   const muscleNames = new Set(MUSCLE_HALF_LIVES.map(([name]) => name));
@@ -92,8 +84,7 @@ const validateCatalogue = (): void => {
     throw new Error(`Catalogue is inconsistent:\n  ${problems.join('\n  ')}`);
   }
 
-  // Not fatal — a stray tuning key does no harm beyond doing nothing — but it
-  // is almost always a rename that was only half applied, so say so loudly.
+  // Not fatal, but usually a half-applied rename
   const strays = [
     ...Object.keys(DAMAGE_OVERRIDES).map(name => ['damage', name] as const),
     ...Object.keys(LOAD_FACTORS).map(name => ['loadFactor', name] as const),
@@ -117,8 +108,7 @@ const seedReferenceTables = async () => {
       prisma.exerciseCategory.upsert({ where: { name }, update: {}, create: { name } })),
     ...EQUIPMENT.map(name =>
       prisma.equipment.upsert({ where: { name }, update: {}, create: { name } })),
-    // Recovery half-lives are re-applied on every seed run so tuning them
-    // propagates without a migration.
+    // Half-lives are re-applied every run, so tuning needs no migration
     ...MUSCLE_HALF_LIVES.map(([name, recoveryHalfLifeHours]) =>
       prisma.muscle.upsert({
         where: { name },
@@ -146,10 +136,7 @@ const seedReferenceTables = async () => {
 };
 
 // ── renames ────────────────────────────────────────────────────────────────
-// An Exercise id is referenced by every logged set, strength estimate and
-// template that ever used it. Renaming in place keeps all of that; adding the
-// new name as a fresh row would orphan the athlete's history behind a name
-// they can no longer find, and leave a duplicate in the list.
+// Renamed in place so every set, estimate and template keeps its exercise id.
 const applyRenames = async (): Promise<number> => {
   const names = RENAMES.flat();
   const rows = await prisma.exercise.findMany({
@@ -159,8 +146,7 @@ const applyRenames = async (): Promise<number> => {
   const byName = new Map(rows.map(r => [r.name, r.id]));
 
   const renames = RENAMES
-    // Only when the old name is there and the new one is not: a second run is
-    // then a no-op, and a row someone created by hand is never overwritten.
+    // Only when the old name exists and the new one does not (idempotent)
     .filter(([from, to]) => byName.has(from) && !byName.has(to))
     .map(([from, to]) =>
       prisma.exercise.update({ where: { id: byName.get(from)! }, data: { name: to } }));
@@ -171,10 +157,8 @@ const applyRenames = async (): Promise<number> => {
 
 // ── exercises ──────────────────────────────────────────────────────────────
 const seedExercises = async (modalities: Map<string, string>) => {
-  // Scoped to createdByUserId: null throughout. Exercise.name is unique in the
-  // schema but has no index behind it in the database, so a user's own custom
-  // exercise can legitimately share a name with a catalogue one — and a
-  // findFirst that ignored the owner would rewrite theirs.
+  // Scoped to catalogue rows (createdByUserId null), so a user's custom
+  // exercise with the same name is never touched
   const existing = await prisma.exercise.findMany({
     where: { name: { in: EXERCISES.map(e => e.name) }, createdByUserId: null },
     select: {
@@ -200,8 +184,7 @@ const seedExercises = async (modalities: Map<string, string>) => {
   const missing = desired.filter(d => !byName.has(d.name));
   if (missing.length) await prisma.exercise.createMany({ data: missing });
 
-  // Only the rows that actually differ, so a re-run of an unchanged catalogue
-  // costs one read and nothing else.
+  // Only rows that differ, so an unchanged re-run writes nothing
   const changed = desired.filter(d => {
     const row = byName.get(d.name);
     if (!row) return false;
@@ -242,23 +225,15 @@ const seedExercises = async (modalities: Map<string, string>) => {
 };
 
 // ── media ──────────────────────────────────────────────────────────────────
-// One Media row per exercise that has artwork, pointing at the backend's own
-// static route. Managed the same way the links below are: the catalogue is the
-// authority, so a row it no longer wants is deleted rather than left behind.
-//
-// Both URLs are derived from the single `media` id, so the thumbnail and the
-// animation cannot drift apart, and re-running with an unchanged catalogue
-// writes nothing.
+// One Media row per exercise with artwork; both URLs derive from its media id.
+// Rows the catalogue no longer wants are deleted.
 const seedMedia = async (exerciseIds: Map<string, string>) => {
   const want = new Map<string, { thumbnailUrl: string; videoUrl: string }>();
   for (const ex of EXERCISES) {
     const id = exerciseIds.get(ex.name);
     if (!id || !ex.media) continue;
-    // Both relative, and deliberately so: an absolute host stored in the
-    // database is a host you have to re-seed 226 rows to change. The frontend
-    // serves the thumbnail from its own origin, and a Netlify proxy forwards
-    // /exercise-media to the backend — so in the browser both resolve
-    // same-origin, which is also what lets the service worker cache them.
+    // Relative URLs: the frontend serves thumbnails, and a Netlify proxy
+    // forwards /exercise-media to the backend
     want.set(id, {
       thumbnailUrl: `/exercises/${ex.media}.jpg`,
       videoUrl: `/exercise-media/${ex.media}.gif`,
@@ -277,8 +252,7 @@ const seedMedia = async (exerciseIds: Map<string, string>) => {
 
   for (const row of existing) {
     const target = want.get(row.exerciseId);
-    // No artwork wanted any more, or a second row for an exercise that should
-    // have exactly one — either way it goes.
+    // Unwanted or duplicate rows are removed
     if (!target || seen.has(row.exerciseId)) { stale.push(row.id); continue; }
     seen.add(row.exerciseId);
     if (row.thumbnailUrl !== target.thumbnailUrl || row.videoUrl !== target.videoUrl) {
@@ -298,11 +272,7 @@ const seedMedia = async (exerciseIds: Map<string, string>) => {
 };
 
 // ── links ──────────────────────────────────────────────────────────────────
-// Stale links are deleted, not just left behind. The seed is the authority on
-// what a catalogue exercise needs, and it has to be able to take something
-// away: 'Barbell Overhead Press' was tagged Barbell AND Dumbbell, which under
-// canPerform's all-of rule meant it needed both, and no amount of upserting
-// would have removed the wrong one.
+// The catalogue is authoritative: stale muscle/category/equipment links are deleted.
 const seedLinks = async (
   exerciseIds: Map<string, string>,
   ref: { categories: Map<string, string>; muscles: Map<string, string>; equipment: Map<string, string> },
@@ -342,8 +312,7 @@ const seedLinks = async (
 
   const haveCategoryKeys = new Set(haveCategories.map(l => key(l.exerciseId, l.categoryId)));
   const haveEquipmentKeys = new Set(haveEquipment.map(l => key(l.exerciseId, l.equipmentId)));
-  // impactFactor is tuning, so an existing muscle link still has to be checked
-  // rather than merely counted as present.
+  // impactFactor is tuning, so existing links are compared, not just counted
   const haveMuscleFactors = new Map(haveMuscles.map(l => [key(l.exerciseId, l.muscleId), l.impactFactor]));
 
   const newCategories = [...wantCategories.values()].filter(l => !haveCategoryKeys.has(key(l.exerciseId, l.categoryId)));
@@ -410,7 +379,7 @@ async function main() {
   console.log(`  media: ${media.created} created, ${media.updated} updated, ${media.removed} removed` +
     ` — ${withArt} of ${EXERCISES.length} exercises have artwork`);
 
-  // counts per modality for a quick sanity check
+  // Counts per modality, as a sanity check
   const counts = await Promise.all(MODALITIES.map(async name => [
     name,
     await prisma.exercise.count({ where: { modality: { name }, createdByUserId: null } }),

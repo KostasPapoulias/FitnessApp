@@ -78,8 +78,7 @@ export default function MuscleMap({ side }: MuscleMapProps) {
     <div
       ref={containerRef}
       className="w-full h-full"
-      // Per-body vertical alignment. A transform, so the box the SVG is fitted
-      // into does not change and nothing below it moves.
+      // Per-body vertical offset, as a transform so the layout box is unchanged
       style={{ transform: `translateY(${bodyOffsetY(gender)})` }}
       dangerouslySetInnerHTML={{ __html: svgMarkup }}
     />

@@ -2,11 +2,7 @@ import api from './api'
 import type { Settings } from '../types'
 import type { Locale } from '../i18n/locales'
 
-/**
- * Everything on the Settings row is a partial patch — the settings screen saves
- * one control at a time, and sending the whole object back would let a screen
- * that never loaded a field overwrite it with a stale value.
- */
+/** A partial settings patch; only the fields sent are changed. */
 export interface SettingsPatch {
   preferredUnit?: 'metric' | 'imperial'
   theme?: 'dark' | 'light'

@@ -7,9 +7,7 @@ import NumberField from '../../components/workout/NumberField'
 import { LightbulbIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
 
-// How each suggestion was arrived at. Shown because a number that changes
-// itself is unsettling unless the athlete can see the reasoning — and because
-// "up 2.5 kg, you hit this at RPE 7" is coaching, where a silent bump is not.
+// Label and colour for how each suggestion was derived, shown with its reasoning.
 const BASIS_STYLE: Record<string, { label: string; color: string }> = {
   progression: { label: 'PROGRESS',  color: '#4ADE80' },
   repeat:      { label: 'REPEAT',    color: '#00D4AA' },
@@ -45,8 +43,7 @@ export default function PlanSets() {
     updateSet, addSet, removeSet, setExerciseRest, removeExerciseAt, setQuickLog,
   } = useWorkoutStore()
 
-  // Pull history-based numbers once the plan is on screen. Until this lands the
-  // per-modality defaults show, so the screen is usable either way.
+  // Fetch history-based suggestions; modality defaults show until they land
   useEffect(() => {
     loadSuggestions()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,15 +61,11 @@ export default function PlanSets() {
 
   const handleStart = () => navigate('/workout/active')
 
-  // Offered here rather than as its own entry on Start Workout: picking the
-  // exercises is the same either way, and "timer or not" is only a real choice
-  // once you can see what you are about to do. Strength only — the quick-log
-  // card floors load at 0 kg, so it cannot carry a calisthenics assist.
+  // Quick log (no timer) — strength only, since its card floors load at 0 kg
   const live = selectedExercises.filter(se => !se.skipped)
   const canQuickLog = live.length > 0 && live.every(se => se.exercise.modality === 'Strength')
 
-  // The flag is set on the way out, not toggled on this screen: while it is
-  // on, the browse tray sends "+ Add Exercise" to the log instead of back here.
+  // Set on the way out; while on, the browse tray adds exercises to the log instead
   const handleQuickLog = () => {
     setQuickLog(true)
     navigate('/workout/log')
@@ -169,8 +162,7 @@ export default function PlanSets() {
                   </span>
                 </div>
 
-                {/* Why these numbers. A load that moves on its own is unnerving
-                    unless the reasoning is visible. */}
+                {/* Why these numbers */}
                 {se.suggestion && !se.skipped && (
                   <div className="px-4 pb-3 -mt-1">
                     <div className="flex items-start gap-2">
@@ -192,10 +184,7 @@ export default function PlanSets() {
                   </div>
                 )}
 
-                {/* Column headers */}
-                {/* `minmax(0,1fr)` rather than `1fr`: a bare fr won't shrink
-                    below its content, so the −/+ cells used to push the RPE and
-                    remove columns out past the card's clip on every phone. */}
+                {/* Column headers — `minmax(0,1fr)` lets the columns shrink below their content */}
                 <div className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,1fr)_38px_24px] gap-1 px-4 py-1 items-center">
                   <div />
                   <p className="text-[10px] tracking-wider text-dark-400 text-center">REPS</p>
@@ -226,9 +215,7 @@ export default function PlanSets() {
                       </div>
                       {/* weight */}
                       <div className="flex items-center justify-center gap-1">
-                        {/* Calisthenics load is signed: below zero is assistance
-                            from a band or a machine, which is a planned choice
-                            like any other. Every other modality floors at 0. */}
+                        {/* Calisthenics load may go negative (assistance); others floor at 0 */}
                         <Step onClick={() => updateSet(ei, si, {
                           weight: (v => ex.modality === 'Calisthenics' ? v : Math.max(0, v))(
                             nextLoad(s.weight, -1)),
@@ -319,9 +306,7 @@ export default function PlanSets() {
             + Add Exercise
           </button>
 
-          {/* Keep it, rather than only doing it now. Everything above is
-              already the shape of a plan — this is what stops it evaporating
-              the moment the session ends. */}
+          {/* Save this plan for later */}
           <SavePlanPanel />
         </div>
 
@@ -354,13 +339,7 @@ export default function PlanSets() {
   )
 }
 
-/**
- * Save the current plan, and optionally put it on a date.
- *
- * Collapsed by default: the overwhelmingly common path through this screen is
- * "look it over and start", and a form sitting open above the Start button
- * makes saving feel like a step rather than an option.
- */
+/** Save the current plan, optionally on a date. Collapsed by default. */
 function SavePlanPanel() {
   const navigate = useNavigate()
   const { selectedExercises, saveAsTemplate, sourceTemplateId } = useWorkoutStore()
@@ -386,11 +365,9 @@ function SavePlanPanel() {
       const template = await saveAsTemplate(name.trim())
 
       if (when) {
-        // datetime-local is wall-clock in the athlete's own zone, which is what
-        // they meant; new Date() reads it as local and toISOString converts.
+        // datetime-local is local wall-clock time; toISOString converts it
         const scheduledFor = new Date(when)
-        // An hour's notice is enough to change plans and not so much that it
-        // arrives while the day is still hypothetical.
+        // Reminder an hour before
         const reminderAt = remind
           ? new Date(scheduledFor.getTime() - 60 * 60 * 1000).toISOString()
           : null

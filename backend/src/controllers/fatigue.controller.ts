@@ -11,8 +11,7 @@ import { describeSleepReadiness } from '../services/sleep-readiness.service'
 import { parseBody } from '../lib/validate'
 import { overrideFatigueSchema } from '../schemas/fatigue.schema'
 
-// GET /api/fatigue/current
-// Returns ALL muscles with their current fatigue state
+// GET /api/fatigue/current — every muscle's current fatigue plus readiness
 export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
   try {
     const {
@@ -23,17 +22,14 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
     res.json({
       success: true,
       data: {
-        // effectiveLevel is internal precision — not part of the API contract
+        // effectiveLevel is internal precision, not part of the API
         muscles: muscles.map(({ effectiveLevel, ...m }) => m),
         readinessScore,
         readinessStatus: status,
         fitnessLevel,
-        // Whole-body fatigue: no muscle row can express what a long run costs
         systemicFatigue,
         systemicRecoveryTargetAt,
-        // Sleep's share of the score above, and whether it had one. Sent even
-        // when it did not apply: "no sleep logged" is the answer to why the
-        // number did not move, and the client must not have to infer it.
+        // Sent even when not applied, so the client can explain an unchanged score
         sleep: {
           adjustment: sleep.adjustment,
           applied: sleep.applied,
@@ -41,8 +37,7 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
           durationMin: sleep.durationMin,
           sleepScore: sleep.sleepScore,
           sleepDate: sleep.sleepDate,
-          // Phrased here rather than taken from readiness.sleepNote, which
-          // stays English for the AI prompt that also quotes it.
+          // Localised here; readiness.sleepNote stays English for the AI prompt
           note: describeSleepReadiness(sleep, localeOf(res)),
         },
       }
@@ -54,9 +49,7 @@ export const getCurrentFatigue = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/fatigue/load
-// Acute vs chronic training load. Answers "am I building or digging a hole",
-// which per-muscle fatigue cannot — that only describes today.
+// GET /api/fatigue/load — acute vs chronic training load
 export const getTrainingLoadSummary = async (req: AuthRequest, res: Response) => {
   try {
     const load = await getTrainingLoad(req.userId!)
@@ -68,8 +61,7 @@ export const getTrainingLoadSummary = async (req: AuthRequest, res: Response) =>
   }
 }
 
-// PUT /api/fatigue/:muscleId
-// Manual override — user adjusts fatigue if algorithm is wrong
+// PUT /api/fatigue/:muscleId — manual override of one muscle's fatigue
 export const overrideFatigue = async (req: AuthRequest, res: Response) => {
   try {
     const { muscleId } = req.params
@@ -77,9 +69,7 @@ export const overrideFatigue = async (req: AuthRequest, res: Response) => {
     if (!body) return
     const { fatigueLevel } = body
 
-    // Recovery target follows the same exponential curve as an earned level,
-    // using this muscle's own half-life — an override must not put the muscle
-    // on a different decay model from every other row.
+    // Recovery target uses the same exponential curve and the muscle's own half-life
     const muscle = await prisma.muscle.findUnique({ where: { id: muscleId } })
     if (!muscle) {
       res.status(404).json({ success: false, error: 'Muscle not found' })
@@ -114,7 +104,6 @@ export const overrideFatigue = async (req: AuthRequest, res: Response) => {
       }
     })
 
-    // Log the manual override
     await prisma.muscleFatigueLog.create({
       data: {
         userId: req.userId!,

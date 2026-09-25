@@ -2,7 +2,7 @@ import { LocalNotifications } from '@capacitor/local-notifications'
 import { Capacitor } from '@capacitor/core'
 import api from '../services/api'
 
-// VAPID public key from the backend is base64url — PushManager needs a Uint8Array
+// VAPID public key is base64url; PushManager needs a Uint8Array
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -10,9 +10,7 @@ const urlBase64ToUint8Array = (base64String: string) => {
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
 }
 
-// Config the service worker cannot read for itself. sw.js is copied verbatim
-// out of public/, so it never sees VITE_API_URL; it picks this up from Cache
-// Storage when iOS wakes it to rotate a subscription, with no page running.
+// Config the service worker reads from Cache Storage (it cannot see VITE_API_URL).
 const CONFIG_CACHE = 'somatrack-push-config'
 const CONFIG_KEY = '/__push-config'
 
@@ -27,7 +25,7 @@ const cachePushConfig = async () => {
       })
     )
   } catch {
-    // Non-fatal: rotation falls back to the page-side repair on next launch
+    // Non-fatal: the page repairs the subscription on next launch
   }
 }
 
@@ -45,20 +43,12 @@ export const useNotifications = () => {
     if (!canUseWebNotifications()) return false
     if (Notification.permission === 'granted') return true
 
-    // iOS only honours this inside a user gesture, and only once — calling it
-    // on app load burns the prompt. Keep it behind a tap.
+    // iOS allows this only inside a user gesture, once
     const permission = await Notification.requestPermission()
     return permission === 'granted'
   }
 
-  /**
-   * Show a notification on the web.
-   *
-   * Always via the service worker registration: `new Notification()` is not
-   * supported in iOS Safari or in a home screen app — it throws "Illegal
-   * constructor", which is why the old test button did nothing on iPhone.
-   * The registration path works everywhere the constructor does, and on iOS too.
-   */
+  /** Show a local notification via the service worker (`new Notification()` fails on iOS). */
   const showLocalNotification = async (title: string, body: string, tag = 'somatrack-local') => {
     if (!canUseWebNotifications() || Notification.permission !== 'granted') return false
 
@@ -72,7 +62,7 @@ export const useNotifications = () => {
     return true
   }
 
-  // Called when user logs in — schedules inactivity reminder
+  // Schedule the inactivity reminder
   const scheduleInactivityReminder = async (daysThreshold = 1) => {
     if (!Capacitor.isNativePlatform()) return
 
@@ -95,17 +85,17 @@ export const useNotifications = () => {
     })
   }
 
-  // Called when workout finishes — cancels the reminder and reschedules
+  // Reschedule the reminder after a workout
   const rescheduleAfterWorkout = async (daysThreshold = 1) => {
     await scheduleInactivityReminder(daysThreshold)
   }
 
-  // Immediate notification — used for rest timer end
+  // Immediate notification when rest ends
   const notifyRestComplete = async (nextSet: string) => {
     if (!Capacitor.isNativePlatform()) {
       await showLocalNotification('⏱️ Rest complete!', `Time for ${nextSet}`, 'somatrack-rest')
 
-      // Web fallback vibration for devices that support it
+      // Web vibration fallback
       if ('vibrate' in navigator) navigator.vibrate([200, 100, 200])
       return
     }
@@ -124,9 +114,7 @@ export const useNotifications = () => {
     })
   }
 
-  // Real Web Push subscription — required for iOS (Add to Home Screen) to deliver
-  // notifications when the app isn't in the foreground, including the lock screen.
-  // Must be called from a user gesture (e.g. a button tap) for iOS to allow the permission prompt.
+  // Web Push subscription (needed for delivery while the app is closed). Call from a user gesture.
   const subscribeToPush = async () => {
     if (Capacitor.isNativePlatform()) return false
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
@@ -153,7 +141,7 @@ export const useNotifications = () => {
     return true
   }
 
-  // Unsubscribes both locally (browser) and server-side (so the backend stops pushing to it)
+  // Unsubscribe in the browser and on the server
   const unsubscribeFromPush = async () => {
     if (Capacitor.isNativePlatform()) return false
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
@@ -168,10 +156,8 @@ export const useNotifications = () => {
     return true
   }
 
-  // Reflects whether this device currently has an active push subscription.
-  // Uses `ready` rather than `getRegistration()`: on a cold load the latter
-  // resolves undefined before the worker activates, and the toggle then renders
-  // Off on a device that is in fact subscribed.
+  // Whether this device has an active subscription. Uses `ready`, which waits
+  // for the worker on a cold load
   const isPushSubscribed = async () => {
     if (Capacitor.isNativePlatform()) return false
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
@@ -181,14 +167,7 @@ export const useNotifications = () => {
     return Boolean(existing)
   }
 
-  /**
-   * Re-register this device's existing subscription with the server.
-   *
-   * The browser and the server can drift apart: the server prunes an endpoint
-   * the moment it 410s, while the browser happily keeps handing back a
-   * subscription object. Re-posting on launch is an idempotent upsert that
-   * repairs that, and costs one request.
-   */
+  /** Re-post this device's subscription on launch (idempotent), in case the server pruned it. */
   const ensurePushSubscription = async () => {
     if (Capacitor.isNativePlatform()) return false
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
@@ -207,13 +186,7 @@ export const useNotifications = () => {
     }
   }
 
-  /**
-   * Ask the SERVER to push to this account's devices.
-   *
-   * Deliberately not a local notification: the thing worth testing is delivery
-   * while the app is closed and the phone is locked, and only a push that
-   * travels through APNs exercises that path.
-   */
+  /** Ask the server to push to this account's devices — tests real delivery. */
   const sendTestPush = async () => {
     const { data } = await api.post('/push/test')
     return data

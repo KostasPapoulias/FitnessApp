@@ -1,16 +1,9 @@
 import type { VoiceCommand } from '../lib/voiceGrammar'
 
 /**
- * Every voice command, written the way it is said.
- *
- * One catalogue feeds three places — the reference sheet, the rotating hint on
- * the live strip, and the suggestion shown after a missed phrase — so the app
- * can never advertise a phrase in one place and a different one elsewhere.
- *
- * `expects` is what `parseVoiceCommand` must return for `example`. It exists so
- * documentation drift is a *test failure* rather than a support question: an
- * example that stops parsing is caught instead of quietly teaching a phrase the
- * grammar no longer understands.
+ * Every voice command as it is said. Feeds the reference sheet, the rotating
+ * hint and the miss suggestion. `expects` is checked in a test, so a
+ * documented phrase that stops parsing fails.
  */
 
 export interface VoiceCommandDoc {

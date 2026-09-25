@@ -1,19 +1,8 @@
-// Fatigue decay.
-//
-// Recovery is exponential, not linear: a muscle sheds most of its fatigue in
-// the first hours and then tails off. The old linear ramp cleared fatigue at a
-// flat ~2 points/hour for every muscle regardless of size, so calves and the
-// lower back recovered at exactly the same rate.
-//
-// The half-life is not stored on the row. It is *implied* by the recovery
-// window: `recoveryTargetAt` is written as the moment the muscle drops to
-// RECOVERED_BELOW, so the number of half-lives across that window is fixed and
-// the curve can be reconstructed from (fatigueLevel, updatedAt,
-// recoveryTargetAt) alone. That keeps every existing caller and record shape
-// working, and lets systemic fatigue reuse the identical curve.
+// Fatigue decay. Recovery is exponential; the half-life is not stored but
+// implied by (fatigueLevel, updatedAt, recoveryTargetAt), where
+// `recoveryTargetAt` is the moment the level reaches RECOVERED_BELOW.
 
-// A muscle at or below this reads as fully recovered. Exponential decay never
-// truly reaches zero, so it needs a floor to land on.
+// At or below this a muscle reads as fully recovered.
 export const RECOVERED_BELOW = 5
 
 export interface FatigueRecord {
@@ -28,18 +17,14 @@ export type FatigueRecordLike = Pick<
   'muscleId' | 'fatigueLevel' | 'recoveryTargetAt' | 'updatedAt'
 >
 
-// Anything carrying a level and a recovery window — muscle rows and the
-// user's systemic row both satisfy this.
+// Anything with a level and a recovery window — muscle rows and the systemic row.
 export type DecayableFatigue = {
   fatigueLevel: number
   recoveryTargetAt: Date | null
   updatedAt: Date
 }
 
-/**
- * Hours for a level to halve, given the window it was told to recover across.
- * Exposed so callers can invert it — see `recoveryTargetFor`.
- */
+/** Half-life implied by a level and the window it recovers across. */
 const impliedHalfLifeMs = (level: number, updatedAt: Date, recoveryTargetAt: Date): number => {
   const window = recoveryTargetAt.getTime() - updatedAt.getTime()
   const halfLives = Math.log2(level / RECOVERED_BELOW)
@@ -57,7 +42,6 @@ export const getEffectiveFatigueLevel = (
   const level = record.fatigueLevel
   const { recoveryTargetAt, updatedAt } = record
 
-  // Already spent, or never given a recovery window to decay along
   if (level <= RECOVERED_BELOW) return 0
   if (!recoveryTargetAt) return level
 
@@ -73,9 +57,8 @@ export const getEffectiveFatigueLevel = (
 }
 
 /**
- * When a muscle sitting at `level` will read as recovered, given its own
- * half-life. This is the inverse of the decay above — write the result to
- * `recoveryTargetAt` and the curve reconstructs itself on read.
+ * When a muscle at `level` will read as recovered, given its half-life — the
+ * inverse of the decay above. Written to `recoveryTargetAt`.
  */
 export const recoveryTargetFor = (
   level: number,

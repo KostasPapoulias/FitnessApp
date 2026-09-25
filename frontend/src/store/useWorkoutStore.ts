@@ -20,27 +20,13 @@ export interface SelectedExercise {
   sets: PlannedSet[]
   workoutExerciseId?: string // set after session starts
   skipped?: boolean
-  /**
-   * Ticked off on the quick-log screen. Nothing is sent when it is ticked —
-   * the sets travel at Finish — so an untick is free and never has to chase a
-   * row already written to the server.
-   */
+  /** Ticked off in quick log (nothing is sent until Finish). */
   done?: boolean
-  /**
-   * What the athlete wrote about this exercise, this session.
-   *
-   * Held here as well as on the server so the field keeps its text while the
-   * PATCH is in flight and across a navigation inside the live workout — the
-   * live screens read the store, not the session endpoint.
-   */
+  /** This session's note on the exercise, kept locally so it survives the PATCH and navigation. */
   notes?: string
-  /**
-   * False until the athlete changes a number themselves. Server suggestions
-   * only overwrite untouched sets — arriving mid-edit and resetting someone's
-   * typing would be worse than showing no suggestion at all.
-   */
+  /** True once the athlete edits a number; suggestions only overwrite untouched exercises. */
   edited?: boolean
-  /** Why the suggested numbers are what they are, shown on the plan screen. */
+  /** Why the suggested numbers are what they are (shown on Plan Sets). */
   suggestion?: {
     basis: 'progression' | 'repeat' | 'deload' | 'return' | 'estimate' | 'default'
     note: string
@@ -53,15 +39,8 @@ export type CardioTarget = { type: 'distance' | 'time'; value: number }
 export type WodFormat = 'amrap' | 'fortime' | 'emom' | 'rounds'
 export type WodConfig = { format: WodFormat; capSec: number; targetRounds: number }
 
-// Placeholder planned sets per modality, shown for the instant before the
-// server's suggestion arrives.
-//
-// Strength deliberately opens at 0 kg rather than a guess. It used to seed
-// 60/70/80 kg for EVERY strength movement, which offered a 60 kg lateral raise
-// — and because those numbers looked deliberate, they were easy to accept
-// without reading. A zero reads as "not filled in yet", which is the truth: the
-// real figure comes from /workout/plan/suggestions, computed from the exercise
-// and the athlete's own bodyweight, sex, age, level and experience.
+// Placeholder sets per modality until the server's suggestion arrives.
+// Strength opens at 0 kg — never a guessed weight.
 function defaultSetsFor(modality: string): PlannedSet[] {
   switch (modality) {
     case 'Calisthenics':
@@ -71,12 +50,12 @@ function defaultSetsFor(modality: string): PlannedSet[] {
         { reps: 8,  weight: 0, rpe: 8, restSeconds: 75 },
       ]
     case 'Mobility':
-      // reps == hold seconds for mobility; no rest between rounds
+      // reps = hold seconds; no rest between rounds
       return [{ reps: 30, weight: 0, rpe: 5, restSeconds: 0 }]
     case 'Cardio':
       return [{ reps: 0, weight: 0, rpe: 6, restSeconds: 0 }]
     case 'WOD':
-      // reps == reps-per-round for a WOD movement
+      // reps = reps per round
       return [{ reps: 10, weight: 0, rpe: 8, restSeconds: 0 }]
     case 'Strength':
     default:
@@ -94,19 +73,9 @@ interface WorkoutStore {
   selectedExercises: SelectedExercise[]
   startError: string | null
   logError: string | null
-  /**
-   * Sets saved locally because the network was gone when they were logged.
-   *
-   * Surfaced so the UI can say so — a set that reads as saved but is only on
-   * the phone is the kind of quiet difference that becomes "the app lost my
-   * workout" three days later.
-   */
+  /** Sets saved on the phone because the network was down; surfaced in the UI. */
   queuedSetCount: number
-  /**
-   * Try to send everything in the outbox. Safe to call at any time: the API
-   * upserts on (workoutExercise, setNumber), so a replay of an already-saved
-   * set is a no-op rather than a duplicate.
-   */
+  /** Send everything in the outbox. Safe any time — the API upserts sets. */
   flushSetQueue: () => Promise<number>
   clearErrors: () => void
   addExercise: (exercise: Exercise) => void
@@ -115,49 +84,39 @@ interface WorkoutStore {
   clearExercises: () => void
   updateSets: (exerciseId: string, sets: PlannedSet[]) => void
 
-  // per-modality plan config
+  // Per-modality plan config
   cardioTarget: CardioTarget | null
   wodConfig: WodConfig | null
   setCardioTarget: (t: CardioTarget | null) => void
   setWodConfig: (c: WodConfig | null) => void
 
-  // Saved plans. Set when the planner was filled from a template, so the
-  // session that follows can be attributed to it and any standby slot closed.
+  // Set when the planner was filled from a template, so the session can be attributed to it
   sourceTemplateId: string | null
   sourceScheduledId: string | null
   /** Fill the planner from a saved plan, ready for the athlete to start it. */
   loadTemplate: (template: WorkoutTemplate, scheduledId?: string | null) => void
-  /** Freeze what is currently planned as a reusable plan. */
+  /** Save the current plan as a template. */
   saveAsTemplate: (name: string, notes?: string) => Promise<WorkoutTemplate>
 
-  // Set / exercise editing (index-based, used by the redesigned flow)
+  // Set / exercise editing (index-based)
   updateSet: (exIdx: number, setIdx: number, patch: Partial<PlannedSet>) => void
   addSet: (exIdx: number) => void
   removeSet: (exIdx: number, setIdx: number) => void
   setExerciseRest: (exIdx: number, restSeconds: number) => void
   /**
-   * Write a note against one exercise in the live session.
-   *
-   * Local state first, server second, and the local write is never rolled
-   * back: this is the athlete's own prose, and dropping what somebody typed
-   * because a gym connection failed is worse than a note that is briefly only
-   * on the phone. A failed PATCH resolves false so the caller can say so.
+   * Write an exercise note: store first (never rolled back), then the server.
+   * Resolves false if the PATCH failed.
    */
   setExerciseNotes: (exIdx: number, notes: string) => Promise<boolean>
-  /** Replace untouched defaults with numbers built from the athlete's history. */
+  /** Replace untouched defaults with history-based suggestions. */
   loadSuggestions: () => Promise<void>
   suggestionsLoading: boolean
   removeExerciseAt: (exIdx: number) => void
   toggleSkip: (exIdx: number) => void
 
   /**
-   * Quick log: the same session, with no set card, rest timer or clock on
-   * screen. The athlete ticks exercises off and everything is logged at Finish.
-   *
-   * A flag rather than route state because it has to survive the browse →
-   * exercise list → back round trip, and decide where the bottom nav's centre
-   * button goes — a quick-log session opened on the live screen would put the
-   * timer straight back.
+   * Quick log: no set card, rest timer or clock; everything is logged at Finish.
+   * A store flag so it survives browsing and steers the nav's centre button.
    */
   quickLog: boolean
   setQuickLog: (on: boolean) => void
@@ -174,11 +133,9 @@ interface WorkoutStore {
   completedSets: { exerciseId: string; setIndex: number }[]
 
   /**
-   * `registerExercises: false` opens the session without attaching anything.
-   * Quick log uses it: there is no endpoint to take an exercise back off a
-   * session, so registering the whole selection up front would leave every
-   * exercise that was never ticked as an empty row in history. They are
-   * registered one at a time, by `completeSet`, when their sets are logged.
+   * `registerExercises: false` opens the session with no exercises attached
+   * (quick log registers each one when its sets are logged, so unticked
+   * exercises never become empty history rows).
    */
   startSession: (opts?: { registerExercises?: boolean }) => Promise<void>
   registerExercise: (exIdx: number) => Promise<string>
@@ -186,39 +143,33 @@ interface WorkoutStore {
     data: {
       rpe?: number
       restSeconds?: number
-      reps?: number       // strength / calisthenics reps; also carries mobility
-                          // hold-seconds, WOD reps-per-round, and the count for
-                          // a cardio movement with no distance (skips, floors)
+      reps?: number       // reps; also mobility hold seconds, WOD reps per round, cardio count
       weight?: number     // strength weight; also carries calisthenics added load
       addedWeight?: number
       duration?: number   // mobility hold seconds / calisthenics isometric hold seconds
       distance?: number   // cardio / wod
       time?: number       // cardio / wod
       rounds?: number     // wod rounds completed
-      /** The recorded run behind a cardio set — route, splits, average pace. */
+      /** The recorded run for a cardio set. */
       run?: RunSummary
     },
-    // A metcon is one effort logged against every movement in it, so it needs
-    // to write sets for exercises other than the "current" one.
+    // A metcon logs a set against every movement, not just the current one
     target?: { exIdx: number; setIdx: number }
   ) => Promise<boolean>
   finishSession: () => Promise<any>
   nextExercise: () => void
 }
 
-// Guards against concurrent startSession() calls (React StrictMode double-invokes
-// mount effects, and a remount would otherwise create a second orphan session).
+// Guards against concurrent startSession() calls (StrictMode, remounts).
 let startInFlight: Promise<void> | null = null
 
-// Same guard for finishing: a double-tap, a StrictMode double-mount of the
-// Finish screen, or an auto-finish racing a manual End must all resolve to a
-// single POST. The backend also refuses to re-apply fatigue to an already
-// finished session, so this is the first of two layers.
+// Same guard for finishing (double taps, remounts); the backend also refuses a
+// second finish.
 let finishInFlight: Promise<any> | null = null
 
 const DEFAULT_SET: PlannedSet = { reps: 10, weight: 20, rpe: 7, restSeconds: 90 }
 
-// Strip the sets off a server suggestion, keeping only the explanation
+// Keep only a suggestion's explanation, without its sets.
 const toMeta = (s: PlanSuggestion): SelectedExercise['suggestion'] => ({
   basis: s.basis,
   note: s.note,
@@ -261,8 +212,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const selectedExercises: SelectedExercise[] = template.exercises.map(te => ({
       exercise: te.exercise,
       skipped: false,
-      // Marked as edited so loadSuggestions() cannot overwrite a plan the
-      // athlete deliberately chose with numbers derived from their averages.
+      // Edited, so suggestions never overwrite a deliberately saved plan
       edited: true,
       sets: te.sets.map(s => ({
         reps: s.reps ?? 0,
@@ -272,8 +222,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       })),
     }))
 
-    // Cardio and WOD carry their target outside the set rows, so lift it back
-    // out of the first set rather than losing it on the round trip.
+    // Cardio and WOD targets are stored on the first set; restore them
     const first = template.exercises[0]
     const firstSet = first?.sets[0]
     const modality = first?.exercise.modality
@@ -296,8 +245,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       wodConfig: null,
       startError: null,
       logError: null,
-      // A saved plan opens in the planner and runs live; a quick-log flag left
-      // over from an abandoned session would reroute its "+ Add Exercise".
+      // Clear any quick-log flag left from an abandoned session
       quickLog: false,
     })
   },
@@ -317,8 +265,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
             weight: s.weight,
             rpe: s.rpe,
             restSeconds: s.restSeconds,
-            // Cardio's target lives on the plan screen rather than in the set
-            // rows; write it onto the first set so reloading restores it.
+            // Cardio's target is saved on the first set
             distance: se.exercise.modality === 'Cardio' && cardioTarget?.type === 'distance'
               ? cardioTarget.value * 1000
               : null,
@@ -386,8 +333,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
       i !== exIdx ? e : {
         ...e,
-        // Touching a number marks the exercise as the athlete's, so a
-        // suggestion still in flight cannot overwrite what they just typed
+        // Mark as edited so an in-flight suggestion can't overwrite it
         edited: true,
         sets: e.sets.map((s, j) => j !== setIdx ? s : { ...s, ...patch })
       }
@@ -398,9 +344,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     selectedExercises: state.selectedExercises.map((e, i) => {
       if (i !== exIdx) return e
       const last = e.sets[e.sets.length - 1] ?? DEFAULT_SET
-      // The set count is the athlete's choice as much as the numbers are.
-      // Quick log re-runs loadSuggestions on mount, straight after Plan Sets,
-      // and would otherwise put a planned fourth set back to three.
+      // Adding a set counts as editing (so quick log's reload keeps it)
       return { ...e, edited: true, sets: [...e.sets, { ...last }] }
     })
   })),
@@ -415,13 +359,10 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     )
   })),
 
-  // Fetched when the plan screen opens rather than on each exercise tap: the
-  // numbers aren't on screen during selection, and a request per tap would put
-  // latency in the middle of browsing.
+  // Fetched when Plan Sets opens, not per exercise tap
   loadSuggestions: async () => {
     const { selectedExercises } = get()
-    // Strength and calisthenics are the only modalities with reps × load to
-    // progress. Cardio targets and metcon formats are planned differently.
+    // Only strength and calisthenics have reps × load to progress
     const eligible = selectedExercises.filter(e =>
       e.exercise.modality === 'Strength' || e.exercise.modality === 'Calisthenics'
     )
@@ -438,7 +379,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         selectedExercises: state.selectedExercises.map(e => {
           const suggestion = byId.get(e.exercise.id)
           if (!suggestion) return e
-          // Never overwrite numbers the athlete has already changed
+          // Never overwrite numbers the athlete changed
           if (e.edited) return { ...e, suggestion: toMeta(suggestion) }
           return {
             ...e,
@@ -449,16 +390,14 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         suggestionsLoading: false,
       }))
     } catch (err) {
-      // A failed suggestion just leaves the modality defaults in place — the
-      // athlete can still plan and train.
+      // On failure the modality defaults stay
       console.error('loadSuggestions error:', err)
       set({ suggestionsLoading: false })
     }
   },
 
   setExerciseNotes: async (exIdx, notes) => {
-    // Store first, unconditionally. The text stays on screen whatever the
-    // network does — see the interface comment.
+    // Store first, unconditionally
     set(state => ({
       selectedExercises: state.selectedExercises.map((e, i) =>
         i !== exIdx ? e : { ...e, notes }
@@ -468,10 +407,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const { sessionId, selectedExercises } = get()
     const workoutExerciseId = selectedExercises[exIdx]?.workoutExerciseId
 
-    // Nothing to PATCH against yet. An exercise gets its server id when the
-    // session starts (or when it is registered mid-workout), so a note typed
-    // on the planning screen has no row to land in — it is carried in the
-    // store and written when the exercise is registered.
+    // No server row yet: the note is sent when the exercise is registered
     if (!sessionId || !workoutExerciseId) return true
 
     try {
@@ -508,8 +444,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
   toggleDone: (exIdx) => set(state => ({
     selectedExercises: state.selectedExercises.map((e, i) =>
-      // Ticking is the athlete vouching for the numbers on the card, so a
-      // suggestion still in flight must not replace them afterwards.
+      // Ticking vouches for the numbers, so suggestions can't replace them
       i !== exIdx ? e : { ...e, done: !e.done, edited: true }
     )
   })),
@@ -541,7 +476,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   }),
 
   startSession: async ({ registerExercises = true } = {}) => {
-    // Already running, or another caller is mid-flight → reuse, never start twice.
+    // Already running or starting: never start twice
     if (get().sessionId) return
     if (startInFlight) return startInFlight
 
@@ -550,8 +485,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         set({ startError: null })
         const session = await workoutService.startSession()
 
-        // Commit the session id *before* registering exercises: if registration
-        // partially fails we still hold a usable session instead of orphaning it.
+        // Commit the session id before registering exercises, so a partial failure keeps a usable session
         const firstLive = get().selectedExercises.findIndex(se => !se.skipped)
         set({
           activeSession: session,
@@ -562,8 +496,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           completedSets: [],
         })
 
-        // Only register what we'll actually work through — skipped exercises
-        // would otherwise become empty rows in the user's history.
+        // Only non-skipped exercises (skipped ones would become empty rows)
         const pending = !registerExercises ? [] : get().selectedExercises
           .map((se, i) => ({ se, i }))
           .filter(({ se }) => !se.skipped && !se.workoutExerciseId)
@@ -572,16 +505,13 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           const we = await workoutService.addExercise(session.id, {
             exerciseId: se.exercise.id,
             orderIndex: i + 1,
-            // Carries any note written on the planning screen, before this
-            // exercise had a server row to PATCH. Without it, a note typed
-            // before Start is silently dropped at the moment the workout
-            // begins — which is exactly when the athlete stops looking.
+            // Include any note typed before Start
             notes: se.notes?.trim() || undefined,
           })
           return [se.exercise.id, we.id] as const
         }))
 
-        // Match by exercise id, not index — the queue may have reordered meanwhile.
+        // Match by exercise id — the queue may have been reordered
         const idMap = new Map(registered)
         set(state => ({
           selectedExercises: state.selectedExercises.map(e => {
@@ -590,9 +520,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
           }),
         }))
 
-        // Bind a standby slot to the session fulfilling it, which is also what
-        // advances the plan's "performed" counters. Best-effort: failing to
-        // attribute a session must never stop the athlete training.
+        // Bind a standby slot to this session (best-effort; never blocks training)
         const { sourceScheduledId } = get()
         if (sourceScheduledId) {
           try {
@@ -613,8 +541,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     return startInFlight
   },
 
-  // Registers a single exercise against the live session. Used for exercises
-  // added *after* the session started — without this their sets are dropped.
+  // Register an exercise added after the session started, so its sets can be logged
   registerExercise: async (exIdx) => {
     const { sessionId, selectedExercises } = get()
     if (!sessionId) throw new Error('No active session')
@@ -625,8 +552,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     const we = await workoutService.addExercise(sessionId, {
       exerciseId: se.exercise.id,
       orderIndex: exIdx + 1,
-      // Same reason as in startSession: this is the exercise's first server
-      // row, so anything already typed against it has to travel with it.
+      // Include any note already typed
       notes: se.notes?.trim() || undefined,
     })
     set(state => ({
@@ -643,8 +569,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       currentExerciseIndex, currentSetIndex
     } = get()
 
-    // Capture the target up front — awaits below must not write to a set the
-    // user has since navigated away from.
+    // Capture the target up front; the user may navigate during the awaits
     const exIdx = target?.exIdx ?? currentExerciseIndex
     const setIdx = target?.setIdx ?? currentSetIndex
 
@@ -661,7 +586,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     let workoutExerciseId = currentExercise.workoutExerciseId
     if (!workoutExerciseId) {
-      // Added mid-workout and never registered — do it now rather than drop the set.
+      // Added mid-workout and never registered: register it now
       try {
         workoutExerciseId = await get().registerExercise(exIdx)
       } catch (err) {
@@ -673,7 +598,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     const setType = MODALITY_SET_TYPE[currentExercise.exercise.modality] ?? 'STRENGTH'
 
-    // Build the modality-specific payload the backend expects for this SetType
+    // The modality-specific payload for this SetType
     const payload: Parameters<typeof workoutService.logSet>[1] = {
       workoutExerciseId,
       setNumber: setIdx + 1,
@@ -685,36 +610,28 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       case 'CALISTHENICS':
         payload.reps = data.reps ?? 0
         payload.addedWeight = data.addedWeight ?? data.weight ?? 0
-        // isometric holds carry seconds-under-tension instead of reps
+        // Isometric holds send seconds instead of reps
         if (data.duration != null) payload.duration = data.duration
         break
       case 'MOBILITY':
-        // reps carries the hold time in seconds unless an explicit duration is given
+        // reps carries hold seconds unless an explicit duration is given
         payload.duration = data.duration ?? data.reps ?? 0
         break
       case 'CARDIO':
         payload.distance = data.distance
         payload.time = data.time
-        // The count, for a movement with no distance. Sent only when there is
-        // one: an explicit 0 would be stored, and a stored 0 is a claim that
-        // nothing was done rather than that nothing was counted — the fatigue
-        // model reads it as "no count" either way, but history should not
-        // record a rope session as zero skips.
+        // The count, only when there is one (a stored 0 would read as "did nothing")
         if (data.reps != null && data.reps > 0) payload.reps = data.reps
-        // Only GPS sessions have a route, but a treadmill run still has splits
-        // and an average pace worth keeping, so the payload goes either way.
+        // Route, splits and pace (treadmill runs have splits without a route)
         if (data.run) payload.run = toRunPayload(data.run)
         break
       case 'WOD':
         payload.distance = data.distance
         payload.time = data.time
-        // The metcon's score. Without reps-per-round and rounds the backend
-        // only sees a clock, and can't tell 3 rounds from 15.
+        // The metcon's score: reps per round and rounds
         payload.reps = data.reps
         payload.rounds = data.rounds
-        // The bar this movement was done at. This case used to drop it, so a
-        // load planned in WodPlan and shown on the live board never left the
-        // phone — and the fatigue model scored every thruster as an air squat.
+        // The movement's load
         payload.weight = data.weight ?? 0
         break
       case 'STRENGTH':
@@ -727,11 +644,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     try {
       await workoutService.logSet(sessionId, payload)
     } catch (err) {
-      // Two different failures wearing the same shape, and they need opposite
-      // handling. No connection means the set is perfectly good and just could
-      // not travel — that goes in the outbox. A rejection from the server means
-      // the payload itself is unacceptable, and queueing it would retry
-      // something that can never succeed while telling the athlete it is saved.
+      // No connection: queue it (the set is fine). A server rejection is not
+      // queued — it would never succeed.
       if (!isRetriableFailure(err)) {
         console.error('logSet rejected:', err)
         set({ logError: 'That set could not be saved. Check the numbers and log it again.' })
@@ -740,15 +654,13 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       const queued = await enqueueSet(sessionId, payload)
       if (!queued) {
-        // IndexedDB unavailable — private browsing, a full disk. Nothing left
-        // to offer but the honest failure.
+        // IndexedDB unavailable: report the failure
         console.error('logSet failed and could not be queued:', err)
         set({ logError: 'That set could not be saved. Check your connection and log it again.' })
         return false
       }
 
-      // Counted as completed below, exactly as if it had been sent. The set is
-      // recorded; the only difference is where it currently lives.
+      // Counted as completed, like a sent set
       set(state => ({
         logError: null,
         queuedSetCount: state.queuedSetCount + 1,
@@ -756,8 +668,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       void get().flushSetQueue()
     }
 
-    // The backend keys a set by (workoutExercise, setNumber) and overwrites on
-    // re-log, so mirror that here: one entry per set, never a duplicate.
+    // One entry per set, mirroring the backend's upsert
     set(state => {
       const exerciseId = currentExercise.exercise.id
       const already = state.completedSets.some(
@@ -788,14 +699,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         sent++
       } catch (err) {
         if (isRetriableFailure(err)) {
-          // Still offline. Stop rather than working through the rest: they will
-          // all fail the same way, and each one is a timeout the athlete waits
-          // through if this was called from the Finish screen.
+          // Still offline: stop; the rest would fail the same way
           await recordAttempt(entry)
           break
         }
-        // Refused on its merits. Retrying changes nothing, and an entry that
-        // can never drain would leave the badge lit forever.
+        // Rejected: drop it so the queue can drain
         console.error('queued set rejected, dropping:', err)
         await dequeueSet(entry.id)
       }
@@ -816,8 +724,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   },
 
   finishSession: async () => {
-    // A finish already on the wire → hand back the same promise instead of
-    // firing a second POST.
+    // A finish already in flight: return the same promise
     if (finishInFlight) return finishInFlight
 
     const { sessionId, sessionStartTime } = get()
@@ -833,15 +740,12 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     finishInFlight = (async () => {
       try {
-        // Drain the outbox BEFORE finishing. The finish is what turns sets into
-        // fatigue, and it reads them from the database — a set still sitting on
-        // the phone at that moment is not counted, and replaying it afterwards
-        // would leave a row nothing derives from. This is the one place the
-        // ordering actually matters.
+        // Drain the outbox first — finishing reads sets from the database, so a
+        // set still on the phone would never be counted
         await get().flushSetQueue()
         return await doFinish(sessionId, duration, set, sourceScheduledId)
       } finally {
-        // Cleared on failure too, so a retry from the Finish screen can run
+        // Cleared on failure too, so a retry can run
         finishInFlight = null
       }
     })()
@@ -850,7 +754,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   }
 }))
 
-// Performs the finish request and clears the workout out of the store.
+// Sends the finish request and clears the workout from the store.
 async function doFinish(
   sessionId: string,
   duration: number,
@@ -859,9 +763,7 @@ async function doFinish(
 ) {
   const result = await workoutService.finishSession(sessionId, duration)
 
-  // Close the standby slot so the plan stops showing as due. After the finish,
-  // not before: the session is what makes it completed, and a failure here must
-  // not lose the workout that has already been recorded.
+  // Close the standby slot, after the finish (a failure here must not lose the workout)
   if (scheduledId) {
     try {
       await templateService.close(scheduledId, 'completed')
@@ -870,9 +772,7 @@ async function doFinish(
     }
   }
 
-  // Wipe the whole selection, not just the session ids: leaving
-  // selectedExercises behind lets a back-navigation to /workout/active
-  // remount and start a brand-new session against stale exercise rows.
+  // Clear the whole selection, so navigating back can't start a new session on stale rows
   set({
     activeSession: null,
     sessionId: null,

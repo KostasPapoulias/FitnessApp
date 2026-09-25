@@ -3,16 +3,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { authService } from '../services/auth.service'
 import { useT } from '../i18n'
 
-/** Must match credentials.service on the server, as Register's does. */
+/** Must match credentials.service on the server. */
 const MIN_PASSWORD_LENGTH = 10
 
-/**
- * Choose a new password, using the token from the emailed link.
- *
- * Success does NOT sign the user in. Handing out a session off the back of a
- * link sitting in an inbox skips the one thing that proves they know the
- * password they just set — so they land on sign-in and type it once.
- */
+/** Set a new password from the emailed token. Does not sign the user in. */
 export default function ResetPassword() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -25,8 +19,7 @@ export default function ResetPassword() {
   const [done, setDone] = useState(false)
   const { t } = useT()
 
-  // Checked here as well as server-side, so a mismatch costs no round trip and
-  // the message appears next to the field that caused it.
+  // Checked client-side too, so the error shows beside the field
   const mismatch = confirm.length > 0 && password !== confirm
 
   const submit = async () => {
@@ -53,9 +46,7 @@ export default function ResetPassword() {
     </div>
   )
 
-  // No token in the URL at all — someone opened the page directly, or a mail
-  // client mangled the link. Say so rather than showing a form that can only
-  // fail on submit.
+  // No token in the URL: say so instead of showing a form that can only fail
   if (!token) {
     return shell(
       <>

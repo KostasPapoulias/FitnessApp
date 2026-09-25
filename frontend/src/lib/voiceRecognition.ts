@@ -2,20 +2,9 @@ import { Capacitor } from '@capacitor/core'
 import { SpeechRecognition } from '@capacitor-community/speech-recognition'
 
 /**
- * Continuous speech recognition, native or web.
- *
- * Two engines behind one handle:
- *
- *  - **Native** (`@capacitor-community/speech-recognition`) on a packaged
- *    build, which is where hands-free logging is actually used.
- *  - **Web Speech** in the browser and PWA. The plugin's own web layer throws
- *    `unimplemented` on every method, so this file provides the fallback.
- *
- * Neither engine really listens continuously. Both stop after an utterance or a
- * stretch of silence, so "continuous" here means *restarted on every stop* —
- * which is also why the restart needs a circuit breaker: a denied mic ends up
- * in a stop/start loop that spins the CPU and drains the battery of a phone
- * that is, by definition, sitting on a bench for an hour.
+ * Continuous speech recognition: the native Capacitor plugin in packaged
+ * builds, Web Speech in the browser. Both stop after each utterance, so the
+ * session restarts on every stop, behind a circuit breaker for repeated failures.
  */
 
 export type VoiceState =
@@ -47,9 +36,7 @@ const RESTART_WINDOW_MS = 10_000
 
 const isNative = () => Capacitor.isNativePlatform()
 
-// ── minimal Web Speech typings ──────────────────────────────────────────────
-// Not in TS's DOM lib, and the full shape isn't worth vendoring for the four
-// members used here.
+// ── minimal Web Speech typings (not in TS's DOM lib) ──────────────────────────
 
 interface WebSpeechAlternative { transcript: string }
 interface WebSpeechResult {
@@ -86,8 +73,7 @@ const webRecognitionCtor = (): (new () => WebSpeechRecognition) | null => {
     (new () => WebSpeechRecognition) | null
 }
 
-/** Whether this device can recognise speech at all — checked before the UI
- *  offers a toggle, so nobody is shown a switch that cannot work. */
+/** Whether this device can recognise speech at all. */
 export const isVoiceSupported = async (): Promise<boolean> => {
   if (isNative()) {
     try {
@@ -100,13 +86,7 @@ export const isVoiceSupported = async (): Promise<boolean> => {
   return webRecognitionCtor() !== null
 }
 
-/**
- * Ask for the microphone.
- *
- * Native asks explicitly. The web engine has no separate permission call — the
- * browser prompts on the first `start()` — so this reports true and lets the
- * real answer arrive as a `denied` state.
- */
+/** Ask for the microphone. The web engine has no separate call — it prompts on start. */
 export const requestVoicePermission = async (): Promise<boolean> => {
   if (!isNative()) return webRecognitionCtor() !== null
   try {
@@ -117,12 +97,7 @@ export const requestVoicePermission = async (): Promise<boolean> => {
   }
 }
 
-/**
- * Begin listening. Resolves once the engine is running.
- *
- * The returned handle's `stop()` is idempotent and safe to call from a React
- * cleanup that may run twice under StrictMode.
- */
+/** Begin listening; resolves once running. `stop()` is idempotent (StrictMode-safe). */
 export const startVoiceSession = async (
   options: VoiceSessionOptions
 ): Promise<VoiceSession> => {
@@ -174,18 +149,17 @@ export const startVoiceSession = async (
     const runOnce = async () => {
       if (!active) return
       try {
-        // Resolves when this utterance ends; partials have already arrived
-        // through the listener above.
+        // Resolves when the utterance ends; partials arrive via the listener
         const result = await SpeechRecognition.start({
           language: LANGUAGE,
           maxResults: 1,
           partialResults: true,
-          // A system dialog would defeat the entire point of hands-free.
+          // No system dialog
           popup: false,
         })
         if (result?.matches?.[0]) push(result.matches[0])
       } catch {
-        // A stop mid-utterance lands here too, so it is not necessarily a fault.
+        // Also reached when stopped mid-utterance — not necessarily a fault
       }
       if (!active) return
       if (!mayRestart()) { report('failed'); return }
@@ -229,8 +203,7 @@ export const startVoiceSession = async (
   }
 
   recognition.onerror = (event) => {
-    // 'no-speech' and 'aborted' are ordinary during a workout — someone resting
-    // in silence produces one every few seconds.
+    // 'no-speech' and 'aborted' are routine; only permission errors are fatal
     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
       active = false
       report('denied')

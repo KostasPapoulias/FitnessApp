@@ -7,13 +7,7 @@ import StarIcon from '../../components/workout/StarIcon'
 import { AlertTriangleIcon, SearchIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
 
-// Muscle sub-filters, as label → the muscle names the API actually returns.
-//
-// These were bare strings matched with `includes` against the muscle name, and
-// most of them could never match: "Quads" is not a substring of "Quadriceps",
-// and "Upper" / "Side Delt" name regions of a muscle the model does not split.
-// Chest and Shoulders therefore have no muscle row at all — the equipment row
-// is what narrows those.
+// Muscle sub-filters: label → the muscle names the API returns.
 const MUSCLE_FILTERS: Record<string, { label: string; muscles: string[] }[]> = {
   Legs: [
     { label: 'Quads', muscles: ['Quadriceps'] },
@@ -37,7 +31,7 @@ const MUSCLE_FILTERS: Record<string, { label: string; muscles: string[] }[]> = {
   ],
 }
 
-// How the modality reads in the header + what the tray does next
+// Header copy and tray actions per modality.
 const MODALITY_META: Record<string, { title: string; sub: string; cta: string; plan: string }> = {
   Strength:     { title: 'Exercises',   sub: 'Select exercises',            cta: 'Plan Sets →',   plan: '/workout/plan' },
   Calisthenics: { title: 'Calisthenics', sub: 'Pick your movements',        cta: 'Plan Sets →',   plan: '/workout/plan' },
@@ -51,10 +45,7 @@ export default function ExerciseList() {
   const location = useLocation()
   const category: string | undefined = location.state?.category
   const modality: string = location.state?.modality ?? 'Strength'
-  // Set when the caller came here to search rather than to browse a category
-  // (the magnifier on BrowseCategories). Read once into a ref below, because
-  // route state survives a re-render and re-focusing on every one of them
-  // would fight the user for the caret.
+  // Arrived via the search button; read once so re-renders don't re-focus
   const autoFocusSearch: boolean = location.state?.autoFocusSearch === true
   const singleSelect = modality === 'Cardio'
 
@@ -68,11 +59,7 @@ export default function ExerciseList() {
   const [isLoading, setIsLoading] = useState(true)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Focus once, on arrival, and never again — the deps are empty on purpose.
-  //
-  // Not `autofocus`: iOS ignores it outside a user gesture, and this navigation
-  // *is* one (the magnifier tap), so an explicit focus() in an effect is what
-  // actually raises the keyboard on a phone.
+  // Focus once on arrival — an explicit focus() in the tap-initiated navigation raises the iOS keyboard
   useEffect(() => {
     if (autoFocusSearch) searchRef.current?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,9 +70,7 @@ export default function ExerciseList() {
 
   useEffect(() => {
     setIsLoading(true)
-    // Both filters are about the list that is on screen, so neither survives a
-    // change of it — a stuck "Cable Machine" on a screen with none reads as an
-    // empty catalogue.
+    // Filters reset when the list changes
     setSubFilter('All')
     setEquipmentFilter('All')
     // Strength narrows by muscle group; every other modality lists by modality only.
@@ -94,9 +79,7 @@ export default function ExerciseList() {
       .finally(() => setIsLoading(false))
   }, [category, modality])
 
-  // Built from what came back rather than a fixed list, so it can never offer a
-  // filter that empties the screen. Worth a row now that the same movement
-  // exists in barbell, dumbbell, machine and cable versions.
+  // Equipment options from what came back, so a filter never empties the list
   const equipmentOptions = useMemo(() => {
     const counts = new Map<string, number>()
     for (const ex of exercises) {
@@ -122,7 +105,7 @@ export default function ExerciseList() {
 
   const toggleExercise = (exercise: Exercise) => {
     if (singleSelect) {
-      setSingleExercise(exercise) // cardio: exactly one activity
+      setSingleExercise(exercise) // cardio: one activity
       return
     }
     if (isSelected(exercise.id)) removeExercise(exercise.id)
@@ -167,11 +150,7 @@ export default function ExerciseList() {
             placeholder={`Search ${headerTitle.toLowerCase()}...`}
             className="flex-1 bg-transparent text-white text-sm placeholder-dark-400 outline-none"
           />
-          {/* In the search bar rather than in the chip rows below it: those two
-              rows are conditional (muscle groups are Strength-only, equipment
-              needs more than one option), so a filter placed there would
-              vanish on exactly the modalities that have the fewest other ways
-              to narrow a long list. */}
+          {/* Favourites filter, in the search bar so it is available on every modality */}
           <button
             onClick={() => setFavoritesOnly(v => !v)}
             aria-pressed={favoritesOnly}
@@ -201,10 +180,7 @@ export default function ExerciseList() {
         </div>
       )}
 
-      {/* Equipment. The catalogue carries the same movement on a barbell, a
-          dumbbell, a machine and a cable, so "what is in front of me" narrows
-          the list faster than anything else. Second colour so the two rows do
-          not read as one set of chips. */}
+      {/* Equipment filter (second colour, so the two chip rows read separately) */}
       {equipmentOptions.length > 1 && (
         <div className="px-5 mb-3">
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -221,9 +197,7 @@ export default function ExerciseList() {
         </div>
       )}
 
-      {/* List */}
-      {/* Padding for the continue tray only while the tray is actually there —
-          otherwise it is just a dead strip under the last exercise. */}
+      {/* List; bottom padding only while the continue tray shows */}
       <div className={`flex-1 min-h-0 overflow-y-auto px-5
                        ${selectedCount > 0 ? 'pb-[var(--tray-clear)]' : 'pb-6'}`}>
         <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
@@ -235,10 +209,7 @@ export default function ExerciseList() {
             {[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-dark-800 rounded-card animate-pulse" />)}
           </div>
         ) : filtered.length === 0 && favoritesOnly ? (
-          // Nothing is missing from the catalogue here — the filter is simply
-          // on, and offering "create an exercise" would answer a question
-          // nobody asked. The way out is to turn the star off, so that is the
-          // button.
+          // Favourites filter is on: the way out is turning it off
           <div className="bg-dark-800 border border-dark-600 rounded-card p-5 text-center">
             <p className="text-white text-sm font-semibold">No favourites here</p>
             <p className="text-dark-400 text-xs mt-1 mb-4">
@@ -253,9 +224,7 @@ export default function ExerciseList() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          // The moment the feature exists for. Someone searched for a movement
-          // and it is not here; offering the search text as the name is the
-          // difference between a dead end and one tap.
+          // No match: offer to create it, prefilled with the search text
           <div className="bg-dark-800 border border-dark-600 rounded-card p-5 text-center">
             <p className="text-white text-sm font-semibold">
               {search ? `No match for "${search}"` : 'Nothing here yet'}
@@ -286,11 +255,7 @@ export default function ExerciseList() {
                                ? 'border-brand-red/40 bg-[#1a0d0d]'
                                : 'border-dark-600 bg-dark-800'}`}>
                   <div className="flex items-center gap-3 p-3">
-                    {/* The emoji is the backdrop, not the alternative: it is
-                        always rendered and the thumbnail covers it. That is
-                        what makes `onError` work — hiding a failed image
-                        reveals the emoji rather than leaving an empty square,
-                        which a ternary could not do without extra state. */}
+                    {/* The icon is always rendered behind the thumbnail, so a failed image reveals it */}
                     <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center text-xl
                                     flex-shrink-0 overflow-hidden
                                     ${selected ? 'bg-brand-teal/20' : 'bg-dark-700'}`}>
@@ -301,10 +266,7 @@ export default function ExerciseList() {
                           alt=""
                           width={44}
                           height={44}
-                          /* Only the rows on screen are fetched. The catalogue
-                             is 226 exercises in one long scroller, so eager
-                             loading would pull every thumbnail the moment the
-                             picker opens. */
+                          /* Lazy: only on-screen thumbnails load */
                           loading="lazy"
                           decoding="async"
                           className="absolute inset-0 h-full w-full object-cover"
@@ -331,8 +293,7 @@ export default function ExerciseList() {
                           Loads an area you're working around
                         </p>
                       )}
-                      {/* Says why this one sank to the bottom. Without the
-                          line it just looks like an odd sort order. */}
+                      {/* Explains why it sorted to the bottom */}
                       {exercise.needsMissingEquipment && (
                         <p className="text-dark-400 text-xs mt-0.5">
                           Needs equipment you haven't listed
@@ -350,9 +311,7 @@ export default function ExerciseList() {
               )
             })}
 
-            {/* Also offered below a list that DID return results — the search
-                matching something is not the same as it matching what they
-                came for, and that case has no empty state to fall into. */}
+            {/* Also offered below results — a match may not be what they wanted */}
             <button
               onClick={() => navigate('/workout/exercises/new', {
                 state: { name: search, modality },

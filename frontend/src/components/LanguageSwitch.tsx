@@ -2,14 +2,9 @@ import { useLocaleStore } from '../store/useLocaleStore'
 import { LANGUAGE_NAMES, LOCALES, useT } from '../i18n'
 
 /**
- * The EN / ΕΛ pill on the signed-out screens.
- *
- * Signed-out only. A choice made here is marked pending and saved to whichever
- * account signs in next (see `reconcileLocale` in useAuthStore); once signed
- * in, the language lives in Profile, where it is saved straight away.
- *
- * Each option carries its own `lang` so a screen reader pronounces "ΕΛ" as
- * Greek even while the page around it is English.
+ * EN / ΕΛ switch for the signed-out screens. The choice is saved to whichever
+ * account signs in next (see `reconcileLocale` in useAuthStore). Each option
+ * has its own `lang` for screen readers.
  */
 export default function LanguageSwitch() {
   const { locale, t } = useT()

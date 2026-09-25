@@ -7,35 +7,13 @@ import {
 } from '../../lib/haptics'
 
 /**
- * A set's weight, reps or RPE, three ways: the −/+ buttons around it (the
- * caller's), a tap to type it, and a long press to pick it.
+ * A set's weight, reps or RPE: tap to type, or long-press to open a picker.
  *
- * Typing exists because steppers do not scale: getting from a 20 kg estimate
- * to a real 100 kg working weight is thirty-two taps.
- *
- * The picker exists because typing needs two hands and a keyboard over the
- * screen. Hold the number and a column opens ON the field — the current value
- * sits exactly where the field is, higher values stacked above it, lower ones
- * below. The column does not move. The finger, still down, slides onto the
- * value it wants, and letting go writes it.
- *
- * It is anchored to the field rather than to the finger on purpose. A panel
- * that followed the finger was chasing the thing trying to read it, and it
- * floated free of the number being edited, so it never read as "this field,
- * opened up". Holding still is also what makes it a picker rather than a
- * gesture to learn: every value on offer is visible, and the one under the
- * fingertip is the one you get.
- *
- * Past the last row the column keeps counting — hold the finger beyond the
- * top or bottom and the values scroll on, one step per tick — so the range is
- * not limited to what fits on screen. 20 kg to 100 kg is one slide and a
- * short wait, not a page of rows.
- *
- * The overlay is `pointer-events: none`; the finger never actually touches it.
- * Every move keeps arriving at the element that was pressed, through pointer
- * capture, so the column can open under the finger without stealing the
- * gesture. Weight steps along the same plate grid as the −/+ buttons
- * (`nextLoad`), so no gesture can produce a weight the steppers could not.
+ * The picker is a column anchored on the field — current value on the field,
+ * higher values above, lower below. It stays still; the finger slides onto a
+ * value and releasing writes it. Holding past either end keeps scrolling
+ * values. The overlay ignores pointer events; moves reach the field through
+ * pointer capture. Weight steps on the `nextLoad` plate grid.
  */
 
 export type NumberKind = 'weight' | 'reps' | 'rpe'
@@ -48,48 +26,48 @@ interface Props {
   label: string
   /** Calisthenics load — negative is assistance, so it may go below zero. */
   signed?: boolean
-  /** Text styling of the number. Sizing belongs here, not on a wrapper. */
+  /** Text styling of the number (sizing too). */
   className?: string
   style?: CSSProperties
 }
 
-/** Long enough that a tap or the start of a scroll never trips it. */
+/** Long enough that a tap or scroll never triggers it. */
 const HOLD_MS = 380
-/** Movement before the hold fires that means "scrolling", not "holding". */
+/** Movement before the hold fires that means scrolling. */
 const SLOP_PX = 8
-/** Height of one value in the column — a comfortable thumb target. */
+/** Row height in the column. */
 const ROW_PX = 40
-/** Most rows either side of the field, when the screen has room for them. */
+/** Most rows either side of the field. */
 const MAX_ROWS = 5
-/** Space the label and difference take above the top row. */
+/** Header space above the top row. */
 const HEADER_PX = 26
-/** How often the column steps on while the finger is held past its end. */
+/** Step interval while held past an end. */
 const SCROLL_MS = 110
 const EDGE_PX = 8
 
 const BOUNDS: Record<NumberKind, { min: number; max: number }> = {
-  // Physical rather than defensive, like the server's own schema scalars
+  // Physical bounds, like the server's schema scalars
   weight: { min: 0, max: 1000 },
   reps: { min: 1, max: 999 },
   rpe: { min: 1, max: 10 },
 }
 
-/** Where the column sits, fixed for as long as it is open. */
+/** Where the column sits, fixed while open. */
 interface Geometry {
-  /** Centre of the field, in viewport pixels. Row 0 is drawn on it. */
+  /** The field's centre, in viewport pixels; row 0 is drawn on it. */
   cx: number
   cy: number
   width: number
-  /** Rows that fit above and below the field without leaving the screen. */
+  /** Rows that fit above and below without leaving the screen. */
   rowsAbove: number
   rowsBelow: number
 }
 
 interface PickerState {
   start: number
-  /** How far the column has scrolled past its ends, in steps. */
+  /** Steps scrolled past the column's ends. */
   offset: number
-  /** The visible row under the finger: 0 is the field, positive is above. */
+  /** The row under the finger: 0 is the field, positive is above. */
   row: number
   geometry: Geometry
 }
@@ -113,11 +91,7 @@ export default function NumberField({
     return v
   }
 
-  /**
-   * Pull `k` back until it names a value the one before it did not — past a
-   * bound every further step clamps to the same number, and those rows are
-   * not shown, so the selection must not land on one.
-   */
+  /** Pull `k` back past rows hidden at a bound (they repeat the bound's value). */
   const liveStep = (start: number, k: number) => {
     while (k !== 0 && stepFrom(start, k) === stepFrom(start, k - Math.sign(k))) {
       k -= Math.sign(k)
@@ -129,14 +103,12 @@ export default function NumberField({
     stepFrom(s.start, liveStep(s.start, s.offset + s.row))
 
   // ── typing ──────────────────────────────────────────────────────────────
-  // A string while focused, not a number: `Number('')` is 0, and a cleared
-  // field would otherwise log a set at nothing. Empty or junk reverts.
+  // A string while editing (Number('') is 0); empty or junk reverts.
   const [draft, setDraft] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const startTyping = () => {
-    // flushSync so the input exists before this tap's handler returns — iOS
-    // only raises the keyboard for a focus() inside the gesture itself.
+    // flushSync so the input exists within this tap — iOS only opens the keyboard then
     flushSync(() => setDraft(String(value)))
     inputRef.current?.focus()
     inputRef.current?.select()
@@ -146,8 +118,7 @@ export default function NumberField({
     if (draft === null) return
     const n = Number(draft.replace(',', '.').trim())
     if (draft.trim() !== '' && Number.isFinite(n)) {
-      // Weight keeps what was typed — a 22 kg dumbbell is real even though
-      // it is off the stepper grid. Reps and RPE are whole numbers.
+      // Weight keeps what was typed (22 kg dumbbells exist); reps and RPE are whole numbers
       const clean = clamp(kind === 'weight' ? Math.round(n * 100) / 100 : Math.round(n))
       if (clean !== value) onChange(clean)
     }
@@ -156,24 +127,20 @@ export default function NumberField({
 
   // ── picking ─────────────────────────────────────────────────────────────
   const [picker, setPicker] = useState<PickerState | null>(null)
-  /**
-   * The live gesture. A ref, not state: pointer events and the scroll timer
-   * both read and write it between renders, and a stale closure over state
-   * would drop a step or scroll one row too far.
-   */
+  /** The live gesture, in a ref: pointer events and the scroll timer update it between renders. */
   const press = useRef<{
     id: number
     downX: number
     downY: number
     holdTimer: ReturnType<typeof setTimeout>
     scrollTimer: ReturnType<typeof setInterval> | null
-    /** -1, 0 or 1: the finger is held past the bottom, inside, or past the top. */
+    /** -1, 0 or 1: held below, inside or above the column. */
     scrollDir: number
     open: boolean
     state: PickerState | null
     current: number
   } | null>(null)
-  /** Set by a pick so the click that follows the release does not type. */
+  /** Swallows the click that follows a pick. */
   const swallowClick = useRef(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
@@ -181,7 +148,7 @@ export default function NumberField({
     if (useSessionPrefsStore.getState().haptic) hapticSelectionTick()
   }
 
-  /** Push the gesture's state to the screen, ticking if the value moved. */
+  /** Push gesture state to the screen, ticking when the value changes. */
   const publish = () => {
     const p = press.current
     if (!p?.state) return
@@ -206,10 +173,8 @@ export default function NumberField({
     if (commit && p.current !== value) onChange(p.current)
   }
 
-  // Scrolling has to be refused by a NON-passive touchmove listener — React's
-  // are passive, and `touch-action` is decided at touchstart, before anyone
-  // knows whether this touch will be a hold. Refused only while picking, so a
-  // scroll that starts on the number still scrolls the page.
+  // Block scrolling with a non-passive touchmove listener, only while picking
+  // (React's listeners are passive; touch-action is fixed at touchstart)
   useEffect(() => {
     const el = buttonRef.current
     if (!el) return
@@ -218,8 +183,7 @@ export default function NumberField({
     return () => el.removeEventListener('touchmove', block)
   }, [draft])
 
-  // Unmounting mid-press (the set was logged by voice, the exercise changed)
-  // must not leave timers that open or scroll a picker for a field that is gone.
+  // Clear timers on unmount mid-press
   useEffect(() => () => {
     const p = press.current
     if (!p) return
@@ -249,9 +213,7 @@ export default function NumberField({
     p.state = { start: value, offset: 0, row: 0, geometry }
     setPicker({ ...p.state })
 
-    // Scrolls on while the finger is held past either end. Stops by itself at
-    // a bound: an offset that no longer changes the value is not applied,
-    // or holding past the top of RPE 10 would wind up rows to unwind.
+    // Scroll while held past an end; stops at a bound
     p.scrollTimer = setInterval(() => {
       const q = press.current
       if (!q?.state || q.scrollDir === 0) return
@@ -269,16 +231,12 @@ export default function NumberField({
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
-    // A mouse drag would otherwise select text across the page while
-    // picking. Mouse only: on touch this would do nothing useful.
+    // Prevent text selection during a mouse drag
     if (e.pointerType === 'mouse') e.preventDefault()
-    // Reset here rather than in onClick: a touch pick whose moves were
-    // refused often fires no click at all, and a flag left standing would
-    // eat the next honest tap.
+    // Reset here: a touch pick often fires no click, which would leave the flag set
     swallowClick.current = false
     endPress(false)
-    // Captured so every move and the release come back here, wherever the
-    // finger goes — including over the column.
+    // Capture, so moves and release come back here wherever the finger goes
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* already gone */ }
     press.current = {
       id: e.pointerId,
@@ -297,13 +255,12 @@ export default function NumberField({
     const p = press.current
     if (!p || p.id !== e.pointerId) return
     if (!p.open || !p.state) {
-      // Moved before the hold landed: this is a scroll or a swipe. Let it go.
+      // Moved before the hold landed: a scroll, so let it go
       if (Math.hypot(e.clientX - p.downX, e.clientY - p.downY) > SLOP_PX) endPress(false)
       return
     }
 
-    // Which row is under the finger. Only vertical position counts — a thumb
-    // drifts sideways as it slides, and that is not a choice.
+    // The row under the finger (vertical position only)
     const { cy, rowsAbove, rowsBelow } = p.state.geometry
     const under = Math.round((cy - e.clientY) / ROW_PX)
     const row = Math.max(-rowsBelow, Math.min(rowsAbove, under))
@@ -325,8 +282,7 @@ export default function NumberField({
         ref={inputRef}
         value={draft}
         aria-label={label}
-        // iOS's decimal pad has no minus key, so a signed load needs the
-        // full keyboard to be typeable at all.
+        // Signed loads need the full keyboard (iOS decimal pad has no minus)
         inputMode={kind === 'weight' ? (signed ? 'text' : 'decimal') : 'numeric'}
         enterKeyHint="done"
         onChange={e => setDraft(e.target.value)}
@@ -335,7 +291,7 @@ export default function NumberField({
           if (e.key === 'Enter') e.currentTarget.blur()
           if (e.key === 'Escape') setDraft(null)
         }}
-        // Never under 16px: iOS zooms the whole page into a smaller input.
+        // Never under 16px: iOS zooms smaller inputs
         className={`w-full min-w-0 bg-dark-900 rounded-md text-center outline-none
                     ring-1 ring-brand-teal tabular-nums ${className}`}
         style={{ ...style, fontSize: 'max(16px, 1em)' }}
@@ -343,7 +299,7 @@ export default function NumberField({
     )
   }
 
-  // Everything the column draws, derived from the gesture's state
+  // The column's rows, derived from the gesture state
   const rows = picker
     ? (() => {
         const { start, offset, geometry } = picker
@@ -355,7 +311,7 @@ export default function NumberField({
           out.push({
             key: r,
             value: v,
-            // Past a bound every step clamps to the same number: show it once
+            // Hidden past a bound, where steps repeat the same value
             hidden: k !== 0 && v === stepFrom(start, k - Math.sign(k)),
             selected: k === selectedK,
             start: k === 0,
@@ -375,10 +331,9 @@ export default function NumberField({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={() => endPress(true)}
-        // A cancel is the system taking the touch (a notification, the OS
-        // back gesture). The athlete did not choose the number showing.
+        // A cancel is the system taking the touch — keep the old value
         onPointerCancel={() => endPress(false)}
-        // Android and desktop both raise a context menu on a long press
+        // Suppress the long-press context menu
         onContextMenu={e => e.preventDefault()}
         className={`w-full min-w-0 text-center tabular-nums select-none
                     [-webkit-touch-callout:none] rounded-md
@@ -389,10 +344,7 @@ export default function NumberField({
         {value}
       </button>
 
-      {/* Portalled to <body>: a fixed overlay inside any transformed ancestor
-          (a sheet mid-animation, an active:scale card) is positioned against
-          that ancestor instead of the screen. z-[60] so it covers BottomNav —
-          see CLAUDE.md. */}
+      {/* Portalled to <body> (transformed ancestors would misplace a fixed overlay); z-[60] covers BottomNav */}
       {picker && rows && createPortal(
         <PickerColumn
           label={label}
@@ -420,15 +372,12 @@ function PickerColumn({ label, geometry, rows, delta, canScrollUp, canScrollDown
 }) {
   const { cx, cy, width, rowsAbove } = geometry
   const vw = window.innerWidth
-  // Row 0's centre lands exactly on the field's centre; everything else is
-  // measured from there. Horizontal is clamped to the screen, vertical never
-  // needs to be — the row counts were chosen to fit.
+  // Row 0 is centred on the field; horizontal position is clamped to the screen
   const top = cy - ROW_PX / 2 - rowsAbove * ROW_PX - HEADER_PX
   const left = Math.min(Math.max(cx - width / 2, EDGE_PX), vw - width - EDGE_PX)
 
   return (
-    // A light dim and no blur: the set being edited has to stay readable
-    // around the column.
+    // Light dim, no blur
     <div aria-hidden="true" className="fixed inset-0 z-[60] pointer-events-none bg-black/20">
       <div
         className="absolute rounded-card bg-dark-900/85 border border-dark-600 shadow-lg overflow-hidden"
@@ -453,8 +402,7 @@ function PickerColumn({ label, geometry, rows, delta, canScrollUp, canScrollDown
                   r.selected
                     ? 'bg-brand-teal text-black text-[22px]'
                     : r.start
-                    // Where the value was before the hold, so it is always
-                    // clear how to put it back.
+                    // The starting value keeps an outline
                     ? 'text-white text-lg ring-1 ring-dark-400'
                     : 'text-dark-200 text-base'
                 }`}
@@ -462,7 +410,7 @@ function PickerColumn({ label, geometry, rows, delta, canScrollUp, canScrollDown
                 {r.value}
               </span>
             )}
-            {/* The column carries on past its ends — say so where it does. */}
+            {/* Arrows where the column can scroll further */}
             {i === 0 && canScrollUp && (
               <span className="absolute right-1.5 text-dark-400 text-[10px]">▲</span>
             )}

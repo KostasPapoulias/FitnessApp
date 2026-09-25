@@ -7,21 +7,14 @@ import { localDay, localHour, isQuietHour } from './notification-window.service'
 import { log } from '../lib/logger'
 
 /**
- * The coach tier's daily plan.
- *
- * The division of labour is deliberate: the AI decides WHAT to say and roughly
- * WHEN, and nothing else. It cannot decide how many notifications to send, it
- * cannot pick a time outside the user's waking hours, and it cannot introduce a
- * number that was not in the data it was given.
- *
- * The reason is not distrust of the model, it is failure modes. A plan is a row
- * you can read, delete and reproduce. A model deciding to fire on its own is a
- * behaviour you cannot test and cannot explain to a user who got woken up.
+ * The coach tier's daily plan. The AI decides what to say and roughly when —
+ * never how many, never a time inside quiet hours, never a number that is not
+ * in its data. Plans are stored as `planned` notification rows.
  */
 
 /** Hard ceiling regardless of what the model proposes. */
 const MAX_PLANNED = 5
-/** Planner calls per user per day. One morning plan plus a few re-plans. */
+/** Planner calls per user per day. */
 const MAX_PLANNER_CALLS = Number(process.env.AI_PLANNER_CALLS_PER_DAY) || 4
 
 interface PlannedItem {
@@ -31,13 +24,7 @@ interface PlannedItem {
   body: string
 }
 
-/**
- * Unwrap a ```json fence.
- *
- * Models that do not honour `response_format` answer with the right JSON inside
- * a markdown block, which `JSON.parse` rejects. Salvaging that costs three
- * lines and turns a whole silent day of no notifications into a working plan.
- */
+/** Unwrap a ```json fence, for models that ignore `response_format`. */
 const stripJsonFences = (text: string): string => {
   const trimmed = text.trim()
   if (!trimmed.startsWith('```')) return trimmed || '{}'
@@ -65,13 +52,8 @@ const PLAN_SCHEMA = {
 }
 
 /**
- * Reject any number the model invented.
- *
- * The context contains real figures — readiness, loads, weights — and a model
- * that paraphrases them will occasionally produce a plausible-looking one that
- * is simply wrong ("you benched 120kg last week"). A user cannot tell the
- * difference, so any message containing a number absent from the source data is
- * dropped rather than corrected.
+ * True when the text contains a number not present in the source data —
+ * such messages are dropped rather than risk a wrong figure.
  */
 export const containsInventedNumbers = (text: string, context: string): boolean => {
   const numbers = text.match(/\d+(?:\.\d+)?/g) ?? []
@@ -79,13 +61,13 @@ export const containsInventedNumbers = (text: string, context: string): boolean 
 
   const contextNumbers = new Set(context.match(/\d+(?:\.\d+)?/g) ?? [])
   return numbers.some(n => {
-    // Small integers are ordinary prose ("3 sets", "day 2"), not claims
+    // Small integers are ordinary prose ("3 sets"), not claims
     if (Number(n) <= 12 && Number.isInteger(Number(n))) return false
     return !contextNumbers.has(n)
   })
 }
 
-/** Wording used when the AI is unavailable, refused, or produced nothing usable. */
+/** Used when the AI is unavailable or produced nothing usable. */
 const FALLBACK_ITEM = {
   title: '💪 SomaTrack',
   body: 'Checking in — how’s the training going? Tap to talk it through.',
@@ -99,48 +81,29 @@ const clampToWakingHours = (
   const hour = Math.max(0, Math.min(23, Math.floor(item.hour)))
   const minute = Math.max(0, Math.min(59, Math.floor(item.minute)))
 
-  // Never nudge a proposed time INTO the waking window — a 3am suggestion is a
-  // sign the model misread the context, and shifting it to 8am sends a message
-  // that was reasoned about the middle of the night.
+  // A time inside quiet hours is dropped, never shifted into waking hours
   if (isQuietHour(hour, quietStart, quietEnd)) return null
   return { ...item, hour, minute, title: item.title, body: item.body }
 }
 
-/**
- * Convert a local wall-clock time today into an instant.
- *
- * Compares the naive UTC guess against what that instant actually reads as in
- * the target zone, then corrects — which handles DST without needing a table.
- */
+/** A local wall-clock time today as an instant; corrects the offset, so DST is handled. */
 const localTimeToDate = (hour: number, minute: number, timezone: string): Date => {
   const now = new Date()
   const guess = new Date(Date.UTC(
     now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute
   ))
   const offsetHours = localHour(guess, timezone) - hour
-  // Offsets can wrap the day boundary either way
+  // Offsets can wrap the day boundary
   const corrected = offsetHours > 12 ? offsetHours - 24
     : offsetHours < -12 ? offsetHours + 24
     : offsetHours
   return new Date(guess.getTime() - corrected * 3_600_000)
 }
 
-/**
- * Generate today's coach plan and store it as `planned` notification rows.
- *
- * Never throws: a failed plan means no coach notifications today, which is a
- * far better outcome than an exception escaping into the scheduler interval.
- */
+/** Generate today's coach plan as `planned` rows. Never throws. */
 export const planCoachNotifications = async (userId: string): Promise<number> => {
   try {
-    // Consent and push preference are independent switches, and both have to
-    // be on. The coach tier is the one notification type whose wording is
-    // written by a model from the athlete's body data, so "don't use my data"
-    // has to silence it — leaving it running would mean the most personal
-    // thing the app sends is the one thing the privacy switch missed.
-    //
-    // Read together: two independent rows, and this runs on every scheduler
-    // tick for every user against a remote database.
+    // Needs both push opt-in and AI data consent — the coach writes from body data
     const [pref, settings] = await Promise.all([
       prisma.notificationPreference.findUnique({ where: { userId } }),
       prisma.settings.findUnique({
@@ -150,21 +113,18 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
     ])
     if (!pref?.pushEnabled || !pref.coachEnabled || pref.coachSuspendedAt) return 0
 
-    // Absent row reads as consent given, matching the column default.
+    // No settings row reads as consent (the column default)
     if (!(settings?.aiConsentEnabled ?? true)) return 0
 
     const timezone = pref.timezone
     const today = localDay(new Date(), timezone)
 
-    // Already planned today?
     const existing = await prisma.notification.count({
       where: { userId, tier: 'coach', dedupeKey: { startsWith: `coach:${today}` } },
     })
     if (existing > 0) return 0
 
-    // Planner calls are capped on count rather than sharing the chat budget:
-    // a day of conversation must not silence the coach, and a re-plan loop must
-    // not quietly consume the allowance the user wanted for chatting.
+    // Planner calls have their own cap, separate from the chat budget
     const usage = await prisma.aiUsageDaily.findUnique({
       where: { userId_day: { userId, day: new Date().toISOString().slice(0, 10) } },
     })
@@ -182,8 +142,7 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
       if (!clamped) continue
 
       const plannedFor = localTimeToDate(clamped.hour, clamped.minute, timezone)
-      // Times already past are dropped, not fired immediately — a morning
-      // suggestion delivered at dinner has lost its point.
+      // Times already past are dropped, not fired immediately
       if (plannedFor.getTime() < Date.now()) continue
 
       try {
@@ -198,16 +157,13 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
             status: 'planned',
             plannedFor,
             dedupeKey: `coach:${today}:${index}`,
-            // Carried on the row rather than only in the logs. A planner that
-            // fails silently looks identical to one that had nothing to say —
-            // both produce bland text — and the fallback ran unnoticed for days
-            // because the only evidence was a console line on the host.
+            // Records why the fallback was used, so a failing planner is visible
             failReason: failure ?? null,
           },
         })
         created++
       } catch {
-        // Duplicate key from a concurrent plan — harmless, skip it
+        // Duplicate key from a concurrent plan — skip
       }
     }
 
@@ -219,7 +175,7 @@ export const planCoachNotifications = async (userId: string): Promise<number> =>
   }
 }
 
-/** `failure` is set only when the fallback was used, and says why. */
+/** `failure` is set only when the fallback was used. */
 interface PlanResult {
   items: PlannedItem[]
   failure?: string
@@ -233,8 +189,7 @@ const generatePlan = async (
 ): Promise<PlanResult> => {
   if (slots <= 0) return { items: [] }
 
-  // No provider configured is a normal state, not a fault: the planner is the
-  // optional coach tier, and the rest of notifications works without it.
+  // No provider configured: no plan (the coach tier is optional)
   let provider
   try {
     provider = resolveAiProvider()
@@ -265,12 +220,8 @@ Rules:
   a valid plan and better than filler.
 `.trim()
 
-    // A provider-native response schema has no portable equivalent — support
-    // for strict structured output varies by provider and by model. `json_object`
-    // is the widely honoured mode, with the shape stated in the prompt as the
-    // real instruction. Nothing downstream trusts it either way: every field is
-    // validated below, and a malformed reply degrades to an empty plan, which
-    // this function already treats as a legitimate outcome.
+    // `json_object` is the portable structured-output mode; every field is
+    // validated below regardless
     const response = await client.chat.completions.create({
       model: modelName,
       messages: [
@@ -298,14 +249,12 @@ Rules:
         item.title.length > 0 && item.body.length > 0 &&
         item.body.length <= 200 &&
         Number.isFinite(Number(item.hour)) && Number.isFinite(Number(item.minute)) &&
-        // Anything quoting a figure that is not in the source data is discarded
+        // Drop anything quoting a figure absent from the source data
         !containsInventedNumbers(`${item.title} ${item.body}`, context)
       )
       .map(item => ({ ...item, hour: Number(item.hour), minute: Number(item.minute) }))
 
-    // The model answered but every item was rejected. Worth distinguishing from
-    // a model that deliberately returned nothing: the first is a bug in the
-    // wording rules, the second is the plan working as intended.
+    // Every proposed item was rejected — worth recording, unlike a deliberately empty plan
     if (items.length === 0 && raw.length > 0) {
       return { items: [], failure: `all ${raw.length} proposed items rejected by filters` }
     }
@@ -313,9 +262,7 @@ Rules:
     return { items }
 
   } catch (error: any) {
-    // Model down, rate limited, safety-filtered, or returned unparseable JSON.
-    // One generic nudge is better than a crash and better than silence, but
-    // only one — filler does not deserve a full day's allowance.
+    // Model down, rate limited or unparseable: one generic nudge, not a full day of filler
     log.error('Coach plan generation failed, using fallback', error)
     return {
       items: [{ hour: 18, minute: 0, ...FALLBACK_ITEM }],

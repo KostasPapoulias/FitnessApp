@@ -9,8 +9,7 @@ export default function MuscleFatiguePopup() {
 
   const { muscleName, fatigueLevel, status, recoveryTargetAt } = selectedMuscle
 
-  // Time until fully recovered. Recovery is exponential, so the tail of a hard
-  // session runs into days — render those as days rather than "~61h".
+  // Time until recovered; long tails are shown in days
   const hoursLeft = recoveryTargetAt
     ? Math.max(0, (new Date(recoveryTargetAt).getTime() - Date.now()) / 3600000)
     : 0
@@ -104,9 +103,7 @@ export default function MuscleFatiguePopup() {
                              : 'bg-dark-700 text-dark-300 border-dark-600'
                            }`}
               >
-                {/* A coloured dot, not a coloured emoji: these are the same
-                    four bands the body map and the Home legend paint, and they
-                    have to be the same four colours. */}
+                {/* Coloured dot in the same four bands as the body map */}
                 <span className={`block w-2.5 h-2.5 rounded-full mx-auto mb-1 ${
                   level === 0 ? 'bg-brand-green' :
                   level === 35 ? 'bg-brand-yellow' :

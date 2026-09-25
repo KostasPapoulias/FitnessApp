@@ -1,10 +1,8 @@
 import prisma from '../lib/prisma'
 
 /**
- * Notification types the app knows how to send.
- *
- * Essential types are rule-driven and never suspend themselves. Coach types are
- * planned by the AI and back off when ignored.
+ * Notification types. Essential types are rule-driven and never suspend;
+ * coach types are AI-planned and back off when ignored.
  */
 export const NOTIFICATION_TYPES = {
   // ── essential ──
@@ -12,9 +10,7 @@ export const NOTIFICATION_TYPES = {
   OVERREACHING: 'overreaching',
   INACTIVITY: 'inactivity',
   COACH_SUSPENDED: 'coach_suspended',
-  // The athlete put a workout on a date and asked to be reminded. Essential,
-  // not coach: they requested this specific message, so it must not be
-  // suppressed by the coach tier backing off from unrelated nudges.
+  // Essential: the athlete asked for this reminder explicitly
   WORKOUT_REMINDER: 'workout_reminder',
   // ── coach ──
   COACH_NUDGE: 'coach_nudge',
@@ -30,29 +26,16 @@ export const ESSENTIAL_TYPES: NotificationType[] = [
   NOTIFICATION_TYPES.WORKOUT_REMINDER,
 ]
 
-/** Only these are AI-planned. Everything else is a rule. */
+/** The AI-planned types. */
 export const COACH_TYPES: NotificationType[] = [
   NOTIFICATION_TYPES.COACH_NUDGE,
 ]
 
-/**
- * Classify by the coach list, not the essential one.
- *
- * Membership testing the essential list meant anything unrecognised — a typo in
- * a rule's type name, or the ad-hoc 'test' type — was silently classified as
- * coach, gated behind an opt-in that defaults off, and never sent. Defaulting
- * to essential fails toward "delivered and visible in history" instead of
- * "silently dropped", which is the failure you can actually notice.
- */
+/** Unknown types classify as essential, so a typo fails toward "sent", not "silently dropped". */
 export const tierOf = (type: string): 'essential' | 'coach' =>
   COACH_TYPES.includes(type as NotificationType) ? 'coach' : 'essential'
 
-/**
- * Read a user's preferences.
- *
- * Returns the all-off defaults WITHOUT creating a row. Reading preferences must
- * never be what enables someone — a row only appears when they choose something.
- */
+/** A user's preferences, with all-off defaults. Never creates a row. */
 export const getPreferences = async (userId: string) => {
   const pref = await prisma.notificationPreference.findUnique({ where: { userId } })
   const typePrefs = await prisma.notificationTypePref.findMany({ where: { userId } })
@@ -76,13 +59,7 @@ const clampHour = (value: unknown, fallback: number) => {
   return Number.isInteger(n) && n >= 0 && n <= 23 ? n : fallback
 }
 
-/**
- * Update preferences. Only the fields present in `input` change.
- *
- * The daily cap is clamped server-side: the client can lower it but never raise
- * it past MAX_DAILY_CAP, so a tampered request cannot turn the app into a
- * notification firehose.
- */
+/** Update preferences; only fields present in `input` change. Daily cap is clamped server-side. */
 const MAX_DAILY_CAP = 5
 
 export const updatePreferences = async (userId: string, input: {
@@ -110,8 +87,7 @@ export const updatePreferences = async (userId: string, input: {
     ...(input.dailyCap !== undefined && {
       dailyCap: Math.min(MAX_DAILY_CAP, Math.max(1, Number(input.dailyCap) || 1))
     }),
-    // Turning the coach back on clears the suspension and the ignore streak —
-    // an explicit opt-in is the strongest possible engagement signal.
+    // Re-enabling the coach clears the suspension and streak
     ...(input.coachEnabled !== undefined && {
       coachEnabled: Boolean(input.coachEnabled),
       ...(input.coachEnabled ? { coachSuspendedAt: null, ignoredStreak: 0 } : {})
@@ -137,13 +113,7 @@ export const updatePreferences = async (userId: string, input: {
   return getPreferences(userId)
 }
 
-/**
- * Reject anything that is not a real IANA zone.
- *
- * The value is fed to Intl to resolve local hours, and an unknown zone throws
- * there — inside the scheduler, where a throw would stop notifications for
- * every user in the tick, not just this one.
- */
+/** Unknown IANA zones fall back to UTC — they would throw inside the scheduler. */
 const sanitizeTimezone = (timezone: string): string => {
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: timezone })
@@ -153,12 +123,7 @@ const sanitizeTimezone = (timezone: string): string => {
   }
 }
 
-/**
- * Whether a specific notification may be sent right now, ignoring timing.
- *
- * Three explicit yeses: the master switch, the tier, and the type. A user who
- * has never touched the settings fails at the first.
- */
+/** Master switch, tier and type must all be on. Ignores timing. */
 export const isTypeAllowed = async (userId: string, type: string): Promise<boolean> => {
   const pref = await prisma.notificationPreference.findUnique({ where: { userId } })
   if (!pref?.pushEnabled) return false
@@ -170,7 +135,7 @@ export const isTypeAllowed = async (userId: string, type: string): Promise<boole
     if (pref.coachSuspendedAt) return false
   }
 
-  // Per-type rows are an optional refinement: absent means "follow the tier".
+  // No per-type row means "follow the tier"
   const typePref = await prisma.notificationTypePref.findUnique({
     where: { userId_type: { userId, type } }
   })

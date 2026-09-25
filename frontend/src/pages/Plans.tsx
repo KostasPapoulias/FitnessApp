@@ -5,14 +5,7 @@ import { useWorkoutStore } from '../store/useWorkoutStore'
 import { ScheduledWorkout, WorkoutTemplate } from '../types'
 import { BellIcon } from '../components/icons'
 
-/**
- * Saved plans and the standby queue.
- *
- * Three states, deliberately on one screen: what is coming up, what is kept,
- * and what has been put away. The athlete's question is almost always "what am
- * I doing next, and do I already have something for it" — splitting that across
- * screens makes them navigate to find out they have nothing scheduled.
- */
+/** Saved plans in three tabs: on standby (scheduled), kept, and archived. */
 
 type Tab = 'standby' | 'plans' | 'archive'
 
@@ -70,8 +63,7 @@ export default function Plans() {
 
   useEffect(() => { refresh() }, [])
 
-  // Loading a plan fills the existing planner rather than starting anything —
-  // the athlete still gets to look it over and press Start themselves.
+  // Loads the plan into the planner; the athlete still reviews it and taps Start
   const openInPlanner = (template: WorkoutTemplate, scheduledId?: string) => {
     loadTemplate(template, scheduledId ?? null)
     navigate('/workout/plan')

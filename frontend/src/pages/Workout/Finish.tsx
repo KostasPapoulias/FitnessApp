@@ -33,29 +33,17 @@ export default function Finish() {
   const state = location.state as { result?: any; snapshot?: Snapshot } | null
   const snapshot = state?.snapshot
 
-  // This screen owns the finish request. It runs here rather than on the live
-  // workout page so there is no End button on screen while we wait — the user
-  // cannot trigger a second finish from a page that no longer exists.
+  // This screen owns the finish request, so there is no End button to press twice
   const [result, setResult] = useState<any>(state?.result ?? null)
-  // Seeded from the store so the summary never flashes for a frame before the
-  // mount effect starts the request.
+  // Seeded from the store so the summary never flashes before the request starts
   const [saving, setSaving] = useState(() => Boolean(useWorkoutStore.getState().sessionId))
   const [saveError, setSaveError] = useState<string | null>(null)
   const startedRef = useRef(false)
-  /**
-   * Whether the save animation has finished handing over.
-   *
-   * Separate from `saving` because the two end at different moments: the
-   * request resolves, and only then does the card fly into the Calendar tab.
-   * Seeded true when there is nothing to save — arriving here on an already
-   * finished session should show the summary at once, not perform a toss for
-   * a workout that was filed minutes ago.
-   */
+  /** True once the save animation has landed; seeded true when nothing needs saving. */
   const [settled, setSettled] = useState(() => !useWorkoutStore.getState().sessionId)
 
   const save = () => {
-    // finishSession() de-dupes concurrent calls internally; this ref stops a
-    // StrictMode double-mount from even queueing the second one.
+    // Guards StrictMode's double mount (finishSession also de-dupes)
     if (startedRef.current) return
     const { sessionId } = useWorkoutStore.getState()
     if (!sessionId) return          // already finished, or arrived without one
@@ -66,7 +54,7 @@ export default function Finish() {
     finishSession()
       .then(async res => {
         if (res) setResult(res)
-        // Best-effort follow-ups: a failure here must not read as a failed save
+        // Best-effort follow-ups; failures here are not a failed save
         try { await fetchFatigue() } catch { /* non-fatal */ }
         try { await rescheduleAfterWorkout(3) } catch { /* non-fatal */ }
       })
@@ -86,9 +74,7 @@ export default function Finish() {
   if (!snapshot) return null
 
   // ── saving ──
-  // Held past the request itself. `settled` is what the landing sets, so the
-  // summary cannot replace the screen mid-arc; on a failure the flight is
-  // skipped and the error banner below is reached immediately.
+  // Held until the animation lands; on failure the error shows immediately
   if (saving || !settled) {
     return (
       <SaveToCalendar
@@ -105,7 +91,7 @@ export default function Finish() {
   const volume = result?.totalVolume
     ?? snapshot.exercises.reduce((v, e) => v + e.topWeight * e.topReps * e.count, 0)
 
-  // Prefer backend musclesAffected (has fatigue level) else snapshot names
+  // Backend musclesAffected when available, otherwise the snapshot's names
   const muscleChips: string[] =
     result?.musclesAffected?.map((m: any) => m.muscleName) ?? snapshot.muscles
 

@@ -3,20 +3,11 @@ import prisma from '../lib/prisma'
 import { AuthRequest } from '../server'
 import { log } from '../lib/logger'
 
-// New-user onboarding.
-//
-// Split into two stages on purpose. The REQUIRED stage collects what the
-// fatigue engine cannot work without — bodyweight above all, since calisthenics
-// load was silently computed against a hardcoded 70 kg for anyone who had not
-// filled in a profile. The OPTIONAL stage (equipment, injuries) only makes
-// suggestions better, so it never blocks access to the app.
-//
-// Everything is stored canonically in metric (kg, cm). The client converts for
-// display off Settings.preferredUnit; storing whatever unit the user happened
-// to be looking at is how two screens end up disagreeing about a bodyweight.
+// New-user onboarding. The required stage collects what the fatigue model
+// needs (bodyweight above all) and gates the app; the optional stage
+// (equipment, injuries) never blocks. Everything is stored in metric.
 
-// Sanity bounds. These reject nonsense, not unusual people — the point is to
-// catch a mis-keyed 700 kg or a height entered in metres, not to police bodies.
+// Sanity bounds: catch mis-keyed values, not unusual people.
 const BOUNDS = {
   weightKg: { min: 25, max: 400 },
   heightCm: { min: 100, max: 260 },
@@ -26,14 +17,11 @@ const BOUNDS = {
 
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'] as const
 const GOALS = ['hypertrophy', 'strength', 'endurance', 'weight_loss'] as const
-// 'prefer_not_to_say' is a real answer, not a missing one. Anything that keys
-// off sex has to tolerate it rather than assume a default.
+// 'prefer_not_to_say' is a real answer, not a missing one.
 const SEXES = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 const SEVERITIES = ['avoid', 'caution'] as const
 
-// The oldest and youngest birth dates we will accept. An age under 13 is a
-// different product with different legal obligations, so it is refused here
-// rather than quietly accepted.
+// Accepted age range; under 13 is refused.
 const MIN_AGE_YEARS = 13
 const MAX_AGE_YEARS = 100
 
@@ -50,9 +38,7 @@ export const yearsBetween = (from: Date, to: Date): number => {
 
 /**
  * GET /api/profile/onboarding/options
- *
- * The equipment catalogue and the muscle list, so the optional stage can render
- * real choices instead of a hardcoded copy that drifts from the seed data.
+ * The equipment catalogue and muscle list for the optional stage.
  */
 export const getOnboardingOptions = async (_req: AuthRequest, res: Response) => {
   try {
@@ -76,13 +62,8 @@ export const getOnboardingOptions = async (_req: AuthRequest, res: Response) => 
 
 /**
  * PUT /api/profile/onboarding
- *
- * The gated stage. Completing it stamps `onboardingCompletedAt`, which is the
- * single flag the client route guard reads.
- *
- * Validation is strict and field-by-field: this is the one place the numbers
- * behind every downstream calculation are set, and a silently-coerced NaN here
- * would surface much later as an unexplainable readiness score.
+ * The gated stage. Strict field-by-field validation; completing it stamps
+ * `onboardingCompletedAt`, which the client route guard reads.
  */
 export const completeOnboarding = async (req: AuthRequest, res: Response) => {
   try {
@@ -111,7 +92,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
       errors.push(`height must be between ${BOUNDS.heightCm.min} and ${BOUNDS.heightCm.max} cm`)
     }
 
-    // The load-bearing one. Everything about calisthenics fatigue rests on it.
+    // Calisthenics load is scored against bodyweight
     if (!isFiniteNumber(weightKg) || !inRange(weightKg, BOUNDS.weightKg)) {
       errors.push(`weight must be between ${BOUNDS.weightKg.min} and ${BOUNDS.weightKg.max} kg`)
     }
@@ -124,8 +105,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
       errors.push('goal must be one of: ' + GOALS.join(', '))
     }
 
-    // Optional within the required stage — asked on the same screen as fitness
-    // level, but not worth blocking completion over.
+    // Optional within the required stage
     if (trainingDaysPerWeek != null &&
         (!isFiniteNumber(trainingDaysPerWeek) || !inRange(trainingDaysPerWeek, BOUNDS.trainingDaysPerWeek))) {
       errors.push('trainingDaysPerWeek is out of range')
@@ -145,8 +125,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
       select: { name: true, onboardingCompletedAt: true },
     })
 
-    // `age` is written alongside birthDate purely so older read paths that
-    // still reach for it agree with the new field on the day it was set.
+    // `age` kept in step with birthDate
     const derivedAge = Math.floor(yearsBetween(parsedBirthDate!, new Date()))
 
     const data = {
@@ -159,8 +138,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
       goal,
       trainingDaysPerWeek: trainingDaysPerWeek ?? null,
       experienceYears: experienceYears ?? null,
-      // Re-running onboarding (from Profile) must not reset the original
-      // completion stamp — it is the gate, not a "last edited" marker.
+      // Re-running onboarding keeps the original completion stamp
       onboardingCompletedAt: existing?.onboardingCompletedAt ?? new Date(),
     }
 
@@ -168,7 +146,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
       where: { userId: req.userId! },
       update: {
         ...data,
-        // Only overwrite the name if this request actually carries one.
+        // Only overwrite the name when one is sent
         ...(typeof name === 'string' && name.trim() ? { name: name.trim() } : {}),
       },
       create: {
@@ -178,9 +156,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
       },
     })
 
-    // Bodyweight is also a measurement, not just a setting. Seeding the
-    // Biometric series here gives the weight chart a first point and a date,
-    // instead of it staying empty until the user happens to log one.
+    // Seed the bodyweight series with a first measurement
     await prisma.biometric.create({
       data: { userId: req.userId!, type: 'WEIGHT', value: weightKg, source: 'onboarding' },
     })
@@ -194,9 +170,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response) => {
 
 /**
  * PUT /api/profile/equipment
- *
- * Replaces the user's equipment set wholesale — the client always sends the
- * full selection, so a diff would only add ways for the two to disagree.
+ * Replaces the user's equipment set with the full selection sent.
  */
 export const setUserEquipment = async (req: AuthRequest, res: Response) => {
   try {
@@ -207,9 +181,7 @@ export const setUserEquipment = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Reject unknown ids rather than silently dropping them: a client sending a
-    // stale id should find out, not quietly end up with less equipment than the
-    // user ticked.
+    // Unknown ids are rejected, not silently dropped
     const unique = [...new Set<string>(equipmentIds)]
     const known = await prisma.equipment.findMany({
       where: { id: { in: unique } },
@@ -236,9 +208,7 @@ export const setUserEquipment = async (req: AuthRequest, res: Response) => {
 
 /**
  * PUT /api/profile/injuries
- *
- * Replaces the active injury set. Resolved injuries are kept as history —
- * marking something healed should not erase that it happened.
+ * Replaces the active injury set; previous ones are marked resolved, not deleted.
  */
 export const setUserInjuries = async (req: AuthRequest, res: Response) => {
   try {
@@ -279,7 +249,7 @@ export const setUserInjuries = async (req: AuthRequest, res: Response) => {
     const now = new Date()
 
     await prisma.$transaction([
-      // Resolve rather than delete: the row is a record of a real limitation.
+      // Resolve rather than delete — injuries are history
       prisma.userInjury.updateMany({
         where: { userId: req.userId!, resolvedAt: null },
         data: { resolvedAt: now },
@@ -292,8 +262,7 @@ export const setUserInjuries = async (req: AuthRequest, res: Response) => {
           severity: i.severity ?? 'caution',
         })),
       }),
-      // Reaching this endpoint at all means the optional stage was answered —
-      // including answering it with "no injuries", which is information.
+      // Answering at all (even "no injuries") completes the optional stage
       prisma.userProfile.update({
         where: { userId: req.userId! },
         data: { optionalStageDoneAt: now },
@@ -313,17 +282,7 @@ export const setUserInjuries = async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/profile/onboarding/state
- *
- * Everything the client needs to decide what to show: gate status and the
- * optional stage's answers.
- *
- * This used to carry a fourth field, `seenHints`, listing the coach-mark
- * tooltips already dismissed. The coach-marks are gone — a scripted tooltip in
- * the coach's voice spends the credibility the real model needs — so the field
- * and the query behind it went with them. The explanatory copy that tells a
- * user what the app does — empty states, the hint under a form field, the
- * Home setup prompt `optionalStageDoneAt` still drives — is static text on the
- * screen it belongs to and was never part of this.
+ * Gate status plus the optional stage's answers.
  */
 export const getOnboardingState = async (req: AuthRequest, res: Response) => {
   try {

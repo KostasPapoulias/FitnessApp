@@ -1,19 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
 /**
- * The locked run screen.
- *
- * Two jobs. It stops a pocket, a sleeve or a raindrop from pausing a run or
- * ending a session — it is the topmost layer, so every touch lands here and
- * nowhere else. And it is nearly all black, which on the OLED in every iPhone
- * since the X means most of the panel is genuinely switched off while the wake
- * lock holds the screen on for forty minutes.
- *
- * Hold-to-unlock rather than a drawn pattern: this gets used while moving,
- * breathing hard, with damp fingers and often in glare. A gesture needing fine
- * motor precision fails exactly when someone is trying to stop the clock at the
- * end of an interval. A held press is just as immune to a pocket brush and
- * cannot really be got wrong.
+ * The locked run screen: the topmost layer, so pocket touches can't pause or
+ * end a run, and nearly all black to save OLED power. Unlocked by a long
+ * press, which works with damp fingers and in glare.
  */
 
 /** Long enough that no accidental contact reaches it. */
@@ -24,9 +14,9 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 interface Props {
   elapsed: string
   distanceKm: string
-  /** Current pace — what the legs are doing this minute. */
+  /** Current pace. */
   pace: string
-  /** Distance over time. The one that survives a red light. */
+  /** Average pace (distance over time). */
   avgPace: string
   running: boolean
   /** Shown small, so a lost signal is visible without unlocking. */
@@ -34,19 +24,12 @@ interface Props {
   statusOk: boolean
   /** Whether a screen wake lock is actually held right now. */
   screenAwake: boolean
-  /**
-   * The pace target, already formatted, or null when no coach is running.
-   *
-   * Read-only here, deliberately. Every touch on this screen is spent
-   * re-taking the wake lock, and a mute button that a pocket can press would
-   * silence the coach without anyone knowing it happened — the unlocked screen
-   * is two seconds away and cannot be pressed by accident.
-   */
+  /** The pace target, or null with no coach. Read-only here, so a pocket can't mute it. */
   coachTarget?: string | null
-  /** Its verdict, in the same words the unlocked strip uses. */
+  /** The coach's verdict, worded as on the unlocked strip. */
   coachLabel?: string | null
   coachColor?: string
-  /** Re-request it. Must be called from a gesture — see the root handler. */
+  /** Re-request the wake lock; must be called from a gesture. */
   onKeepAwake: () => void
   onUnlock: () => void
 }
@@ -58,9 +41,7 @@ export default function RunLock({
   const [holding, setHolding] = useState(false)
   const timer = useRef<number | null>(null)
 
-  // A static readout at high brightness for the length of a long run is the
-  // one situation where OLED burn-in is a real risk. Nudging the whole layout
-  // by a few pixels every minute costs nothing and removes it.
+  // Shift the layout a few pixels each minute to prevent OLED burn-in
   const [drift, setDrift] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setDrift(d => (d + 1) % 4), 60_000)
@@ -92,15 +73,10 @@ export default function RunLock({
     <div
       className="fixed inset-0 z-50 bg-black text-white flex flex-col
                  items-center justify-between px-6 py-10 select-none"
-      // Nothing on this layer scrolls, and an overscroll at the top of a
-      // standalone PWA is a pull-to-refresh — which reloads the page and takes
-      // the run with it.
+      // No scroll or overscroll: pull-to-refresh would reload and lose the run
       style={{ touchAction: 'none', overscrollBehavior: 'none' }}
       onContextMenu={e => e.preventDefault()}
-      // Every touch on this screen lands here and is otherwise thrown away —
-      // which makes it free to spend on re-taking a wake lock that has been
-      // dropped. iOS only grants one from a gesture, and on a locked screen
-      // this is the only gesture there is.
+      // Any touch re-takes a dropped wake lock (iOS only grants one from a gesture)
       onPointerDown={() => { if (!screenAwake) onKeepAwake() }}
     >
       <div
@@ -134,9 +110,7 @@ export default function RunLock({
           ))}
         </div>
 
-        {/* Current pace, deliberately small: on a locked screen the average is
-            what you steer by, and the live number moves too much to read at a
-            glance while running. */}
+        {/* Current pace small; the average is what to steer by on a locked screen */}
         <div className="mt-7 text-[11px] tracking-[0.18em] text-dark-500 tabular-nums">
           NOW {pace} / KM
         </div>
@@ -171,9 +145,7 @@ export default function RunLock({
               cx="56" cy="56" r={RING_RADIUS}
               fill="none" stroke="#00D4AA" strokeWidth="3" strokeLinecap="round"
               strokeDasharray={RING_CIRCUMFERENCE}
-              // Driven by a CSS transition rather than an animation frame loop:
-              // one property, no JS running per frame, and the release path is
-              // the same code as the hold path with a different duration.
+              // CSS transition drives the ring, for both hold and release
               strokeDashoffset={holding ? 0 : RING_CIRCUMFERENCE}
               style={{
                 transition: holding
@@ -187,10 +159,7 @@ export default function RunLock({
           </span>
         </button>
 
-        {/* Whether the screen will actually stay on is the one thing this
-            screen exists for, and it used to be invisible — a wake lock that
-            was never granted looked exactly like one that was, right up until
-            the display went dark and the run stopped recording. */}
+        {/* Whether the screen will stay on — a lock never granted must not look like one held */}
         <p className="text-[11px] text-dark-500 mt-5 text-center leading-relaxed max-w-[240px]">
           {screenAwake
             ? 'Screen locked and staying on — taps are ignored while you run.'

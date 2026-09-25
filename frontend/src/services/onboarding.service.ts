@@ -30,8 +30,7 @@ export interface OnboardingState {
   injuries: Injury[]
 }
 
-// Always metric on the wire. The form converts at the edge so that a user on
-// imperial units and a user on metric write the same numbers to the database.
+// Always metric on the wire; the form converts imperial input.
 export interface OnboardingAnswers {
   name?: string
   sex: 'male' | 'female' | 'other' | 'prefer_not_to_say'
@@ -71,10 +70,8 @@ export const onboardingService = {
   },
 }
 
-//  Unit conversion
-// One direction each, kept here rather than in the form so the rounding is
-// consistent everywhere. Round-tripping kg -> lb -> kg will not return the exact
-// original, which is why only the metric value is ever persisted.
+// ── unit conversion ──
+// Only the metric value is persisted, so rounding here never compounds.
 export const KG_PER_LB = 0.45359237
 export const CM_PER_INCH = 2.54
 

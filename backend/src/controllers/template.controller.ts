@@ -8,12 +8,7 @@ import {
   templateFromSession, updateTemplate,
 } from '../services/template.service'
 
-/**
- * Saved plans and the standby queue.
- *
- * Every handler scopes by `req.userId` from the verified token rather than
- * trusting an id in the body, so no request can reach another athlete's plan.
- */
+/** Saved plans and the standby queue. Every handler is scoped to `req.userId`. */
 
 const fail = (res: Response, error: unknown, fallback: string) => {
   if (error instanceof TemplateValidationError) {
@@ -79,9 +74,7 @@ export const update = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// POST /api/templates/:id/archive   body: { archived: boolean }
-// Archive rather than delete: a plan that produced sessions is part of the
-// explanation for how the athlete got here.
+// POST /api/templates/:id/archive   body: { archived: boolean } — plans are archived, never deleted
 export const archive = async (req: AuthRequest, res: Response) => {
   try {
     const template = await setTemplateArchived(req.userId!, req.params.id, req.body?.archived !== false)

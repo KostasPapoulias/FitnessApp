@@ -1,23 +1,12 @@
 /**
- * Outbound email.
- *
- * Resend over HTTP rather than SMTP: one API key, no connection handling, no
- * transport to keep warm, and nothing to configure beyond an env var. Sent with
- * `fetch` rather than the SDK — this makes exactly one request shape, and a
- * dependency for that is not worth the install.
- *
- * Mail is OPTIONAL. If `RESEND_API_KEY` is unset the app boots and runs
- * normally and only the features that need mail refuse, saying why. The
- * alternative — pretending a reset was sent when nothing was configured — is
- * the worst outcome: the user waits for a mail that was never going to arrive
- * and has no way to find out.
+ * Outbound email via Resend's HTTP API. Optional: without RESEND_API_KEY the
+ * features that need mail refuse with a clear error instead of pretending.
  */
 
 import type { Locale } from './locale'
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
-/** Both must be present for mail to be considered configured. */
 const apiKey = process.env.RESEND_API_KEY?.trim()
 const from = process.env.MAIL_FROM?.trim() || 'SomaTrack <onboarding@resend.dev>'
 
@@ -37,8 +26,7 @@ export const sendMail = async (mail: Mail): Promise<void> => {
     throw new MailError('Mail is not configured. Set RESEND_API_KEY.')
   }
 
-  // Bounded so a hung provider cannot hold an HTTP handler open indefinitely —
-  // the caller is a request the user is waiting on.
+  // Bounded so a hung provider cannot hold the request open
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 10_000)
 
@@ -54,9 +42,7 @@ export const sendMail = async (mail: Mail): Promise<void> => {
         to: [mail.to],
         subject: mail.subject,
         html: mail.html,
-        // Sent alongside the HTML, not instead of it: a mail with no text part
-        // scores worse with spam filters, and a reset that lands in spam has
-        // failed just as completely as one that was never sent.
+        // A text part alongside the HTML improves spam scoring
         text: mail.text,
       }),
       signal: controller.signal,
@@ -79,12 +65,8 @@ export const sendMail = async (mail: Mail): Promise<void> => {
 }
 
 /**
- * The reset email.
- *
- * Deliberately plain and short. A password reset is the single most phished
- * message a product sends, so it makes one clear statement, shows the link as
- * text so the destination is visible before clicking, and never asks for
- * anything back.
+ * The password reset email. Plain and short, with the link shown as text so
+ * the destination is visible before clicking.
  */
 export const passwordResetMail = (
   to: string, link: string, ttlMinutes: number, locale: Locale = 'en'
@@ -124,7 +106,7 @@ export const passwordResetMail = (
   `.trim(),
 })
 
-/** The same email in Greek. Same structure, same rules. */
+/** The same email in Greek. */
 const passwordResetMailEl = (to: string, link: string, ttlMinutes: number): Mail => ({
   to,
   subject: 'Επαναφορά κωδικού SomaTrack',

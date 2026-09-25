@@ -1,17 +1,8 @@
 import React from 'react'
 import { MessageKey, useT } from '../../i18n'
 
-// Shared form primitives for anywhere the user types a measurement.
-//
-// Extracted from Onboarding so the Edit Profile modal cannot drift from it:
-// the two screens write the SAME columns, and having one of them accept a
-// birth date while the other accepted a plain age is exactly how a profile
-// ends up disagreeing with itself.
-//
-// Every field here holds a STRING. Storing numbers meant clearing a field ran
-// Number('') === 0, which stamped a hard 0 into the input the moment the last
-// digit was deleted. Parsing happens at the edges — validate and submit — and
-// nowhere in between.
+// Shared form fields for Onboarding and Edit Profile, so the two cannot drift.
+// Every field holds a string (Number('') is 0); parsing happens on validate and submit.
 
 export const num = (raw: string): number | null => {
   const trimmed = raw.trim()
@@ -26,8 +17,7 @@ export const within = (v: number | null, { min, max }: { min: number; max: numbe
 export const MIN_AGE = 13
 export const MAX_AGE = 100
 
-// Bounds in the unit the field is displayed in, so the hint under a field
-// matches what is being typed rather than a converted equivalent.
+// Bounds in the unit the field displays.
 export const LIMITS = {
   cm:     { min: 100, max: 260 },
   kg:     { min: 25,  max: 400 },
@@ -37,8 +27,7 @@ export const LIMITS = {
   years:  { min: 0,   max: 80 },
 }
 
-// Native number spinners are unusable at thumb size and steal horizontal room
-// from the value, so they are suppressed in one place here.
+// Hides native number spinners.
 export const INPUT_BASE =
   'w-full bg-dark-700 border rounded-btn px-4 py-3 text-white ' +
   'placeholder-dark-500 focus:outline-none transition-colors ' +
@@ -59,8 +48,7 @@ export function NumberField({
 }) {
   const { t } = useT()
   const parsed = num(value)
-  // Only complain about a value the user has finished typing. Flagging "1" as
-  // out of range while they are on their way to "175" is noise.
+  // Only flag a value once it is out of range when complete
   const invalid = parsed !== null && !within(parsed, limits)
 
   return (
@@ -73,10 +61,7 @@ export function NumberField({
           value={value}
           placeholder={placeholder}
           onChange={e => {
-            // Digits, and one separator when decimals are allowed. Filtering on
-            // input rather than validating after keeps a stray letter from ever
-            // reaching state — type="number" silently blanks the whole field
-            // instead, losing what was already typed.
+            // Filter characters as typed (type="number" would blank the field instead)
             const cleaned = decimal
               ? e.target.value.replace(/[^\d.,]/g, '').replace(',', '.')
               : e.target.value.replace(/\D/g, '')
@@ -123,8 +108,7 @@ function DatePart({
       onChange={e => {
         const digits = e.target.value.replace(/\D/g, '').slice(0, maxLength)
         onChange(digits)
-        // Hop to the next box once this one is full, so the whole date can be
-        // typed without reaching for the screen between parts.
+        // Auto-advance to the next box when full
         if (digits.length === maxLength) onFilled?.()
       }}
       className={`${flex} ${INPUT_BASE} text-center tracking-widest
@@ -135,24 +119,12 @@ function DatePart({
 
 export interface DateParts { day: string; month: string; year: string }
 
-/**
- * Why three fields are not a date, as a message key rather than a sentence.
- * This runs inside useMemo on Onboarding, so a translated string would be
- * frozen in whatever language was showing when the digits were typed; a key
- * is translated where it is shown, in BirthDateField.
- */
+/** Birth-date validation errors, as message keys translated where shown. */
 export type BirthDateError =
   | ''
   | Extract<MessageKey, 'birth.badMonth' | 'birth.badDay' | 'birth.noSuchDate' | 'birth.tooYoung' | 'birth.checkYear'>
 
-/**
- * Resolves three text fields into a real date, or explains why they aren't one.
- *
- * Deliberately not <input type="date">: that renders in whatever order the
- * browser locale dictates — mm/dd/yyyy on a US-locale Chrome regardless of
- * where the user is — and its calendar opens on the current month, which is a
- * miserable way to reach a birth year thirty years back.
- */
+/** Three day/month/year fields to a date, or the reason they aren't one (not type="date", whose order follows the browser locale). */
 export const resolveBirthDate = ({ day, month, year }: DateParts): {
   date: Date | null; error: BirthDateError
 } => {
@@ -163,9 +135,7 @@ export const resolveBirthDate = ({ day, month, year }: DateParts): {
   if (year.length < 4) return { date: null, error: '' }
 
   const date = new Date(y, m - 1, d)
-  // Rejects 31 February and friends: the Date constructor rolls those over
-  // into the next month rather than failing, so the only way to catch one is
-  // to check the parts survived the trip.
+  // Reject dates the Date constructor would roll over (31 February)
   if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
     return { date: null, error: 'birth.noSuchDate' }
   }
@@ -218,16 +188,14 @@ export function BirthDateField({ value, onChange, error }: {
   )
 }
 
-/** Shared selectable chip, so the two screens style choices identically. */
+/** Shared selectable chips. */
 export function ChipRow<T extends string>({ options, value, onChange, layout = 'row' }: {
   options: { value: T; label: string }[]
   value: T | null
   onChange: (v: T) => void
   layout?: 'row' | 'grid2'
 }) {
-  // Spelled out rather than interpolated: Tailwind scans source text for class
-  // names, so a template like `grid-cols-${n}` is never emitted and the grid
-  // silently collapses to one column.
+  // Literal classes: Tailwind can't see interpolated names like `grid-cols-${n}`
   const container = layout === 'grid2' ? 'grid grid-cols-2 gap-2' : 'flex gap-2'
 
   return (

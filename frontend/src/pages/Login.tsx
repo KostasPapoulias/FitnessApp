@@ -22,9 +22,7 @@ export default function Login() {
       await login(email, password)
       navigate('/')
     } catch (err: any) {
-      // 401 really is "invalid email or password", but a 429 from the rate
-      // limiter is not — reporting it as bad credentials sends someone into a
-      // retry loop that can only make the lockout longer.
+      // A 429 (rate limit) must not be shown as wrong credentials
       const status = err?.response?.status
       setError(
         status === 401
@@ -39,8 +37,7 @@ export default function Login() {
     <div className="min-h-dvh bg-dark-900 flex flex-col justify-between px-6
                     pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
 
-      {/* The first screen anyone sees, so the language is offered here and
-          not only once they have found their way to Register. */}
+      {/* Language offered on the first screen */}
       <div className="flex justify-end">
         <LanguageSwitch />
       </div>
@@ -82,8 +79,7 @@ export default function Login() {
             />
           </div>
 
-          {/* Below the password field, where someone realises they have
-              forgotten it — not buried under the register link. */}
+          {/* Right below the password field */}
           <Link
             to="/forgot-password"
             className="text-dark-300 text-xs self-end -mt-1 active:opacity-70"

@@ -23,9 +23,8 @@ export const chat = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Thread resolution. `newThread` is how the client starts a fresh
-    // conversation — the row is created here, on the first real message,
-    // so abandoning the compose screen never leaves an empty thread behind.
+    // `newThread` creates the thread here, on the first real message, so an
+    // abandoned compose screen leaves no empty thread
     let thread
     if (existingThreadId) {
       thread = await prisma.chatThread.findFirst({
@@ -53,8 +52,7 @@ export const chat = async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: { reply, threadId: thread.id, proposals } })
 
   } catch (error) {
-    // Out of budget or calling too fast is a 429, not a server fault — the
-    // client shows the reason rather than a generic "AI service error".
+    // Over budget or too fast: 429 with the reason
     if (error instanceof AiBudgetError) {
       res.status(429)
         .set('Retry-After', String(error.retryAfterSeconds))
@@ -62,9 +60,7 @@ export const chat = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // No provider configured is a deployment state, not a fault. 503 with the
-    // real reason, and no Sentry alert — an unconfigured server would otherwise
-    // file an identical issue on every message anyone sends.
+    // Unconfigured provider: 503, logged without an Error so it is not reported
     if (error instanceof AiNotConfiguredError) {
       log.warn('AI chat attempted with no provider configured', { reason: error.message })
       res.status(503).json({ success: false, error: 'The AI coach is not configured on this server.' })
@@ -76,8 +72,7 @@ export const chat = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/ai/usage
-// Today's AI spend against the daily cap
+// GET /api/ai/usage — today's AI spend against the daily cap
 export const getUsage = async (req: AuthRequest, res: Response) => {
   try {
     res.json({ success: true, data: await getUsageToday(req.userId!) })
@@ -87,18 +82,16 @@ export const getUsage = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/ai/threads
-// Returns all chat threads for the user
+// GET /api/ai/threads — the user's non-empty threads with a last-message preview
 export const getThreads = async (req: AuthRequest, res: Response) => {
   try {
     const threads = await prisma.chatThread.findMany({
-      // Only conversations that actually contain something. Also hides the
-      // empty rows left behind by the old eager-create flow.
+      // Only threads that contain messages
       where: { userId: req.userId!, messages: { some: {} } },
       include: {
         messages: {
           orderBy: { dateTime: 'desc' },
-          take: 1 // just the last message for preview
+          take: 1
         },
         _count: { select: { messages: true } }
       },
@@ -111,8 +104,7 @@ export const getThreads = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// POST /api/ai/threads
-// Creates a new thread
+// POST /api/ai/threads — create a thread
 export const createThread = async (req: AuthRequest, res: Response) => {
   try {
     const thread = await prisma.chatThread.create({
@@ -142,16 +134,12 @@ export const deleteThread = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/ai/history
-// Returns full chat history for the user
+// GET /api/ai/history?threadId= — one thread's messages and open proposals
 export const getHistory = async (req: AuthRequest, res: Response) => {
   try {
     const { threadId } = req.query
 
-    // Reading history must never create a thread — that was a second source
-    // of empty rows. It also has to honour the requested threadId; it used
-    // to always return the newest thread, so opening an older chat showed
-    // the wrong conversation.
+    // Never creates a thread; honours the requested threadId
     const thread = threadId
       ? await prisma.chatThread.findFirst({
           where: { id: String(threadId), userId: req.userId! }
@@ -171,8 +159,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
       orderBy: { dateTime: 'asc' }
     })
 
-    // Cards the athlete never acted on come back with the conversation, so
-    // something scrolled past is not silently lost on reload.
+    // Unanswered proposal cards come back with the conversation
     const proposals = await listThreadProposals(req.userId!, thread.id)
 
     res.json({ success: true, data: { threadId: thread.id, messages, proposals } })
@@ -183,8 +170,7 @@ export const getHistory = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/ai/suggest-workout
-// Proactive suggestion based on current fatigue
+// GET /api/ai/suggest-workout — a workout suggestion from the current fatigue state
 export const suggestWorkout = async (req: AuthRequest, res: Response) => {
   try {
     const thread = await getOrCreateThread(req.userId!)
@@ -211,17 +197,16 @@ export const suggestWorkout = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ success: false, error: 'Server error' })
   }
 }
-// POST /api/ai/proposals/:id/accept
-// Turn a drafted card into real data. The only route in the AI path that
-// writes to the app's own tables, and it needs the athlete's own token.
+
+// POST /api/ai/proposals/:id/accept — the only AI route that writes to the
+// app's own tables, and only with the athlete's token.
 export const acceptProposal = async (req: AuthRequest, res: Response) => {
   try {
     const result = await applyProposal(req.userId!, req.params.id)
     res.json({ success: true, data: result })
   } catch (error) {
     if (error instanceof ProposalError) {
-      // Gone or already spent is the user's state, not a fault — 409 so the
-      // client can say what happened instead of showing a generic failure.
+      // Gone or already spent: 404 / 409 so the client can explain
       res.status(error.code === 'not_found' ? 404 : 409)
         .json({ success: false, error: error.message })
       return

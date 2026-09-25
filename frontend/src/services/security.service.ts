@@ -13,8 +13,7 @@ export const securityService = {
     return res.data.data
   },
 
-  // Changing an existing PIN needs the old one, or the account password as the
-  // way back in when it has been forgotten.
+  // Changing an existing PIN needs the old PIN or the account password
   setPin: async (pin: string, proof?: { currentPin?: string; password?: string }) => {
     await api.put('/security/pin', { pin, ...proof })
   },
@@ -23,8 +22,7 @@ export const securityService = {
     await api.delete('/security/pin', { data: proof })
   },
 
-  // Verified server-side, so the correct PIN never sits in the bundle or in
-  // device storage where it could simply be read.
+  // Verified server-side only
   verifyPin: async (pin: string): Promise<boolean> => {
     const res = await api.post('/security/pin/verify', { pin })
     return res.data.success === true

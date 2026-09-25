@@ -1,19 +1,6 @@
 /**
- * The app's icon set.
- *
- * Emoji were doing this job, and they render as a different picture on every
- * platform — Apple's dumbbell is not Google's, and several ("📊" for export,
- * "📏" for units) were only ever approximations of the thing they labelled.
- * They also sit differently on the baseline from one glyph to the next, which
- * is why the settings rows never quite lined up.
- *
- * Drawn here rather than pulled from a package because the app already draws
- * its own — BottomNav, StartWorkout and BrowseCategories all carry inline SVG
- * in exactly this shape. Every icon takes `className` for size and colour and
- * paints in `currentColor`, so a row decides its own tone.
- *
- * House style, matching what was already here: 24×24 viewBox, no fill, 1.8
- * stroke, round caps and joins.
+ * The app's hand-drawn icon set: 24×24, no fill, 1.8 stroke, round caps.
+ * Each takes `className` for size and colour and paints in `currentColor`.
  */
 
 interface IconProps {
@@ -57,7 +44,7 @@ export const UserIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** Same bars as the bottom nav's centre button, so one object means one thing. */
+/** Matches the bottom nav's centre button. */
 export const DumbbellIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4" />
@@ -70,7 +57,7 @@ export const MoonIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** Nutrition: a bowl with a leaf, rather than a salad's worth of detail at 20px. */
+/** Nutrition: a bowl with a leaf. */
 export const NutritionIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M3 12h18a9 9 0 0 1-18 0z" />
@@ -107,7 +94,7 @@ export const LockIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** Export: what the row actually does. The old 📊 described a chart instead. */
+/** Download / export. */
 export const DownloadIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M12 3v12" />
@@ -139,7 +126,7 @@ export const MicIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** The same mic with a line through it — one glyph, one meaning, on or off. */
+/** Microphone with a line through it. */
 export const MicOffIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M9 9v3a3 3 0 0 0 5.1 2.1M15 12V6a3 3 0 0 0-5.9-.8" />
@@ -192,7 +179,7 @@ export const SpeakerIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** The AI mark. Four-pointed star, so it never reads as a favourite. */
+/** The AI mark — four-pointed so it never reads as a favourite star. */
 export const SparkleIcon = (props: IconProps) => (
   <Svg {...props}>
     <path d="M12 3c.6 4.2 1.8 5.4 6 6-4.2.6-5.4 1.8-6 6-.6-4.2-1.8-5.4-6-6 4.2-.6 5.4-1.8 6-6z" />
@@ -246,11 +233,7 @@ export const BarChartIcon = (props: IconProps) => (
   </Svg>
 )
 
-/**
- * A modality's own mark — the five shapes StartWorkout already drew for its
- * picker, promoted so the live screens, the planners and the queue all show
- * the same thing for the same kind of session.
- */
+/** A modality's mark, used everywhere a session type is shown. */
 export const ModalityIcon = (
   { modality, className = 'w-5 h-5' }: IconProps & { modality: string }
 ) => {
@@ -377,7 +360,7 @@ export const TreeIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** A filled star for a personal best, matching the favourite star's outline. */
+/** Filled star for a personal best. */
 export const StarFilledIcon = ({ className = 'w-4 h-4' }: IconProps) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
     <path d="M12 3.4l2.6 5.3 5.8.85-4.2 4.1 1 5.75L12 16.7l-5.2 2.7 1-5.75-4.2-4.1 5.8-.85z" />

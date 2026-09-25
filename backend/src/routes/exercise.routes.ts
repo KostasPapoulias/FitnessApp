@@ -20,10 +20,6 @@ router.get('/', getExercises);
  * @route POST /api/exercises
  * @protected
  * @returns the created custom exercise, shaped like a GET / row
- *
- * The only write in this router, so it carries `verifyToken` rather than the
- * `optionalAuth` the reads share — a custom exercise has an owner by
- * definition, and an anonymous caller has no `userId` to be one.
  */
 router.post('/', verifyToken, createExercise);
 
@@ -54,15 +50,7 @@ router.get('/:id', getExerciseById);
  * @protected
  * @returns { exerciseId, isFavorite }
  *
- * `verifyToken` rather than the router's `optionalAuth`, for the same reason
- * the POST above carries it: a favourite belongs to somebody by definition,
- * and an anonymous caller has no `userId` to own one. Without this the writes
- * would land with `userId: undefined` and fail at the foreign key — a 500 for
- * what is really "sign in first".
- *
- * Two verbs on one path instead of a single toggle: the client already knows
- * which state the star is in, and an explicit verb means a retried request
- * lands on the state the user asked for rather than flipping it back.
+ * Explicit verbs rather than a toggle, so a retried request is idempotent.
  */
 router.post('/:id/favorite', verifyToken, addFavorite);
 router.delete('/:id/favorite', verifyToken, removeFavorite);

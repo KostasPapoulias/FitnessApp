@@ -4,22 +4,16 @@ import {
   SleepReadiness, describeSleepReadiness, resolveSleepReadiness,
 } from './sleep-readiness.service'
 
-// Single source of truth for "how ready is this user to train".
-// Both GET /api/fatigue/current and the AI system prompt read from here —
-// they used to roll their own average and drifted apart.
-//
-// The score is muscle fatigue and systemic fatigue, shifted by last night's
-// sleep. Sleep is a bounded modifier rather than a weighted term, and the
-// reasoning for that is in `sleep-readiness.service.ts` — it is the whole
-// design of the feature and it is not obvious from the arithmetic here.
+// Single source of truth for "how ready is this user to train", read by both
+// GET /api/fatigue/current and the AI system prompt. The score combines muscle
+// and systemic fatigue, shifted by last night's sleep.
 
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 
 export const DEFAULT_FITNESS_LEVEL: FitnessLevel = 'intermediate'
 
 export interface ReadinessModel {
-  // Average fatigue is multiplied by this before being subtracted from 100.
-  // Advanced athletes tolerate more accumulated fatigue, beginners less.
+  // Multiplies fatigue before it is subtracted from 100; advanced athletes tolerate more
   fatiguePenalty: number
   // Score thresholds for the traffic-light banding.
   bands: { ready: number; caution: number }
@@ -44,24 +38,17 @@ export const bandReadiness = (score: number, model: ReadinessModel): ReadinessSt
   score >= model.bands.ready ? 'ready' :
   score >= model.bands.caution ? 'caution' : 'rest'
 
-// How many of the worst-hit muscles define the "peak" term below.
+// How many of the worst-hit muscles form the "peak" term.
 const PEAK_MUSCLE_COUNT = 3
 
-// Split between local muscle damage and whole-body cost. Systemic fatigue is
-// what a hard run or metcon actually loads, so it has to carry real weight.
+// Split between local muscle damage and whole-body (systemic) cost.
 const MUSCLE_SHARE = 0.7
 const SYSTEMIC_SHARE = 0.3
 
 /**
- * How loaded the athlete's muscles are, as one number.
- *
- * A flat mean across all 15 muscles buries every session: a leg day that pins
- * quads, hams and glutes at 80 averaged out to 16, and the app called it
- * "ready". Half the weight now goes to the worst-hit muscles, so training three
- * muscles hard registers as training hard.
- *
- * `fatigueLevels` must still cover the ENTIRE muscle set — untrained muscles
- * count as 0, or the score gets worse the less you have trained.
+ * Muscle load as one number: half the mean, half the worst three, so a hard
+ * session on a few muscles is not averaged away. `fatigueLevels` must cover
+ * every muscle, untrained ones as 0.
  */
 export const aggregateMuscleFatigue = (fatigueLevels: number[]): number => {
   if (fatigueLevels.length === 0) return 0
@@ -75,14 +62,8 @@ export const aggregateMuscleFatigue = (fatigueLevels: number[]): number => {
 }
 
 /**
- * Pure scoring function. Blends local muscle load with whole-body fatigue —
- * without the systemic term, an hour of running left every muscle reading
- * "fresh" and readiness essentially untouched.
- *
- * `sleepAdjustment` is a signed shift in readiness points, already bounded by
- * `sleep-readiness.service`. It is added rather than blended in so that an
- * athlete who has logged nothing scores exactly what the fatigue model says —
- * see that file for why a default value would have been worse than no value.
+ * Readiness score (0–100) from muscle and systemic fatigue, plus the signed,
+ * already-bounded sleep adjustment.
  */
 export const computeReadinessScore = (
   fatigueLevels: number[],
@@ -92,9 +73,7 @@ export const computeReadinessScore = (
 ): number => {
   const clamp = (score: number) => Math.round(Math.min(100, Math.max(0, score)))
 
-  // Nothing trained yet. Still not necessarily 100: four hours' sleep is a real
-  // reason not to be ready, and returning a flat 100 here would have made the
-  // modifier silently inapplicable to exactly the athletes who train least.
+  // Nothing trained — sleep can still move the score
   if (fatigueLevels.length === 0 && systemicFatigue <= 0) return clamp(100 + sleepAdjustment)
 
   const load =
@@ -102,7 +81,7 @@ export const computeReadinessScore = (
     systemicFatigue * SYSTEMIC_SHARE
   const score = 100 - load * model.fatiguePenalty + sleepAdjustment
 
-  // Round once, at the end — rounding per-muscle first skews the average.
+  // Round once at the end
   return clamp(score)
 }
 
@@ -125,26 +104,18 @@ export interface UserReadiness {
   /** Whole-body fatigue, decayed to now. Cardio and metcons load this. */
   systemicFatigue: number
   systemicRecoveryTargetAt: Date | null
-  /**
-   * What last night's sleep did to the score, and whether it did anything at
-   * all. The UI has to be able to say which — a score that moved for an unseen
-   * reason is worse than one that never moved.
-   */
+  /** What last night's sleep did to the score, and whether it applied. */
   sleep: SleepReadiness
-  /** One line naming the above, so every surface phrases it the same way. */
+  /** One line describing the above. */
   sleepNote: string
 }
 
-/**
- * Resolves a user's full readiness picture: every muscle in the catalogue,
- * decayed to `now`, plus the level-weighted overall score.
- */
+/** Every muscle's fatigue decayed to `now`, plus the overall score. */
 export const getUserReadiness = async (
   userId: string,
   now: Date = new Date()
 ): Promise<UserReadiness> => {
-  // One round trip, not five. At ~290ms to Railway the sequential version of
-  // this was the difference between a readiness call and a readiness wait.
+  // Independent reads, batched
   const [allMuscles, fatigueCurrent, profile, systemic, lastSleep] = await Promise.all([
     prisma.muscle.findMany(),
     prisma.muscleFatigueCurrent.findMany({ where: { userId } }),
@@ -169,7 +140,6 @@ export const getUserReadiness = async (
       muscleName: muscle.name,
       fatigueLevel: rounded,
       effectiveLevel,
-      // SVG colors
       status: rounded >= 70 ? 'high' :
               rounded >= 35 ? 'moderate' : 'recovered',
       color: rounded >= 70 ? '#EF4444' :
@@ -200,8 +170,7 @@ export const getUserReadiness = async (
 
   return {
     readinessScore,
-    // Banded from the final score, sleep included — the traffic light has to
-    // agree with the number printed next to it.
+    // Banded from the final score, sleep included
     status: bandReadiness(readinessScore, model),
     fitnessLevel,
     muscles,

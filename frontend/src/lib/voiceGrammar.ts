@@ -1,20 +1,8 @@
 /**
- * Spoken phrase → workout command.
+ * Spoken phrase → workout command. Pure and engine-agnostic.
  *
- * Pure, synchronous and engine-agnostic on purpose: the native recogniser and
- * the Web Speech fallback return wildly different objects but both end up
- * handing a plain transcript string here, and this is the only place that has
- * to know what "sixty two and a half kilos" means.
- *
- * Two rules shape the whole grammar:
- *
- *  1. Setting a value is cheap to get wrong, logging is not. A misheard weight
- *     is visible on screen and corrected with a tap; a misheard "log it" writes
- *     a set to the database. So logging needs an explicit verb — "log", "set
- *     done" — and never happens as a side effect of hearing numbers.
- *
- *  2. Ending a workout needs both words. Bare "end" is one syllable away from
- *     too much ordinary gym noise.
+ * Rules: numbers alone only set values — logging a set needs an explicit verb
+ * ("log", "set done"); ending a workout needs both words.
  */
 
 export type VoiceCommand =
@@ -28,18 +16,11 @@ export type VoiceCommand =
   | { kind: 'pauseRest' }
   | { kind: 'resumeRest' }
   | { kind: 'endWorkout' }
-  /**
-   * Mark the thing this modality counts — a lap on a run, a completed round in
-   * a metcon. Deliberately one command rather than one per modality: the
-   * athlete is saying "that one counted", and which list it lands in is the
-   * screen's business, not theirs.
-   */
+  /** Mark what this modality counts: a lap on a run, a round in a metcon. */
   | { kind: 'mark' }
 
 // ── number words ────────────────────────────────────────────────────────────
-// No homophone correction ("for" → four, "to" → two) on purpose. It reads well
-// in isolation and then destroys "set reps to eight", which is the single most
-// likely phrase in the whole grammar.
+// No homophone correction ("to" → two) — it would break "set reps to eight".
 
 const UNITS: Record<string, number> = {
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
@@ -56,11 +37,8 @@ const TENS: Record<string, number> = {
 const DIGITS = /^\d+(?:\.\d+)?$/
 
 /**
- * Read one number starting at `start`, in digits or words.
- *
- * Handles "60", "62.5", "sixty two", "a hundred and ten", and the fractional
- * tails a gym actually produces: "sixty two point five", "sixty and a half".
- * Returns the index just past the number so a caller can keep scanning.
+ * Read one number from `start`, in digits or words ("62.5", "sixty two point
+ * five", "a hundred and ten", "sixty and a half"). Returns the index after it.
  */
 export const readNumber = (
   tokens: string[],
@@ -75,7 +53,7 @@ export const readNumber = (
     i++
     matched = true
   } else {
-    // hundreds
+    // Hundreds
     if (tokens[i] === 'a' && tokens[i + 1] === 'hundred') {
       value = 100
       i += 2
@@ -85,11 +63,11 @@ export const readNumber = (
       i += 2
       matched = true
     }
-    // "a hundred AND ten" — the filler is only legal after a hundreds group
+    // "a hundred AND ten": the filler is only valid after hundreds
     if (matched && tokens[i] === 'and' && (TENS[tokens[i + 1]] !== undefined || UNITS[tokens[i + 1]] !== undefined)) {
       i++
     }
-    // tens, optionally followed by a unit ("sixty two")
+    // Tens, optionally followed by a unit ("sixty two")
     if (TENS[tokens[i]] !== undefined) {
       value += TENS[tokens[i]]
       i++
@@ -107,7 +85,7 @@ export const readNumber = (
 
   if (!matched) return null
 
-  // "point five" / "point seven five" — digits are spoken one at a time
+  // "point five" / "point seven five": digits spoken one at a time
   if (tokens[i] === 'point') {
     let decimals = ''
     let j = i + 1
@@ -153,8 +131,7 @@ const SKIP_PHRASES = [
   'skip rest', 'skip the rest', 'skip break', 'skip', 'ready', "i'm ready", 'im ready',
 ]
 
-// Checked BEFORE the log phrases, because "complete round" contains "complete"
-// and would otherwise be swallowed as a strength log on a screen with no sets.
+// Checked before the log phrases ("complete round" contains "complete").
 const MARK_PHRASES = [
   'lap', 'mark lap', 'new lap', 'split',
   'round done', 'round complete', 'complete round', 'that round', 'round',
@@ -165,25 +142,15 @@ const END_PHRASES = [
   'stop workout', 'stop the workout', 'end session', 'finish session',
 ]
 
-/**
- * Filler a value phrase is still allowed to contain.
- *
- * Anything outside this set means the athlete was talking to a person, not to
- * the app — see `isValuePhrase`.
- */
+/** Filler a value phrase may contain; anything else means the athlete was talking to a person. */
 const LEAD_INS = new Set([
   'log', 'set', 'make', 'change', 'it', 'to', 'that', 'now', 'the', 'my',
   'rpe', 'weight', 'point', 'and', 'a', 'half', 'quarter', 'hundred',
 ])
 
 /**
- * Whether an utterance is nothing but numbers, units and filler.
- *
- * Without this the number extraction is far too eager: "can you spot me on this
- * one" ends in a number word and was silently setting reps to 1, and "I did
- * eight reps yesterday" would rewrite the working set mid-conversation. A
- * command aimed at the app contains no words that aren't part of the command,
- * so requiring exactly that is both simple and strict.
+ * Whether an utterance is only numbers, units and filler — so "I did eight
+ * reps yesterday" is never read as a command.
  */
 const isValuePhrase = (tokens: string[]): boolean =>
   tokens.every(t =>
@@ -196,7 +163,7 @@ const isValuePhrase = (tokens: string[]): boolean =>
     LEAD_INS.has(t)
   )
 
-/** Bounds that reject misrecognition rather than writing nonsense to the log. */
+/** Bounds that reject misrecognition. */
 const LIMITS = {
   reps: { min: 1, max: 100 },
   weight: { min: 0, max: 500 },
@@ -208,21 +175,18 @@ const inRange = (v: number | undefined, k: keyof typeof LIMITS) =>
 
 export const normalize = (raw: string): string =>
   raw.toLowerCase()
-    // keep the decimal point inside "62.5" while dropping sentence punctuation
+    // Keep the decimal point in "62.5"; drop punctuation
     .replace(/[^\w\s.']/g, ' ')
     .replace(/(\D)\.|\.(\D)|\.$/g, (_m, a = '', b = '') => `${a} ${b}`)
     .replace(/\s+/g, ' ')
     .trim()
 
 /**
- * Pull reps / weight / rpe out of a phrase.
- *
- * Unit words anchor the numbers ("eight REPS at sixty KILOS"). When there are
- * none, a bare two-number phrase joined by "at" or "by" is read as reps then
- * weight — the order every lifter says it in, and the order the set card shows.
+ * Pull reps / weight / rpe from a phrase. Unit words anchor the numbers; with
+ * none, "eight at sixty" reads as reps then weight.
  */
 const extractValues = (tokens: string[]): { reps?: number; weight?: number; rpe?: number } => {
-  // Conversation that merely contains a number is not a command.
+  // A sentence that merely contains a number is not a command
   if (!isValuePhrase(tokens)) return {}
 
   let reps: number | undefined
@@ -237,7 +201,7 @@ const extractValues = (tokens: string[]): { reps?: number; weight?: number; rpe?
       continue
     }
     if (REP_WORDS.has(t)) {
-      // "eight reps" reads back one token; "reps eight" reads forward
+      // "eight reps" reads back; "reps eight" reads forward
       reps = readNumberEndingAt(tokens, i)?.value ?? readNumber(tokens, i + 1)?.value ?? reps
       continue
     }
@@ -252,7 +216,7 @@ const extractValues = (tokens: string[]): { reps?: number; weight?: number; rpe?
     }
   }
 
-  // "log eight at sixty" — no unit words to anchor on
+  // "log eight at sixty" — no unit words
   if (reps === undefined && weight === undefined && rpe === undefined) {
     const first = firstNumber(tokens)
     if (first && JOINERS.has(tokens[first.next] ?? '')) {
@@ -294,45 +258,26 @@ const hasPhrase = (text: string, phrases: string[]) =>
   phrases.some(p => text === p || text.includes(` ${p} `) ||
     text.startsWith(`${p} `) || text.endsWith(` ${p}`))
 
-/**
- * Words that mean someone was probably talking TO the app rather than near it.
- *
- * Used to tell a failed command apart from gym conversation. Getting this wrong
- * in one direction nags the athlete about every sentence they say to a training
- * partner; in the other it silently swallows a real attempt — and silence is
- * the reason people decide voice control "doesn't work" and never retry.
- */
+/** Words that suggest someone was talking to the app, used to recognise a missed command. */
 const COMMAND_ISH = new Set([
   'set', 'sets', 'log', 'logged', 'done', 'finish', 'finished', 'complete',
   'next', 'skip', 'rest', 'pause', 'resume', 'end', 'stop', 'rpe', 'weight',
   ...REP_WORDS, ...WEIGHT_WORDS,
 ])
 
-/**
- * True when a phrase looks like an attempted command that didn't parse.
- *
- * Only ever consulted after `parseVoiceCommand` has already returned null, so
- * a hit here means "you tried to say something and I missed it" — which the UI
- * can answer with a suggestion instead of doing nothing at all.
- */
+/** Whether an unparsed phrase looks like an attempted command, so the UI can suggest one. */
 export const looksLikeCommand = (raw: string): boolean => {
   const text = normalize(raw)
   if (!text) return false
   const tokens = text.split(' ')
-  // A sentence containing "set" is someone talking. A short phrase built around
-  // a command word is someone talking to the app. Four tokens is roughly where
-  // real commands stop and conversation starts — "I did eight reps yesterday"
-  // is five, and nagging about it would be worse than ignoring it.
+  // Longer than four tokens is conversation, not a command
   if (tokens.length > 4) return false
   return tokens.some(t => COMMAND_ISH.has(t))
 }
 
 /**
- * Parse one transcript into a command, or null if it wasn't one.
- *
- * Order is deliberate: the destructive and navigational commands are matched
- * before anything that reads numbers, so "end workout" can never be mistaken
- * for a value phrase.
+ * Parse a transcript into a command, or null. Destructive and navigation
+ * commands are matched before anything that reads numbers.
  */
 export const parseVoiceCommand = (raw: string): VoiceCommand | null => {
   const text = normalize(raw)
@@ -349,8 +294,7 @@ export const parseVoiceCommand = (raw: string): VoiceCommand | null => {
   const values = extractValues(tokens)
   const hasValues = values.reps !== undefined || values.weight !== undefined || values.rpe !== undefined
 
-  // An explicit log verb turns a value phrase into a write. Without one, the
-  // numbers only move the dials — see rule 1 at the top of the file.
+  // An explicit log verb turns values into a logged set
   if (hasPhrase(text, LOG_PHRASES)) return { kind: 'logSet', ...values }
   if (hasValues && tokens[0] === 'log') return { kind: 'logSet', ...values }
   if (hasValues) return { kind: 'setValues', ...values }

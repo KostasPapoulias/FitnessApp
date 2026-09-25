@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 import { bodySvg, useBodyGender } from './bodyAssets'
 
-// Exported for the data export, which draws the same map for every session and
-// must colour the same groups for the same muscle names.
+// Muscle name → SVG group ids. Exported for the data export's maps.
 export const MUSCLE_NAME_TO_GROUP: Record<string, string[]> = {
   'Quadriceps': ['Quads'],
   'Hamstrings': ['Hamstrings'],
@@ -47,8 +46,7 @@ const decorateSvg = (svg: string, css: string) => {
 }
 
 export default function MiniMuscleMap({ fatigueSnapshot }: MiniMuscleMapProps) {
-  // Historical sessions all belong to the signed-in athlete, so the body drawn
-  // against an old snapshot is the same one Home draws today.
+  // The signed-in athlete's body, for current and historical snapshots alike
   const gender = useBodyGender()
 
   const svgCss = useMemo(() => {

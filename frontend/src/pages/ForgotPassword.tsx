@@ -4,15 +4,9 @@ import { authService } from '../services/auth.service'
 import { useT } from '../i18n'
 
 /**
- * Ask for a reset link.
- *
- * The confirmation is deliberately identical whether or not the address has an
- * account. Saying "no account with that email" would turn this form into a way
- * to check who has signed up — which, for a fitness app, is information about
- * a person they did not choose to publish.
- *
- * Outside AppLayout, so it uses --safe-top/--safe-bottom directly. The
- * under-padded --page-top belongs to screens that render inside it.
+ * Request a password reset link. The confirmation is the same whether or not
+ * the address has an account. Rendered outside AppLayout, so it uses
+ * --safe-top/--safe-bottom directly.
  */
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -29,8 +23,7 @@ export default function ForgotPassword() {
       await authService.forgotPassword(email.trim())
       setSent(true)
     } catch (err: any) {
-      // 503 means the deployment has no mail configured. That is worth saying
-      // plainly rather than claiming a message is on its way.
+      // 503: mail is not configured on the server
       setError(err?.response?.data?.error ?? t('common.offline'))
     } finally {
       setIsLoading(false)

@@ -12,11 +12,10 @@ import { DumbbellIcon, HistoryListIcon, TrendingUpIcon } from '../components/ico
 export default function Home() {
   const { user } = useAuthStore()
   const { fetchFatigue, readinessScore, sleep, isLoading, selectedMuscle } = useFatigueStore()
-  // AppLayout does the fetching; Home only reads the result.
+  // Fetched by AppLayout; Home only reads it
   const { loaded, optionalStageDoneAt } = useOnboardingStore()
   const [side, setSide] = useState<'front' | 'back'>('front')
-  // Degrees of counter-rotation from the phone's tilt. Always 0 on desktop,
-  // and on any device that declines the sensor.
+  // Counter-rotation from the phone's tilt; 0 on desktop or without the sensor
   const tilt = useDeviceTilt()
   const { t } = useT()
 
@@ -24,11 +23,9 @@ export default function Home() {
     fetchFatigue()
   }, [])
 
-  // The optional stage has never been answered. Not an error state — the app
-  // works without it — so this is a card to act on, not a warning.
+  // Optional setup never answered: show a prompt card
   const showSetupPrompt = loaded && !optionalStageDoneAt
 
-  // Readiness score color
   const readinessColor =
     readinessScore >= 70 ? 'text-brand-green' :
     readinessScore >= 40 ? 'text-brand-yellow' :
@@ -65,14 +62,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Progress and history.
-          Two slim pills rather than a card: the bottom of this screen is
-          already the setup prompt and the AI strip, and a third block down
-          there squeezes the body map on a short phone. They sit under the
-          header because that is where they read as navigation — which is all
-          they are. The bottom nav has no free slot and Calendar answers a
-          different question, so without these the app's only charts would be
-          reachable from one row inside Profile. */}
+      {/* Progress and history links */}
       <div className="flex gap-2 px-5 pb-1">
         <Link
           to="/progress"
@@ -122,15 +112,8 @@ export default function Home() {
           </button>
         </div>
 
-        {/* The SVG map.
-            On a phone it counter-rotates a few degrees against how the device
-            is held, so it reads as hanging level with the ground rather than
-            being painted on the screen. Transform only — no layout is affected,
-            so nothing below it moves. */}
-        {/* Height flexes instead of sitting at a fixed 360px: on a short phone
-            (or in landscape) a rigid map outgrew this container, and the
-            legend — anchored to the container's bottom — landed on top of it.
-            The floor lets the page scroll rather than squashing the body. */}
+        {/* The body map. On a phone it counter-rotates against the device tilt
+            (transform only). Height flexes so the legend never overlaps it. */}
         <div className="w-full max-w-[220px] flex-1 min-h-[240px] max-h-[360px] mt-12 mb-9">
           {isLoading
             ? <div className="w-full h-full bg-dark-800 rounded-2xl animate-pulse" />
@@ -139,7 +122,7 @@ export default function Home() {
                 className="w-full h-full"
                 style={{
                   transform: `rotate(${tilt}deg) translateX(${tilt * 0.9}px)`,
-                  transformOrigin: '50% 22%',   // pivots near the shoulders, like it hangs from there
+                  transformOrigin: '50% 22%',   // pivots near the shoulders
                   willChange: tilt === 0 ? undefined : 'transform',
                 }}
               >
@@ -169,8 +152,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Finish-your-setup prompt. Sits above the AI strip because it is the
-          one thing on this screen that still needs the user to do something. */}
+      {/* Finish-your-setup prompt */}
       {showSetupPrompt && (
         <Link
           to="/training-setup"
@@ -189,14 +171,7 @@ export default function Home() {
         </Link>
       )}
 
-      {/* What sleep did to the readiness score at the top of this screen.
-          Shown when it did nothing too: a readiness figure that silently
-          ignores a variable the app asks you to log is the bug this exists to
-          fix, and an unlogged night must not look like a neutral one.
-
-          This used to be the tail of an AI suggestion strip. The suggestion is
-          gone; the sleep note is not a suggestion, it is why the number above
-          reads what it reads. */}
+      {/* What sleep did to the readiness score — shown even when it did nothing */}
       {sleep && (
         <div className={`mx-1 mb-1 bg-dark-800 border border-dark-600
                         rounded-card px-3 py-2.5

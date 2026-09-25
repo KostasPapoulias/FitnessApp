@@ -86,7 +86,7 @@ export default function NotificationSettings() {
     notificationService.getHistory(10).then(setHistory).catch(() => {})
   }, [])
 
-  // On means BOTH: this device holds a subscription and the server has consent
+  // On only when this device is subscribed AND the server has consent
   const pushOn = subscribed && Boolean(prefs?.pushEnabled)
 
   const save = async (patch: Partial<NotificationPreferences>) => {
@@ -109,8 +109,7 @@ export default function NotificationSettings() {
           alert('Could not enable notifications. On iPhone, open this from the home screen icon (not Safari) and use iOS 16.4+.')
           return
         }
-        // The device's zone travels with the opt-in — nothing timed can be
-        // scheduled until the server knows what "9am" means for this user.
+        // Send the device's timezone with the opt-in, so reminders hit local hours
         const saved = await notificationService.updatePreferences({
           pushEnabled: true,
           essentialEnabled: true,
@@ -136,9 +135,7 @@ export default function NotificationSettings() {
   const typeEnabled = (type: string) => prefs?.types?.[type] ?? true
 
   const handleType = async (type: string, next: boolean, safety?: boolean) => {
-    // Safety alerts get one confirm on the way out. It fires precisely when you
-    // feel fine and are about to train through a load spike — the moment it is
-    // easiest to switch off and most costly to have switched off.
+    // Confirm before turning off safety alerts — they matter most when you feel fine
     if (!next && safety) {
       const ok = confirm(
         'Turn off the injury risk warning?\n\n' +
@@ -217,8 +214,7 @@ export default function NotificationSettings() {
 
         <Divider />
 
-        {/* Tier flag rather than a type row: suspension and backoff key off
-            coachEnabled, and a separate type row could disagree with it. */}
+        {/* The coach tier flag (not a type row), since suspension keys off it */}
         <Row
           icon={<CoachAvatar className="w-5 h-5" />}
           label="AI coaching nudges"

@@ -1,50 +1,28 @@
-// SomaTrack service worker.
-//
-// This file is what runs when the app is NOT running: swiped out of the app
-// switcher, screen locked, or never opened since the phone booted. iOS wakes
-// this worker when APNs delivers a push and kills it again seconds later, so
-// everything here must be short-lived and hold no state between events.
-//
-// It lives in public/ and is copied verbatim by Vite — no bundling, no
-// import.meta.env. Config it can't hardcode is left in Cache Storage by the
-// page (see useNotifcations.ts) and read back below.
-//
-// Two jobs, and they are independent: push delivery (the original one), and the
-// app-shell cache below that makes a cold launch instant and survives a gym
-// with no signal.
+// SomaTrack service worker: push delivery and the offline app-shell cache.
+// Copied verbatim by Vite (no bundling, no import.meta.env); config is read
+// from Cache Storage, written by the page (see useNotifcations.ts). Short-lived
+// on iOS, so it holds no state between events.
 
 const CONFIG_CACHE = 'somatrack-push-config'
 const CONFIG_KEY = '/__push-config'
 
-// ── app shell cache ────────────────────────────────────────────────────────
-//
-// Runtime caching rather than a precache manifest, because this file is copied
-// verbatim and never bundled — it cannot see the content-hashed filenames Vite
-// produces, and a hardcoded list would go stale on the first deploy. Assets are
-// cached the first time they are fetched instead, which costs one online launch
-// and then works offline indefinitely.
-//
-// Bump SHELL_CACHE to evict everything at once. `activate` deletes any cache
-// that is not in the current set, so an old bundle's assets do not accumulate
-// forever on a phone.
+// ── app shell cache ──
+// Runtime caching, since this unbundled file can't see Vite's hashed filenames.
+// Bump SHELL_CACHE to evict; `activate` deletes caches not in KEEP_CACHES.
 const SHELL_CACHE = 'somatrack-shell-v1'
 const KEEP_CACHES = [SHELL_CACHE, CONFIG_CACHE]
 
-/** The SPA entry. Every navigation falls back to this — Netlify rewrites all
- *  paths to it anyway, so one cached copy answers every route. */
+/** The SPA entry; every navigation falls back to it. */
 const APP_SHELL = '/index.html'
 
 self.addEventListener('install', (event) => {
-  // Take over immediately rather than waiting for every tab to close, so a
-  // deploy that fixes push doesn't sit behind an open home screen app.
+  // Take over without waiting for open tabs to close
   self.skipWaiting()
 
   event.waitUntil(
     caches.open(SHELL_CACHE)
       .then((cache) => cache.addAll([APP_SHELL, '/logo-mark.png', '/manifest.json']))
-      // A failed precache must not fail the install. An offline install, or one
-      // file 404ing after a rename, would otherwise leave the worker stuck in
-      // `installing` and push would stop working too.
+      // A failed precache must not fail the install (it would also stop push)
       .catch(() => {})
   )
 })
@@ -61,13 +39,8 @@ self.addEventListener('activate', (event) => {
 })
 
 /**
- * Which requests this worker will answer from cache at all.
- *
- * The API is excluded outright, and that is not a performance decision. Serving
- * a stale readiness score or a stale fatigue map would be actively wrong — the
- * whole model is time-dependent, and a cached body map showing yesterday's
- * recovery is worse than an honest failure. Writes are handled by the outbox in
- * `lib/setQueue.ts`, on the page side where there is state to reconcile.
+ * Same-origin GETs only. /api/ is never cached: the fatigue model is
+ * time-dependent, so stale data is worse than a failure.
  */
 const isSameOriginGet = (request, url) =>
   request.method === 'GET' &&
@@ -75,16 +48,8 @@ const isSameOriginGet = (request, url) =>
   !url.pathname.startsWith('/api/')
 
 /**
- * Built assets only — never anything the dev server invents.
- *
- * This allowlist exists because the same worker runs against `vite dev`, which
- * serves modules from `/src/`, `/node_modules/` and `/@vite/` with cache-busting
- * query strings. Caching those first-wins would serve a stale module after
- * every edit and break HMR, and the failure would look like "my changes stopped
- * applying" rather than anything to do with a service worker.
- *
- * `/assets/` is where Vite writes its content-hashed output, and the handful of
- * root files below are the only other things a build emits.
+ * Built assets only. The allowlist keeps `vite dev` modules (/src/, /@vite/…)
+ * out of the cache, which would otherwise break HMR.
  */
 const CACHEABLE_ROOT_FILES = [
   '/logo-mark.png',
@@ -98,18 +63,8 @@ const CACHEABLE_ROOT_FILES = [
 ]
 
 /**
- * Exercise artwork, cached like a built asset and for the same reason.
- *
- * `/exercises/` is this app's own public/ — one 6.5 KB thumbnail per row of the
- * exercise list. `/exercise-media/` is proxied to the backend by netlify.toml,
- * which is what makes the animations same-origin and therefore cacheable at
- * all; fetched straight from Railway they would fail the origin check above and
- * this worker would never see them.
- *
- * Both are safe to cache forever because the filename contains the content id:
- * a different image is a different name, so a cached one can never be stale.
- * That is also why they are not in the shell cache's version bump — evicting
- * them on every deploy would re-download artwork that cannot have changed.
+ * Exercise artwork (/exercises/ and /exercise-media/, proxied same-origin by
+ * netlify.toml). Filenames carry the content id, so they never go stale.
  */
 const isExerciseMedia = (url) =>
   url.pathname.startsWith('/exercises/') || url.pathname.startsWith('/exercise-media/')
@@ -125,9 +80,7 @@ self.addEventListener('fetch', (event) => {
 
   if (!isSameOriginGet(request, url)) return
 
-  // Navigations: network first, so a deploy is picked up on the next launch
-  // with a signal, and the cached shell answers when there is none. Cache-first
-  // here would pin users to whatever build they first installed.
+  // Navigations: network first so a deploy lands on the next launch; cached shell offline
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -143,16 +96,12 @@ self.addEventListener('fetch', (event) => {
 
   if (!isBuiltAsset(url)) return
 
-  // The hashed JS/CSS bundles, images, fonts, the map worker. Cache-first,
-  // because a content-hashed filename can never change contents: a new build
-  // produces new names, and the old ones are evicted by the version bump above
-  // rather than by revalidation.
+  // Hashed assets: cache first — a new build means new filenames
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached
       return fetch(request).then((response) => {
-        // Only cache a real success. An opaque cross-origin response or a 404
-        // stored here would be served forever.
+        // Only a real success; a cached 404 would be served forever
         if (response.ok && response.type === 'basic') {
           const copy = response.clone()
           caches.open(SHELL_CACHE).then((cache) => cache.put(request, copy)).catch(() => {})
@@ -164,9 +113,8 @@ self.addEventListener('fetch', (event) => {
 })
 
 // ── incoming push ──
-// iOS revokes push permission for the whole app if a push arrives and nothing
-// is displayed, so every path through this handler MUST end in a
-// showNotification() — including the malformed-payload path.
+// iOS revokes push permission if a push shows nothing, so every path must end
+// in showNotification(), including a malformed payload
 self.addEventListener('push', (event) => {
   let data = {}
   try {
@@ -178,15 +126,12 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'SomaTrack', {
       body: data.body || 'Reminder',
-      // Same tag ⇒ the new notification REPLACES the previous one instead of
-      // adding a row. A once-a-minute reminder without this buries Notification
-      // Center in an hour. renotify makes the replacement still buzz.
+      // Same tag replaces the previous notification; renotify still buzzes
       tag: data.tag || 'somatrack',
       renotify: true,
       data: { url: data.url || '/', nid: data.nid }
     })
-      // Show first, THEN report. A failed ack must never cost the user the
-      // notification itself — and on iOS, not showing one revokes permission.
+      // Show first, then ack: a failed ack must never cost the notification
       .then(() => ack(data.nid, 'displayed'))
   )
 })
@@ -197,8 +142,7 @@ self.addEventListener('notificationclick', (event) => {
   const info = event.notification.data || {}
   const target = info.url || '/'
 
-  // Focus the app if it is already open. openWindow() unconditionally would
-  // spawn a second window and lose whatever workout was on screen.
+  // Focus an open window rather than spawning a second one
   event.waitUntil(
     Promise.all([
       ack(info.nid, 'clicked'),
@@ -216,22 +160,15 @@ self.addEventListener('notificationclick', (event) => {
 })
 
 // ── dismissed ──
-// Weak signal: iOS fires this inconsistently, so it informs the history screen
-// but never feeds the engagement backoff.
+// Weak signal (iOS fires it inconsistently): history only, not the engagement backoff
 self.addEventListener('notificationclose', (event) => {
   const info = event.notification.data || {}
   event.waitUntil(ack(info.nid, 'dismissed'))
 })
 
 /**
- * Report a notification's fate to the server.
- *
- * This is the only delivery receipt web push provides: a push service returning
- * 201 means it accepted the payload, not that any phone rendered it. Without
- * this the app cannot tell a working subscription from a ghost.
- *
- * Requires network at the moment of display, so a missing ack means "not
- * confirmed", never "definitely not delivered".
+ * Report a notification's fate — web push's only delivery receipt. Needs the
+ * network, so a missing ack means "unconfirmed", not "undelivered".
  */
 async function ack(nid, event) {
   if (!nid) return
@@ -245,15 +182,13 @@ async function ack(nid, event) {
       body: JSON.stringify({ nid, event })
     })
   } catch {
-    // Offline, or the worker was killed early. Nothing to recover here.
+    // Offline or killed early; nothing to recover
   }
 }
 
 // ── subscription rotation ──
-// iOS silently replaces a push subscription now and then (OS updates, long idle
-// periods, reinstalls). Without this handler the old endpoint keeps 410-ing,
-// the server prunes it, and push dies for good while the UI still reads "On" —
-// the classic "it worked for a week then stopped" failure.
+// iOS replaces subscriptions silently; without this the old endpoint 410s and
+// push dies while the UI still reads "On"
 self.addEventListener('pushsubscriptionchange', (event) => {
   event.waitUntil(resubscribe(event))
 })
@@ -266,8 +201,7 @@ async function resubscribe(event) {
     const oldEndpoint = event.oldSubscription && event.oldSubscription.endpoint
     if (!oldEndpoint) return
 
-    // Prefer the key the old subscription was created with; fall back to the
-    // server, which serves it unauthenticated precisely for this moment.
+    // Prefer the old subscription's key; else the server's public key endpoint
     let applicationServerKey =
       event.oldSubscription.options && event.oldSubscription.options.applicationServerKey
 
@@ -293,8 +227,7 @@ async function resubscribe(event) {
     })
 
   } catch {
-    // Nothing useful to do from here — the page repairs the subscription on
-    // next launch (ensurePushSubscription), this just shortens the outage.
+    // The page repairs the subscription on next launch (ensurePushSubscription)
   }
 }
 

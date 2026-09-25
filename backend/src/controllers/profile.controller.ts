@@ -10,22 +10,16 @@ import {
   logNutritionSchema, logSleepSchema, updateProfileSchema,
 } from '../schemas/profile.schema'
 
-// GET /api/profile
+// GET /api/profile — profile, settings, stats and latest sleep/nutrition/HRV
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
-    // Issued together, not one after another. These seven queries are entirely
-    // independent, and awaiting them in sequence billed a full network round
-    // trip each — against a remote database that is ~290 ms per trip, this
-    // single endpoint spent about two seconds waiting rather than working.
-    //
-    // The two aggregates are also merged into one: _sum and _avg over the same
-    // rows with the same filter is one scan, not two.
+    // Independent reads, batched; one aggregate covers both sum and average
     const [
       user, totalWorkouts, sessionStats, latestSleep, latestNutrition, latestHRV
     ] = await Promise.all([
       prisma.user.findUnique({
         where: { id: req.userId! },
-        // Settings through the allowlist: `true` sent the PIN hash to the phone.
+        // Settings through the allowlist, so the PIN hash never leaves
         include: { profile: true, settings: { select: CLIENT_SETTINGS_SELECT } }
       }),
       prisma.workoutSession.count({ where: { userId: req.userId! } }),
@@ -91,9 +85,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       birthDate, trainingDaysPerWeek, experienceYears,
     } = parsed
 
-    // Only write what was actually sent. Spreading the body wholesale would
-    // let an omitted field null out a stored value — the Edit Profile modal
-    // does not send every column, and a partial save must stay partial.
+    // Only write what was sent, so a partial save stays partial
     const parsedBirthDate =
       typeof birthDate === 'string' && !Number.isNaN(Date.parse(birthDate))
         ? new Date(birthDate)
@@ -109,8 +101,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       ...(trainingDaysPerWeek != null ? { trainingDaysPerWeek } : {}),
       ...(experienceYears != null ? { experienceYears } : {}),
       ...(parsedBirthDate
-        // `age` is kept in step so any older read path that still reaches for
-        // it agrees with birthDate on the day it was written.
+        // `age` kept in step with birthDate
         ? {
             birthDate: parsedBirthDate,
             age: Math.floor(yearsBetween(parsedBirthDate, new Date())),
@@ -124,8 +115,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       create: { userId: req.userId!, name: name ?? 'User', ...data },
     })
 
-    // A changed bodyweight is a new measurement, not just a settings edit —
-    // the weight chart should show that it moved and when.
+    // A changed bodyweight is also recorded as a new measurement
     if (weight != null && Number.isFinite(weight)) {
       const latest = await prisma.biometric.findFirst({
         where: { userId: req.userId!, type: 'WEIGHT' },
@@ -148,16 +138,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/profile/sleep
- *
- * One row per night, replacing any existing one for the same date. Sleep now
- * moves the readiness score, and two rows for one night made *which* value
- * counted depend on row ordering — logging 8h and then correcting it to 5h
- * could leave the 8h in force. Re-logging is also the normal way to fix a
- * mis-dragged slider, and that has to be a correction rather than a second
- * night.
- *
- * Bounds are checked here for the same reason: an out-of-range duration is no
- * longer just a bad chart point, it is readiness input.
+ * One row per night: re-logging a date replaces it. Sleep feeds readiness.
  */
 export const logSleep = async (req: AuthRequest, res: Response) => {
   try {
@@ -170,20 +151,15 @@ export const logSleep = async (req: AuthRequest, res: Response) => {
       res.status(400).json({ success: false, error: 'sleepDate is not a valid date' })
       return
     }
-    // Normalised to UTC midnight so "the same night" is a single value. The
-    // client sends a bare YYYY-MM-DD, which already parses this way; a client
-    // that sends a full timestamp must not create a second row for one night.
+    // Normalised to UTC midnight so each night is a single value
     const night = new Date(Date.UTC(
       parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate()
     ))
 
-    // Range checks live in logSleepSchema now — same bounds, one place.
     const minutes = durationMin
     const score = sleepScore ?? null
 
-    // Not an upsert: SleepLog has no unique constraint on (userId, sleepDate),
-    // and adding one would need a migration that first has to decide what to do
-    // with the duplicate rows already in the table.
+    // Replace-then-create: SleepLog has no unique (userId, sleepDate) constraint
     const entry = await prisma.$transaction(async tx => {
       await tx.sleepLog.deleteMany({
         where: { userId: req.userId!, sleepDate: night }
@@ -234,22 +210,11 @@ export const logNutrition = async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/profile/biometrics?type=WEIGHT&days=365
- *
- * The Biometric series was write-only. Onboarding wrote the first weight and
- * `updateProfile` writes one on every change, with a comment promising the
- * weight chart it would feed — and nothing could read them back, so the chart
- * was never built and the rows just accumulated.
- *
- * Deliberately just a reader. The other BiometricType values (BODY_FAT, HRV,
- * HEART_RATE, LEAN_MASS, SLEEP_SCORE) stay unwritten: they need either a wrist
- * device or a tape measure, and inventing an estimate from a photo or a
- * formula the athlete cannot check would put a made-up number in the same
- * series as a measured one.
+ * A measurement series, oldest first.
  */
 const BIOMETRIC_TYPES = ['WEIGHT', 'BODY_FAT', 'LEAN_MASS', 'HEART_RATE', 'HRV', 'SLEEP_SCORE'] as const
 type BiometricTypeName = typeof BIOMETRIC_TYPES[number]
 
-/** A year of points is more than any chart at this size can resolve. */
 const MAX_HISTORY_DAYS = 365 * 5
 const DEFAULT_HISTORY_DAYS = 365
 
@@ -278,8 +243,7 @@ export const getBiometrics = async (req: AuthRequest, res: Response) => {
         measuredAt: { gte: since },
       },
       select: { measuredAt: true, value: true, source: true },
-      // Ascending: this is a series to be drawn left to right, and the client
-      // reversing it is one more place the order can be got wrong.
+      // Oldest first, ready to draw
       orderBy: { measuredAt: 'asc' },
     })
 
@@ -291,17 +255,11 @@ export const getBiometrics = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// DELETE /api/profile/account
-// GET /api/profile/export
-//
-// Everything the app holds about the caller, for the Export Data row. The
-// client renders it into a report and embeds this JSON inside that report, so
-// the response is the whole of what the person takes away. See the service
-// for what is deliberately left out.
+// GET /api/profile/export — everything held about the caller (see data-export.service)
 export const exportData = async (req: AuthRequest, res: Response) => {
   try {
     const data = await buildDataExport(req.userId!)
-    // A personal record, not something a proxy or the browser should keep
+    // Personal data: never cached
     res.setHeader('Cache-Control', 'no-store')
     res.json({ success: true, data })
   } catch (error) {
@@ -310,9 +268,9 @@ export const exportData = async (req: AuthRequest, res: Response) => {
   }
 }
 
+// DELETE /api/profile/account — cascades remove all of the user's data
 export const deleteAccount = async (req: AuthRequest, res: Response) => {
   try {
-    // Cascade deletes handle everything — one delete removes all user data
     await prisma.user.delete({ where: { id: req.userId! } })
     res.json({ success: true, data: { message: 'Account deleted' } })
   } catch (error) {

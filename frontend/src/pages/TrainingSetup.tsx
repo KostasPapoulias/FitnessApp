@@ -6,19 +6,10 @@ import {
 import { useOnboardingStore } from '../store/useOnboardingStore'
 import { BuildingIcon, DumbbellIcon, HouseIcon, ModalityIcon, TreeIcon } from '../components/icons'
 
-// The optional stage: what you can train with, and what you need to train
-// around. Reachable from the Home prompt card and from Profile.
-//
-// Never gates anything. Skipping it costs suggestion quality, not access — so
-// every exit from this screen is a valid one, including the back arrow.
-//
-// Equipment here RANKS the exercise list, it does not filter it. Nothing gets
-// hidden for want of a barbell; unavailable movements just sort to the bottom.
-// Only an injury marked "avoid" actually removes anything.
+// The optional onboarding stage: equipment and injuries. Never gates anything.
+// Equipment ranks the exercise list; only injuries marked "avoid" filter it.
 
-// Where people train, as whole places rather than parts lists. Picking a
-// preset ticks its equipment — you can then adjust individual items, which is
-// how someone says "commercial gym, but no rower".
+// Training places as presets; picking one ticks its equipment, then items can be adjusted.
 const PRESETS: { id: string; icon: React.ReactNode; label: string; blurb: string; items: string[] }[] = [
   {
     id: 'gym', icon: <BuildingIcon className="w-6 h-6" />, label: 'Full gym',
@@ -55,9 +46,7 @@ const PRESETS: { id: string; icon: React.ReactNode; label: string; blurb: string
   },
 ]
 
-// Grouped so the list reads as a place rather than an alphabetical dump. Names
-// must match Equipment.name in seed.ts; anything unlisted falls into "Other" so
-// a new seed entry appears instead of vanishing.
+// Equipment groups; names must match Equipment.name in seed.ts. Unlisted items go to "Other".
 const GROUPS: { title: string; items: string[] }[] = [
   { title: 'Free weights', items: ['Barbell', 'Dumbbell', 'Kettlebell', 'EZ Bar', 'Trap Bar', 'Medicine Ball'] },
   { title: 'Machines & cardio', items: ['Machine', 'Cable Machine', 'Smith Machine', 'Treadmill', 'Rower', 'Bike', 'Elliptical', 'Stair Climber'] },
@@ -72,9 +61,7 @@ const SEVERITIES: { value: 'avoid' | 'caution'; label: string; blurb: string }[]
 
 export default function TrainingSetup() {
   const navigate = useNavigate()
-  // Refetched after save so the "Finish your setup" card on Home actually
-  // disappears. Without this the store kept its stale optionalStageDoneAt and
-  // the prompt came back on every visit until the app was restarted.
+  // Refetched after save so the Home setup prompt disappears
   const refreshOnboarding = useOnboardingStore(s => s.fetchState)
 
   const [equipment, setEquipment] = useState<EquipmentOption[]>([])
@@ -107,8 +94,7 @@ export default function TrainingSetup() {
     [equipment]
   )
 
-  // A preset reads as active when everything it covers is ticked. It is a
-  // shortcut, not a mode — ticking one extra item does not clear it.
+  // A preset is active when all its items are ticked
   const activePreset = useMemo(() => {
     if (selected.size === 0) return null
     return PRESETS.find(p => {
@@ -120,8 +106,7 @@ export default function TrainingSetup() {
   const applyPreset = (preset: typeof PRESETS[number]) => {
     const ids = preset.items.map(n => byName.get(n)?.id).filter(Boolean) as string[]
     setSelected(prev => {
-      // Tapping the active preset clears it, so a mistap is undoable without
-      // hunting through the grid to untick fifteen things.
+      // Tapping the active preset clears it
       const alreadyOn = ids.every(id => prev.has(id))
       return alreadyOn ? new Set() : new Set(ids)
     })
@@ -153,20 +138,18 @@ export default function TrainingSetup() {
     setSaving(true)
     setError('')
     try {
-      // Injuries last: that call is what stamps optionalStageDoneAt, so if
-      // equipment fails the stage stays open rather than being marked done
-      // with half its answers missing.
+      // Injuries last: that call marks the stage done, so an equipment failure leaves it open
       await onboardingService.setEquipment([...selected])
       await onboardingService.setInjuries(injuries)
       await refreshOnboarding()
       navigate('/', { replace: true })
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Could not save. Please try again.')
-      setSaving(false)   // stays on the screen so the selection is not lost
+      setSaving(false)   // stay on screen so the selection is kept
     }
   }
 
-  // Anything the seed added that GROUPS does not name yet.
+  // Seeded equipment not named in GROUPS
   const grouped = new Set(GROUPS.flatMap(g => g.items))
   const ungrouped = equipment.filter(e => !grouped.has(e.name))
 
@@ -301,9 +284,7 @@ export default function TrainingSetup() {
 
       {error && <p className="text-brand-red text-sm mt-4">{error}</p>}
 
-      {/* In normal flow, not fixed. A fixed bar escaped AppLayout's centred
-          430px column and stretched the full window width, and sat underneath
-          the bottom nav besides. */}
+      {/* In normal flow: a fixed bar would escape AppLayout's column */}
       <button onClick={save} disabled={saving}
         className="w-full bg-brand-teal text-black font-bold py-3.5 rounded-btn mt-8
                    active:scale-95 transition-transform disabled:opacity-50">

@@ -3,15 +3,11 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 /**
- * One-off: re-join routes shredded by the simplify-before-segment bug.
+ * One-off: re-joins run routes fragmented by an old simplify-before-segment
+ * bug, only where the joined distance matches the logged one.
  *
- * Safe only because the evidence says so per run — joining the fragments end to
- * end recovers ~100% of the distance the run logged, which means no time was
- * ever missing, only points. A run with a REAL recording gap would come out
- * well short, and merging that one would draw a line the athlete never ran.
- *
- * Run with:  npx tsx repair-routes.ts <backup.json> [setId]
- * Nothing is written until the backup file exists on disk.
+ *   npx tsx repair-routes.ts <backup.json> [setId]
+ * Writes nothing unless the backup file exists.
  */
 const COVERAGE_MIN = 0.9
 

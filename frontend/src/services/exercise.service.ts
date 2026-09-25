@@ -26,27 +26,13 @@ export const exerciseService = {
     return res.data.data
   },
 
-  /**
-   * Star / unstar an exercise.
-   *
-   * Two calls rather than one toggle, mirroring the API. The caller already
-   * renders the current state, so it can say what it wants rather than asking
-   * the server to flip whatever is there — which is what makes a retry on a
-   * flaky gym connection safe instead of a coin toss.
-   */
+  /** Star or unstar; explicit on/off so a retry is safe. */
   setFavorite: async (id: string, on: boolean): Promise<void> => {
     if (on) await api.post(`/exercises/${id}/favorite`)
     else await api.delete(`/exercises/${id}/favorite`)
   },
 
-  /**
-   * Create a movement the catalogue does not have.
-   *
-   * Deliberately carries no calibration fields. damageFactor, loadFactor and
-   * the per-muscle impact weightings are derived server-side from the role
-   * each muscle is given — they feed the fatigue model, and a number typed
-   * into a form here would be wrong in a way nobody could ever see.
-   */
+  /** Create a custom exercise. No calibration fields — the server derives those. */
   create: async (input: {
     name: string
     modalityId: string
@@ -54,7 +40,7 @@ export const exerciseService = {
     muscles: { muscleId: string; role: 'primary' | 'secondary' }[]
     categoryIds?: string[]
     equipmentIds?: string[]
-    /** Cardio only; the backend ignores it for every other modality. */
+    /** Cardio only. */
     cardioTracking?: CardioTracking
   }): Promise<Exercise> => {
     const res = await api.post('/exercises', input)

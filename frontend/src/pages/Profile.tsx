@@ -30,7 +30,7 @@ import {
 } from '../components/icons'
 import { useLocaleStore } from '../store/useLocaleStore'
 
-//   Reusable row components 
+// ── reusable row components ──
 function StatCard({ value, label, color = 'text-white' }: {
   value: string; label: string; color?: string
 }) {
@@ -42,10 +42,9 @@ function StatCard({ value, label, color = 'text-white' }: {
   )
 }
 
-//   Training load
-// Muscle fatigue says how sore you are today. This says whether the last six
-// weeks are building you up or burying you — the acute:chronic ratio is the
-// best-evidenced early warning for overuse injury, so it gets called out.
+// ── training load ──
+// Whether recent weeks are building fitness or overreaching; the
+// acute:chronic ratio is the main overuse-injury warning.
 function TrainingLoadCard({ load, systemicFatigue }: {
   load: TrainingLoad | null
   systemicFatigue: number
@@ -114,8 +113,7 @@ function TrainingLoadCard({ load, systemicFatigue }: {
 }
 
 function SettingsRow({ icon, label, sublabel, color = 'text-white', right, onClick }: {
-  // A node, not a string: most rows are an emoji, but the AI row shows the
-  // coach's actual avatar.
+  // A node: icons, or the coach's avatar on the AI row
   icon: React.ReactNode; label: string; sublabel?: string
   color?: string; right?: React.ReactNode; onClick?: () => void
 }) {
@@ -140,11 +138,8 @@ function SettingsRow({ icon, label, sublabel, color = 'text-white', right, onCli
   )
 }
 
-//   Toggle component 
-// A span rather than a button: it lives inside SettingsRow, which is itself a
-// button, and a button nested in a button is invalid HTML — the click landed on
-// whichever one the browser felt like. Harmless while the toggle did nothing
-// locally; not harmless now that it writes to the server.
+// ── toggle ──
+// A span, not a button: it sits inside SettingsRow, which is already a button.
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <span
@@ -168,14 +163,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   )
 }
 
-/**
- * Two-way segmented control, for settings where both options deserve to be
- * visible. A toggle would work for units, but "on/off" says nothing about which
- * state is which — the labels are the whole point here.
- *
- * Rendered as spans inside the parent SettingsRow button rather than nested
- * buttons, which is invalid HTML and swallows the outer row's own clicks.
- */
+/** Two-option segmented control (spans, since it sits inside a SettingsRow button). */
 function SegmentedControl<T extends string>({ value, options, onChange }: {
   value: T
   options: readonly { value: T; label: string }[]
@@ -213,15 +201,9 @@ const UNIT_OPTIONS = [
   { value: 'imperial', label: 'lb/ft' },
 ] as const
 
-//   Edit Profile Modal
-//
-// Writes the same columns onboarding does, through the same field components,
-// so the two cannot drift. It previously asked for a plain `age`, which the
-// recovery model no longer reads — it prefers `birthDate` — so editing it
-// changed nothing the athlete could observe.
-//
-// Values only. Each label is a dictionary key built from its value, so the
-// typecheck refuses a value with no label in one of the languages.
+// ── edit profile ──
+// Same columns and field components as onboarding, so the two cannot drift.
+// Values only; each label is a dictionary key built from its value.
 const SEXES = ['male', 'female', 'other', 'prefer_not_to_say'] as const
 const LEVELS = ['beginner', 'intermediate', 'advanced'] as const
 const GOALS = ['hypertrophy', 'strength', 'endurance', 'weight_loss'] as const
@@ -246,8 +228,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
     profile?.experienceYears != null ? String(profile.experienceYears) : ''
   )
 
-  // Seeded in whichever unit the athlete reads, converted back on save. The
-  // stored value is always metric.
+  // Shown in the athlete's unit; always stored metric
   const [cm, setCm] = useState(profile?.height != null ? String(Math.round(profile.height)) : '')
   const [kg, setKg] = useState(profile?.weight != null ? String(profile.weight) : '')
   const [feet, setFeet] = useState(
@@ -271,8 +252,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
     ? (within(num(lb), LIMITS.lb) ? lbToKg(num(lb)!) : null)
     : (within(num(kg), LIMITS.kg) ? num(kg) : null)
 
-  // Bodyweight is load-bearing for calisthenics scoring, so it may not be
-  // cleared to nothing once set. Everything else may be left blank.
+  // Bodyweight can't be cleared once set (calisthenics scoring needs it)
   const valid =
     name.trim() !== '' &&
     weightKg !== null &&
@@ -295,8 +275,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
   }
 
   return (
-    // The shared sheet, so this rises, drags shut and sits over the nav the
-    // same way every other sheet in the app does.
+    // The shared bottom sheet
     <BottomSheet
       title={t('profile.editTitle')}
       onClose={onClose}
@@ -390,7 +369,7 @@ function EditProfileModal({ profile, imperial, onSave, onClose }: {
   )
 }
 
-//   Log Sleep Modal 
+// ── log sleep ──
 function LogSleepModal({ onSave, onClose }: {
   onSave: (data: any) => void; onClose: () => void
 }) {
@@ -448,7 +427,7 @@ function LogSleepModal({ onSave, onClose }: {
   )
 }
 
-//   Log Nutrition Modal 
+// ── log nutrition ──
 function LogNutritionModal({ onSave, onClose }: {
   onSave: (data: any) => void; onClose: () => void
 }) {
@@ -500,15 +479,14 @@ function LogNutritionModal({ onSave, onClose }: {
   )
 }
 
-//   Main Profile Page 
+// ── profile page ──
 export default function Profile() {
   const navigate = useNavigate()
   const { user, logout, fetchMe } = useAuthStore()
   const {
     readinessScore, systemicFatigue, sleep, trainingLoad, fetchFatigue, fetchTrainingLoad,
   } = useFatigueStore()
-  // Only needs to READ the state here — enabling, testing and per-type choices
-  // all live on the Notifications screen now.
+  // Only reads push state; settings live on the Notifications screen
   const { isPushSubscribed } = useNotifications()
   const { equipmentIds, injuries } = useOnboardingStore()
   const { t, tn, num, locale } = useT()
@@ -523,7 +501,7 @@ export default function Profile() {
   const [settingsError, setSettingsError]   = useState<string | null>(null)
   const [weightSeries, setWeightSeries]     = useState<BiometricPoint[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  // 'done' carries the filename, so the row can say where the export went
+  // 'done' carries the filename, so the row can name it
   const [exportState, setExportState] =
     useState<{ status: 'idle' | 'busy' | 'error' } | { status: 'done'; file: string }>({ status: 'idle' })
   const [pushEnabled, setPushEnabled]       = useState(false)
@@ -538,20 +516,14 @@ export default function Profile() {
       .finally(() => setIsLoading(false))
   }, [])
 
-  // Its own request rather than folded into getProfile: the series is the only
-  // unbounded thing on this screen, and every other card should render without
-  // waiting on a year of measurements. A failure leaves the card in its empty
-  // state instead of taking the profile down with it.
+  // Fetched separately, so other cards don't wait on a year of measurements
   useEffect(() => {
     profileService.getBiometrics('WEIGHT')
       .then(series => setWeightSeries(series.points))
       .catch(() => setWeightSeries([]))
   }, [])
 
-  // On requires BOTH: this device holds a subscription, and the server has the
-  // user opted in. Reading only the browser meant anyone who subscribed before
-  // the opt-in model existed saw "On" while the server would never send them
-  // anything — the migration deliberately does not backfill consent.
+  // On only when this device is subscribed AND the server has consent
   useEffect(() => {
     Promise.all([
       isPushSubscribed(),
@@ -564,26 +536,17 @@ export default function Profile() {
 
   useEffect(() => {
     fetchTrainingLoad()
-    // Readiness too, rather than trusting whatever Home last left in the store:
-    // this screen prints the score and now also explains it, and a deep link
-    // straight to /profile arrives with an empty store and would show 0%.
+    // Fetch readiness too — a deep link here arrives with an empty store
     fetchFatigue()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The modal already validated and converted to metric, so this forwards its
-  // payload as-is rather than re-parsing it. Re-deriving numbers here is how
-  // the old `age` field ended up silently disagreeing with `birthDate`.
+  // The modal has already validated and converted to metric
   const handleSaveProfile = async (form: any) => {
     const saved = await profileService.updateProfile(form)
     setProfileData((prev: any) => ({ ...prev, profile: saved }))
-    // Keeps the cached auth user in step — Home reads the name from there, so
-    // renaming yourself otherwise left the old name on the greeting until the
-    // next launch.
+    // Refresh the cached user (Home reads the name from it)
     await fetchMe()
-    // A saved weight change writes a new Biometric row, so the chart is stale
-    // the moment the modal closes. Refetched rather than appended locally:
-    // updateProfile only records a point when the value actually moved, and
-    // guessing that rule here would drift from it.
+    // Refetch the weight series (a changed weight adds a point)
     profileService.getBiometrics('WEIGHT')
       .then(series => setWeightSeries(series.points))
       .catch(() => {})
@@ -593,9 +556,7 @@ export default function Profile() {
   const handleSaveSleep = async (data: any) => {
     await profileService.logSleep(data)
     setShowSleepModal(false)
-    // Sleep moves the readiness score, and the score is on screen directly
-    // above the button that opened this modal. Without the refetch the athlete
-    // logs four hours' sleep and watches nothing happen.
+    // Refresh readiness — sleep changes it
     await Promise.all([
       fetchFatigue(),
       profileService.getProfile().then(setProfileData).catch(() => {}),
@@ -607,15 +568,7 @@ export default function Profile() {
     setShowNutritionModal(false)
   }
 
-  /**
-   * Optimistic, then reverted on failure.
-   *
-   * These controls used to be `onChange={setAiConsent}` and nothing else — the
-   * switch moved, the server never heard about it, and the old value came back
-   * on the next launch. Showing the new state immediately is right for a
-   * toggle; showing it when the save failed is how that bug looked from the
-   * outside, so the revert and the message are the part that matters.
-   */
+  /** Optimistic settings save, reverted with a message on failure. */
   const saveSettings = async (patch: SettingsPatch) => {
     if (!settings) return
     const previous = settings
@@ -623,15 +576,13 @@ export default function Profile() {
 
     setSettings({ ...settings, ...patch })
     setSettingsError(null)
-    // The screen switches language before the server answers, like every
-    // other toggle here, and switches back with the rest if the save fails.
+    // Switch language immediately; reverted with the rest on failure
     if (patch.language) setLocale(patch.language)
 
     try {
       const saved = await settingsService.updateSettings(patch)
       setSettings(saved)
-      // profileData carries its own copy, and EditProfileModal reads the unit
-      // from it — left stale, changing units would not reach the form.
+      // Keep profileData's copy in step (the edit form reads the unit from it)
       setProfileData((prev: any) => (prev ? { ...prev, settings: saved } : prev))
     } catch {
       setSettings(previous)
@@ -640,12 +591,7 @@ export default function Profile() {
     }
   }
 
-  /**
-   * Fetch everything, render the report, save it.
-   *
-   * The report builder is loaded on demand: it carries the body artwork and
-   * a page of markup that nobody needs until they ask for an export.
-   */
+  /** Fetch everything, build the report, save it. The builder is loaded on demand. */
   const handleExport = async () => {
     if (exportState.status === 'busy') return
     setExportState({ status: 'busy' })
@@ -674,23 +620,18 @@ export default function Profile() {
     navigate('/login')
   }
 
-  // Readiness color
   const readinessColor =
     readinessScore >= 70 ? 'text-brand-green' :
     readinessScore >= 40 ? 'text-brand-yellow' : 'text-brand-red'
 
-  // Initial letter for avatar
   const initial = (profileData?.profile?.name ?? user?.email ?? 'U')[0].toUpperCase()
 
-  // Format total volume
   const formatVolume = (kg: number) => {
     if (kg >= 1000) return `${num(kg / 1000)}t`
     return `${Math.round(kg)}kg`
   }
 
-  // Stored answers are enum values ('prefer_not_to_say', 'weight_loss'). Shown
-  // through the dictionary when recognised, and as stored otherwise — an old
-  // row holding something this build does not know is still worth showing.
+  // Stored enum values, shown through the dictionary when recognised, raw otherwise
   const profile = profileData?.profile
   const level: unknown = profile?.fitnessLevel
   const goal: unknown = profile?.goal
@@ -789,10 +730,7 @@ export default function Profile() {
             />
           </div>
 
-          {/* Why the number is what it is. Sleep now moves readiness, so the
-              screen has to say when it did — and equally when it did not, or an
-              unlogged night looks like a night that scored neutral. Wording
-              comes from the server so every surface says the same thing. */}
+          {/* What sleep did to readiness — shown even when nothing applied */}
           {sleep && (
             <p className={`text-[11px] mt-2 leading-relaxed ${
               sleep.applied ? 'text-dark-300' : 'text-dark-400'
@@ -810,9 +748,7 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Where the history lives. Its own group rather than rows in the
-            Settings list below — these are views, not preferences, and burying
-            the app's only charts under "Settings" is how they stay unfound. */}
+        {/* Progress and history links */}
         <div className="bg-dark-800 rounded-card border border-dark-600 overflow-hidden">
           <p className="text-dark-300 text-xs uppercase tracking-wider
                         px-2 py-0.5 border-b border-dark-700">
@@ -836,12 +772,10 @@ export default function Profile() {
           />
         </div>
 
-        {/* Training load — the weeks-long trend, not today's soreness */}
+        {/* Training load trend */}
         <TrainingLoadCard load={trainingLoad} systemicFatigue={systemicFatigue} />
 
-        {/* Bodyweight trend + BMI. Sits above Body Stats because it answers the
-            same question with history behind it — the static row below is the
-            editable record, this is what it has been doing. */}
+        {/* Bodyweight trend + BMI */}
         <BodyweightCard
           points={weightSeries}
           heightCm={profileData?.profile?.height ?? null}
@@ -975,10 +909,7 @@ export default function Profile() {
 
           <div className="h-px bg-dark-700 mx-4" />
 
-          {/* Shows the device's language, not the settings row's: they agree
-              once signed in, and the device's is what is on screen. Each name
-              is written in its own language, so it can be found by someone
-              who cannot read the one currently showing. */}
+          {/* Language: the device's; each name is written in its own language */}
           <SettingsRow
             icon={<GlobeIcon />}
             label={t('common.language')}
@@ -997,9 +928,7 @@ export default function Profile() {
             icon={<CoachAvatar className="w-5 h-5" />}
             label={t('profile.aiConsent')}
             sublabel={settings?.aiConsentEnabled === false
-              // Says what actually changes. "Allow AI to use your fitness data"
-              // gives no hint that the chat survives and the coach nudges do
-              // not, and the difference is the whole reason to leave it on.
+              // Spells out what consent-off changes
               ? t('profile.aiConsentOff')
               : t('profile.aiConsentOn')}
             right={
@@ -1016,8 +945,7 @@ export default function Profile() {
 
           <div className="h-px bg-dark-700 mx-4" />
 
-          {/* One entry point rather than three scattered toggles — what to be
-              notified about, how often and quiet hours all live together now. */}
+          {/* Notification settings */}
           <SettingsRow
             icon={<BellIcon />}
             label={t('profile.notifications')}

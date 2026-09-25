@@ -1,23 +1,7 @@
 /**
- * The calibration everything else derives from.
- *
- * These are not tests against bugs. Nothing here has ever thrown — the model is
- * pure arithmetic over numbers that are always numbers. They exist because the
- * constants in `fatigue-model.service.ts` are load-bearing for the whole app:
- * change FATIGUE_PER_HSE from 13 to 15 and every athlete's readiness score
- * moves, the body map recolours, tomorrow's suggested weights change and the
- * coach starts giving different advice — with nothing failing, nothing
- * typechecking differently and no way to tell whether the change did what was
- * intended.
- *
- * So the assertions come in two kinds, and the distinction matters when one
- * fails. The **exact-value** ones pin the current calibration: if one breaks,
- * you changed a number, and the only question is whether you meant to. The
- * **relational** ones encode the model's actual claims — that volume leads
- * intensity for endurance work, that a strong and a weak athlete pay the same
- * price for the same relative effort. If one of those breaks, the model no
- * longer says what its own comments say it says, and that is a real defect
- * whatever the constants are.
+ * Tests for the fatigue model's calibration. Exact-value assertions pin the
+ * current constants (a failure means a number changed); relational ones pin
+ * the model's claims (a failure means the model no longer does what it says).
  */
 
 import { test, describe } from 'node:test'
@@ -42,7 +26,7 @@ import {
   wodLoadFactor,
 } from './fatigue-model.service'
 
-/** Floating point: compare to a tolerance, never with ===. */
+/** Floating-point comparison with a tolerance. */
 const close = (actual: number, expected: number, epsilon = 1e-9) =>
   assert.ok(
     Math.abs(actual - expected) < epsilon,
@@ -75,9 +59,9 @@ describe('rpeFactor', () => {
 
 describe('estimateE1rm', () => {
   test('Epley, with reps left in reserve added to the rep count', () => {
-    // RPE 10 → 0 in reserve → plain Epley over 5 reps.
+    // RPE 10 → 0 in reserve → plain Epley over 5 reps
     close(estimateE1rm(100, 5, 10), 100 * (1 + 5 / 30))
-    // RPE 8 → 2 in reserve → scored as if 7 reps were available.
+    // RPE 8 → 2 in reserve → scored as 7 reps
     close(estimateE1rm(100, 5, 8), 100 * (1 + 7 / 30))
   })
 
@@ -93,9 +77,7 @@ describe('estimateE1rm', () => {
 
 describe('resistanceHse', () => {
   test('scores load RELATIVE to the athlete', () => {
-    // The claim in the source: a 140 kg bencher and a 70 kg bencher pay the
-    // same price for the same 5×5 at the same effort. Absolute tonnage
-    // punished strong athletes, and this is the assertion that says so.
+    // Same relative effort, same cost, whatever the absolute weight
     const strong = resistanceHse({ reps: 5, weight: 140, rpe: 8, e1rm: 180 })
     const weaker = resistanceHse({ reps: 5, weight: 70, rpe: 8, e1rm: 90 })
     close(strong, weaker)
@@ -115,21 +97,9 @@ describe('resistanceHse', () => {
   })
 
   test('KNOWN: a long light set DOES outscore a heavy one below RPE 10', () => {
-    // `repFactor`'s comment says the curve stays "flat enough that a long light
-    // set never outscores a heavy one taken to the same RPE". Measured, that is
-    // not true at RPE 9: 20 × 60 kg (30% of 1RM) scores 1.0925 and 5 × 200 kg
-    // (100% of 1RM) scores 1.0648 — the light set wins at every load.
-    //
-    // The mechanism is `e1rm = max(history, estimateE1rm(this set))`. A 5-rep
-    // set implies a 1RM about 17% above the weight lifted, so its own estimate
-    // raises the denominator and relative load can never read higher than
-    // ~0.86. loadFactor therefore tops out at ~1.63 instead of its nominal 1.7,
-    // while repFactor gives the 20-rep set 1.27 for free.
-    //
-    // Pinned rather than corrected: whether 20 reps at RPE 9 SHOULD cost more
-    // than a heavy triple is a calibration judgement, not a bug to fix in a
-    // test. This assertion is here so that if the constants are ever retuned,
-    // it fails and the decision gets made deliberately.
+    // Known calibration quirk: at RPE 9, 20 × 60 kg outscores 5 × 200 kg,
+    // because a 5-rep set's own e1RM caps its relative load near 0.86.
+    // Pinned so any retune has to decide this deliberately.
     const longLight = resistanceHse({ reps: 20, weight: 60, rpe: 9, e1rm: 200 })
     const maximal = resistanceHse({ reps: 5, weight: 200, rpe: 9, e1rm: 200 })
     assert.ok(longLight > maximal)
@@ -152,7 +122,7 @@ describe('resistanceHse', () => {
   })
 
   test('calisthenics and barbell work are comparable at equal relative effort', () => {
-    // Push-ups: bodyweight 80 kg moved, e1rm implied by the set itself.
+    // Push-ups at 80 kg bodyweight vs 80 kg on a bar
     const pushUps = resistanceHse({ reps: 20, weight: 80, rpe: 9 })
     const bench = resistanceHse({ reps: 20, weight: 80, rpe: 9 })
     close(pushUps, bench)
@@ -165,8 +135,7 @@ describe('cardioHse', () => {
   })
 
   test('volume leads intensity — the whole point of CARDIO_VOLUME_SHARE', () => {
-    // Two hours easy shreds the legs; twenty minutes of intervals feels harder
-    // and barely touches them. Leaning on RPE alone got this backwards.
+    // Two hours easy costs the legs more than twenty minutes of intervals
     const longEasy = cardioHse(2 * 60 * 60, 4)
     const shortHard = cardioHse(20 * 60, 9)
     assert.ok(longEasy > shortHard)
@@ -177,8 +146,7 @@ describe('cardioHse', () => {
   })
 
   test('distance is converted to "minutes of typical work" when a reference speed exists', () => {
-    // 15 km at a 12 km/h reference is 75 minutes of typical work, regardless of
-    // how long it actually took.
+    // 15 km at a 12 km/h reference = 75 minutes of typical work
     const byDistance = cardioHse(1800, 7, 15, 12)
     const byEquivalentDuration = cardioHse(75 * 60, 7)
     close(byDistance, byEquivalentDuration)
@@ -196,16 +164,12 @@ describe('cardioHse', () => {
   })
 
   test('a count at exactly the reference cadence scores as its duration', () => {
-    // The calibration that makes the count safe to log: 1100 skips in ten
-    // minutes at a 110/min reference is ten minutes of typical work. Logging a
-    // count can refine the estimate, never inflate it, so nobody is penalised
-    // for counting.
+    // 1100 skips in 10 min at 110/min = 10 minutes of typical work
     close(cardioHse(600, 7, null, null, 1100, 110), cardioHse(600, 7))
   })
 
   test('density separates two sessions the clock cannot tell apart', () => {
-    // Same ten minutes, same RPE. The only difference is how much rope actually
-    // turned, which is exactly what duration alone could never see.
+    // Same clock and RPE; only the count differs
     const continuous = cardioHse(600, 7, null, null, 1400, 110)
     const stopStart = cardioHse(600, 7, null, null, 700, 110)
     assert.ok(continuous > stopStart)
@@ -213,9 +177,7 @@ describe('cardioHse', () => {
   })
 
   test('a count cannot claim more than a human sustains', () => {
-    // A mistyped 11000 in a ten-minute set would otherwise score as 100 minutes
-    // of work. Capped at 2.5x the clock, which still lets double-unders through
-    // at roughly 1.8x.
+    // A typo is capped at 2.5× the clock; double-unders (~1.8×) pass
     const typo = cardioHse(600, 7, null, null, 11_000, 110)
     close(typo, cardioHse(25 * 60, 7))
 
@@ -224,8 +186,7 @@ describe('cardioHse', () => {
   })
 
   test('distance wins over a count when both are present', () => {
-    // Nothing logs both today, but the precedence must be stated rather than
-    // emergent: distance is the more informative of the two.
+    // Distance is the more informative measure
     close(
       cardioHse(1800, 7, 15, 12, 9999, 110),
       cardioHse(1800, 7, 15, 12)
@@ -250,8 +211,7 @@ describe('wodHse', () => {
   })
 
   test('density multiplier is clamped at both ends', () => {
-    // Past the clamp, more reps stop buying more fatigue — otherwise a
-    // miscounted score would dominate everything else in the session.
+    // More reps stop adding fatigue past the clamp
     const absurd = wodHse(10 * 60, 9, 100_000)
     const merelyHuge = wodHse(10 * 60, 9, 10_000)
     close(absurd, merelyHuge)
@@ -280,9 +240,7 @@ describe('wodLoadFactor', () => {
   })
 
   test('load is relative to the athlete, not absolute', () => {
-    // The same bar is a harder metcon for the lighter athlete. Absolute tonnage
-    // would score these identically and tell the heavier one their metcons are
-    // getting easier as they get heavier.
+    // The same bar is harder for a lighter athlete
     assert.ok(wodLoadFactor(43, 60) > wodLoadFactor(43, 95))
   })
 
@@ -294,8 +252,7 @@ describe('wodLoadFactor', () => {
   })
 
   test('is capped, so one heavy movement cannot outweigh the clock', () => {
-    // Past the reference the factor stops climbing. A metcon's cost is its
-    // density and duration; load is a modifier and has to stay one.
+    // Load is a modifier; the factor stops climbing past the reference
     close(wodLoadFactor(100, 80), wodLoadFactor(500, 80))
     assert.ok(wodLoadFactor(500, 80) <= 1.8)
   })
@@ -317,16 +274,13 @@ describe('accumulate', () => {
   })
 
   test('saturates towards 100 instead of slamming into it', () => {
-    // Half the headroom is gone, so half the delta lands.
+    // Half the headroom is gone, so half the delta lands
     close(accumulate(50, 50), 75)
     close(accumulate(90, 50), 95)
   })
 
   test('converges on 100 and never passes it', () => {
-    // Asymptotic, not capped — but the asymptote is reached in floating point.
-    // After ~61 saturating additions the level is exactly 100.0, because
-    // `0.5 * level + 50` has no representable step left below it. What matters
-    // is the ceiling holding, not the limit being unreachable in theory.
+    // Asymptotic in theory; in floating point it reaches exactly 100 and never passes it
     let level = 0
     for (let i = 0; i < 200; i++) level = accumulate(level, 50)
     assert.ok(level <= 100)
@@ -334,8 +288,7 @@ describe('accumulate', () => {
   })
 
   test('keeps the ordering a hard cap used to destroy', () => {
-    // The bug this replaced: a session three times too hard and a merely hard
-    // one both read exactly 100, so they were indistinguishable afterwards.
+    // A hard cap would make these two equal
     assert.ok(accumulate(80, 90) > accumulate(80, 30))
   })
 
@@ -348,7 +301,7 @@ describe('accumulate', () => {
 describe('systemicLoad', () => {
   test('is Foster sRPE weighted by the modality mix', () => {
     const strengthOnly = new Map([['STRENGTH', 10]])
-    // 60 minutes × RPE 6 × 0.6 for strength (most of a strength session is rest).
+    // 60 min × RPE 6 × 0.6 for strength
     close(systemicLoad(3600, 6, strengthOnly), 60 * 6 * 0.6)
   })
 
@@ -401,9 +354,7 @@ describe('recovery rate', () => {
   })
 
   test('is clamped hard at both ends', () => {
-    // The linear term is a reasonable approximation across a normal training
-    // population and nonsense outside it. Extrapolated freely it would claim a
-    // 75-year-old recovers three times slower than a 30-year-old.
+    // The linear term is only valid within a normal range
     close(ageRecoveryFactor(120), 1.25)
     close(ageRecoveryFactor(1), 0.92)
   })
@@ -431,9 +382,7 @@ describe('recovery rate', () => {
   })
 
   test('training age explains more than birth year — level dominates', () => {
-    // A deliberate design constraint: the age slope must not overwhelm the
-    // level multiplier, or a 45-year-old advanced athlete would be modelled as
-    // recovering slower than a 30-year-old beginner.
+    // The age slope must not overwhelm the level multiplier
     assert.ok(recoveryRateFor('advanced', 45) < recoveryRateFor('beginner', 30))
   })
 })
@@ -461,17 +410,14 @@ describe('resolveAge', () => {
 
 describe('constants', () => {
   test('are the values the rest of the model was calibrated against', () => {
-    // A guard, not a claim about correctness. Changing one of these is a
-    // deliberate recalibration, and it should not be possible to do it by
-    // accident in a refactor.
+    // Guard: changing these is a deliberate recalibration
     assert.equal(FATIGUE_PER_HSE, 13)
     assert.equal(SYSTEMIC_AU_PER_POINT, 8)
     assert.equal(HOLD_SECONDS_PER_REP, 3)
   })
 
   test('roughly 8 hard sets on one muscle drives it near 100', () => {
-    // The stated intent of FATIGUE_PER_HSE, asserted end to end through the
-    // accumulation curve rather than trusted as a comment.
+    // The stated intent of FATIGUE_PER_HSE, end to end
     let level = 0
     for (let i = 0; i < 8; i++) {
       const hse = resistanceHse({ reps: 8, weight: 100, rpe: 9, e1rm: 130 })

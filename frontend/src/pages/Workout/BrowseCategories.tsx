@@ -62,8 +62,7 @@ export default function BrowseCategories() {
 
   const selectedCount = selectedExercises.length
 
-  // The selected tray is only over the content once something is selected, so
-  // only then does the content pay for it.
+  // Bottom padding only while the selected tray is showing
   return (
     <div className={`flex-1 bg-dark-900 text-white px-5 pt-6 overflow-y-auto relative
                      ${selectedCount > 0 ? 'pb-[var(--tray-clear)]' : 'pb-6'}`}>
@@ -79,11 +78,7 @@ export default function BrowseCategories() {
           <p className="text-[21px] font-extrabold tracking-tight">{modality}</p>
           <p className="text-xs text-dark-300">Select a muscle group</p>
         </div>
-        {/* Searching is the way past the category grid, not a feature of it:
-            "Bulgarian split squat" is a Legs exercise, but nobody who knows the
-            name wants to guess which tile it is filed under first. ExerciseList
-            already searches, and already lists the whole modality when it is
-            given no category — so this hands off rather than duplicating it. */}
+        {/* Search hands off to ExerciseList, which searches the whole modality */}
         <button onClick={() => navigate('/workout/exercises', {
             state: { modality, autoFocusSearch: true },
           })}

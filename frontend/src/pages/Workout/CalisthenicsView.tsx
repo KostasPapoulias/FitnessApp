@@ -9,28 +9,19 @@ import { useModalityVoice } from '../../hooks/useModalityVoice'
 import { ListIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
 
-// Heuristic: does this movement read as an isometric hold?
+// Heuristic: is this movement an isometric hold?
 function isHold(name: string) {
   return /hold|plank|l-?sit|lever|flag|hang|wall sit|bridge/i.test(name)
 }
 
 /**
- * How a calisthenics set is loaded, as one signed number.
- *
- * Assistance and added weight are the same axis, not two settings. This screen
- * used to carry both: a three-way Assisted/Bodyweight/Weighted picker that was
- * read nowhere, and a separate ± stepper. They could disagree — "Weighted" with
- * −20 kg on the band was reachable — and neither survived the screen, because
- * both lived in a component ref rather than on the set.
- *
- * Now the number IS `set.weight` and the label is derived from its sign, so the
- * two cannot contradict each other and the value is the same one the planner,
- * the queue and the rest timer edit.
+ * Load as one signed number (`set.weight`): negative is assistance, positive
+ * is added weight. The mode label is derived from its sign.
  */
 const loadMode = (load: number) => load < 0 ? 0 : load > 0 ? 2 : 1
 const MODES = ['Assisted', 'Bodyweight', 'Weighted']
 
-/** Text for a signed load, in the athlete's terms rather than a signed number. */
+/** A signed load in words. */
 const loadLabel = (load: number) =>
   load > 0 ? `+${load} kg` : load < 0 ? `${Math.abs(load)} kg assist` : 'Bodyweight'
 
@@ -44,16 +35,13 @@ const bigStep =
   'w-12 h-12 rounded-btn border border-dark-600 bg-dark-700 text-white text-2xl font-bold ' +
   'flex items-center justify-center active:scale-90 transition-transform flex-shrink-0'
 
-/** The signed-load stepper. Shared by the rep and hold branches — a band-assisted
- *  front lever and a weighted plank are both ordinary. */
+/** The signed-load stepper, for reps and holds alike. */
 function LoadBox({ load, onChange }: { load: number; onChange: (next: number) => void }) {
   const step = (dir: 1 | -1) => onChange(nextLoad(load, dir))
   return (
     <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3 text-center">
       <p className="text-[10px] tracking-wide text-dark-400 mb-1.5">LOAD / ASSIST</p>
-      {/* The value sits above the buttons rather than between them:
-          "Bodyweight" needs ~74px, which no half-width column has left
-          once two 30px steppers are in the same row. */}
+      {/* Value above the buttons; "Bodyweight" needs the full width */}
       <p className="text-sm font-extrabold truncate mb-2" style={{ color: loadColor(load) }}>
         {loadLabel(load)}
       </p>
@@ -73,7 +61,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
   const ex = selectedExercises[currentExerciseIndex]
   const set = ex?.sets[currentSetIndex]
 
-  // hold timer
+  // Hold timer
   const [holdSec, setHoldSec] = useState(0)
   const [holdRunning, setHoldRunning] = useState(false)
   const runningRef = useRef(false)
@@ -82,17 +70,11 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
     const id = setInterval(() => { if (runningRef.current) setHoldSec(s => s + 1) }, 1000)
     return () => clearInterval(id)
   }, [])
-  // reset hold when the set/exercise changes
+  // Reset the hold when the set changes
   useEffect(() => { setHoldSec(0); setHoldRunning(false) }, [currentExerciseIndex, currentSetIndex])
 
-  // Calisthenics logs reps against a signed load, which the strength set card
-  // knows nothing about — so it is excluded from the strength voice path and
-  // answers here instead. A hold is deliberately NOT loggable by voice: its
-  // value is the seconds under tension on the timer, and "set done" shouted
-  // mid-lever would write whatever the clock happened to read.
-  //
-  // Above the early return because it is a hook. `logReps` and `holdRunning`
-  // are declared below and that is fine — the handler runs long after.
+  // Voice control. Holds are not loggable by voice (their value is the timer).
+  // Above the early return, since it is a hook.
   useModalityVoice(registerVoice, command => {
     switch (command.kind) {
       case 'pauseRest':  setHoldRunning(false); return true
@@ -116,15 +98,13 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
   const mode = loadMode(load)
   const setLoad = (next: number) => updateSet(currentExerciseIndex, currentSetIndex, { weight: next })
 
-  // Picking a mode moves the load across zero, keeping whatever magnitude was
-  // already dialled in. Starting from bodyweight it opens at one plate-ish step
-  // so the chip does something visible rather than selecting a silent zero.
+  // Picking a mode flips the load's sign, keeping its magnitude (or starts at one step)
   const pickMode = (m: number) => {
     const mag = Math.abs(load) || 5
     setLoad(m === 0 ? -mag : m === 2 ? mag : 0)
   }
 
-  // up next
+  // Up next
   let un: { t: string; d: string }
   if (currentSetIndex + 1 < ex.sets.length) {
     const nextSet = ex.sets[currentSetIndex + 1]
@@ -142,12 +122,9 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
   }
 
   const restSeconds = set.restSeconds ?? 90
-  // The load goes out signed. `completeSet` maps it to `addedWeight`, which the
-  // backend schema allows below zero precisely so assistance can be recorded —
-  // this used to clamp at zero and throw every band and machine away.
+  // The load is sent signed; the backend records assistance as negative addedWeight
   const logReps = () => onRest({ reps: set.reps, weight: load, rpe: set.rpe, restSeconds })
-  // A hold has no reps — send seconds under tension as `duration` so it isn't
-  // recorded (and scored for volume) as if it were that many repetitions.
+  // A hold sends seconds as `duration`, not reps
   const logHold = () => {
     if (holdSec <= 0) return
     onRest({ reps: 0, duration: holdSec, weight: load, rpe: set.rpe, restSeconds })
@@ -167,8 +144,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
             <div className="text-[12.5px] text-dark-300 mt-0.5 truncate">{muscle}</div>
           </div>
         </div>
-        {/* The same queue the strength screen opens: reorder, add an exercise,
-            add or drop sets, skip. It was reachable from strength only. */}
+        {/* The same queue the strength screen opens */}
         <button
           onClick={() => navigate('/workout/queue')}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] border border-dark-600
@@ -179,7 +155,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
         </button>
       </div>
 
-      {/* progression — a real control now, and always agreeing with the load */}
+      {/* Progression mode — always consistent with the load */}
       <div className="mt-3.5">
         <p className="text-[10px] tracking-widest text-dark-400 mb-2">PROGRESSION</p>
         <div className="flex gap-1.5 overflow-x-auto">

@@ -1,16 +1,9 @@
 import prisma from '../lib/prisma'
 
 /**
- * Current token version per user, cached briefly.
- *
- * Revocation has to be checked on every authenticated request or it is not
- * revocation. That would be a database read per request, so versions are held
- * for a few seconds — a revoked token stays usable for at most that long, which
- * is the trade being made deliberately: seconds instead of the seven days a
- * stateless JWT otherwise survives.
- *
- * Any code that bumps a version must call `forget()` so the change applies at
- * once on the instance that made it.
+ * Token revocation. Each user's current token version is cached for 10 s, so a
+ * revoked token stays usable for at most that long. Anything that bumps a
+ * version must call `forgetTokenVersion`.
  */
 
 const TTL_MS = 10_000
@@ -26,7 +19,7 @@ export const currentTokenVersion = async (userId: string): Promise<number | null
     select: { tokenVersion: true },
   })
 
-  // Deleted account: the token references somebody who no longer exists
+  // Deleted account
   if (!user) {
     cache.delete(userId)
     return null
@@ -34,7 +27,6 @@ export const currentTokenVersion = async (userId: string): Promise<number | null
 
   cache.set(userId, { version: user.tokenVersion, readAt: Date.now() })
 
-  // Bounded so a long-running process cannot accumulate an entry per user seen
   if (cache.size > 5_000) {
     const cutoff = Date.now() - TTL_MS
     for (const [key, entry] of cache) {
@@ -48,13 +40,7 @@ export const currentTokenVersion = async (userId: string): Promise<number | null
 /** Drop a cached version — call immediately after incrementing one. */
 export const forgetTokenVersion = (userId: string) => cache.delete(userId)
 
-/**
- * Revoke every token this user holds.
- *
- * Used by "sign out everywhere" and by anything that changes a credential: a
- * password change that leaves old tokens working is not really a password
- * change.
- */
+/** Revoke every token the user holds (sign out everywhere, credential changes). */
 export const revokeAllTokens = async (userId: string): Promise<number> => {
   const updated = await prisma.user.update({
     where: { id: userId },

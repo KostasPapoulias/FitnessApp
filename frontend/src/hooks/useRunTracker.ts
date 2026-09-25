@@ -7,41 +7,24 @@ import {
 import { SavedRun, TrackGap, clearRun, loadRun, saveRun } from '../lib/runStorage'
 
 /**
- * A live outdoor session: elapsed time, distance, speed, and the route.
- *
- * Two things this owns that look trivial and are not.
- *
- * DISTANCE. A phone standing still reports a position that wanders several
- * metres between fixes. Summing every reported movement is how a 5k logs as
- * 5.4k, so distance only accumulates when the position has moved far enough
- * from its ANCHOR to be movement rather than noise — see commitFix below.
- *
- * TIME. Elapsed is computed from timestamps, never counted up a tick at a time.
- * A counter loses every tick the browser throttles or drops, and always in the
- * same direction: short. Reading the clock means a stall shows up as a jump,
- * which is at least honest and can be reconciled against the track.
+ * A live outdoor session: elapsed time, distance, speed and route.
+ * Distance accumulates only when the position has moved far enough from its
+ * anchor to be movement rather than GPS noise (see commitFix). Elapsed time
+ * is computed from timestamps, never counted up by ticks.
  */
 
-/** Weight of each new speed reading. Low enough to stop the number flickering. */
+/** Smoothing weight for each new speed reading. */
 const SPEED_ALPHA = 0.3
 /** How often the session is mirrored to IndexedDB. */
 const FLUSH_MS = 5_000
-/** Display refresh. Fast enough to look live, slow enough to cost nothing. */
+/** Display refresh interval. */
 const TICK_MS = 250
 
-/**
- * Window the coachable pace is measured over.
- *
- * Neither of the two paces already on screen can be coached against. The live
- * one is the smoothed GPS speed, which swings by twenty seconds a kilometre
- * between fixes; the average is the whole run, so by kilometre five it barely
- * moves and a deliberate surge reads as nothing at all. Forty-five seconds is
- * long enough to be steady and short enough to notice you easing off.
- */
+/** Window for the coachable rolling pace — steadier than live speed, more responsive than the average. */
 const PACE_WINDOW_SEC = 45
-/** Below this the window is too short to divide by. */
+/** Minimum window span to compute a pace. */
 const PACE_MIN_SPAN_SEC = 20
-/** And too little ground covered to be a pace rather than a wobble. */
+/** Minimum distance in the window to compute a pace. */
 const PACE_MIN_METRES = 25
 
 export type RunStatus =
@@ -57,19 +40,13 @@ export type RunSource = 'gps' | 'manual'
 export interface RunSummary {
   meters: number
   elapsedSec: number
-  /** Simplified for storage and drawing — the full track never leaves memory. */
+  /** Simplified for storage and drawing. */
   track: TrackPoint[]
-  /** The same track, gap-segmented and rounded, ready to persist and redraw. */
+  /** Gap-segmented, rounded route, ready to store and draw. */
   route: RouteSegment[]
   bounds: [[number, number], [number, number]] | null
   gaps: TrackGap[]
-  /**
-   * Seconds per kilometre over the whole run.
-   *
-   * Carried explicitly rather than left to be recomputed downstream: distance
-   * is rounded to two decimals before it is stored, and dividing the rounded
-   * number moves the pace of a short run by a second or two.
-   */
+  /** Average s/km, from unrounded distance (the stored distance is rounded). */
   avgPaceSec: number
   splits: Split[]
   laps: Split[]
@@ -82,12 +59,9 @@ const hasGeolocation = () =>
   typeof navigator !== 'undefined' && 'geolocation' in navigator
 
 /**
- * @param initialSource Where distance comes from before anyone chooses.
- *
- * 'manual' for a movement the phone cannot measure — an erg, a treadmill, a
- * pool. It has to be known at construction rather than switched on mount:
- * the acquire effect below opens a watch immediately, so flipping afterwards
- * raises the OS location prompt for a session that will never use a fix.
+ * @param initialSource 'manual' for movements the phone can't measure (erg,
+ * treadmill, pool). Must be known at construction, or the location prompt is
+ * raised for a session that never uses GPS.
  */
 export const useRunTracker = (activityKey: string, initialSource: RunSource = 'gps') => {
   const [status, setStatus] = useState<RunStatus>('idle')
@@ -99,63 +73,36 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
   const [elapsedSec, setElapsedSec] = useState(0)
   const [meters, setMeters] = useState(0)
   const [speedMps, setSpeedMps] = useState(0)
-  /** Seconds per kilometre over the last PACE_WINDOW_SEC. 0 until measurable. */
+  /** s/km over the last PACE_WINDOW_SEC; 0 until measurable. */
   const [rollingPaceSec, setRollingPaceSec] = useState(0)
   /**
-   * Distance over time, published from inside the tick.
-   *
-   * Not derived by the screen from `meters` and `elapsedSec`, which is what it
-   * used to do and which made the number visibly jitter — on a machine, where
-   * the dial holds a constant speed and the average should be a flat line, it
-   * swung about ten seconds a kilometre.
-   *
-   * `elapsedSec` is floored to whole seconds for display, while `meters` grows
-   * continuously. Dividing one by the other means the numerator jumps a whole
-   * second at a time while the denominator creeps, so the quotient sawtooths
-   * every second — worst at the start, where a second is a large share of the
-   * elapsed time. Computed here it uses the unfloored elapsed and the same
-   * instant's distance, which is the same reason splits are folded in this
-   * tick rather than in an effect of their own.
+   * Average pace, computed in the tick from unfloored elapsed time and the same
+   * instant's distance (dividing the displayed values makes it sawtooth).
    */
   const [avgPaceSec, setAvgPaceSec] = useState(0)
   const [accuracy, setAccuracy] = useState<number | null>(null)
-  /**
-   * The last position the device reported, believed or not.
-   *
-   * Deliberately separate from the track. The track only accepts fixes good
-   * enough to measure distance with, and a fix too vague to measure with is
-   * still far better than a hardcoded city centre to point a camera at. This is
-   * what the map follows before the first real fix lands — and, indoors, it may
-   * be the only thing it ever gets.
-   */
+  /** The last reported position, believed or not — the map follows it before the first usable fix. */
   const [position, setPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null)
   const [pointCount, setPointCount] = useState(0)
   const [gapCount, setGapCount] = useState(0)
   const [splits, setSplits] = useState<Split[]>([])
   const [laps, setLaps] = useState<Split[]>([])
 
-  // Everything the interval and the geolocation callback touch lives in refs.
-  // Both fire outside React's render cycle, and routing them through state
-  // would rebuild the watch on every fix.
+  // Refs, since the interval and geolocation callbacks run outside render
   const points = useRef<TrackPoint[]>([])
   const gaps = useRef<TrackGap[]>([])
   const anchor = useRef<TrackPoint | null>(null)
   const lastFix = useRef<TrackPoint | null>(null)
-  /** Running low-pass of position — see smoothPosition. */
+  /** Running low-pass of position (see smoothPosition). */
   const smoothed = useRef<TrackPoint | null>(null)
   const distance = useRef(0)
-  /** Kilometre splits, folded forward one sample at a time — see advanceSplits. */
+  /** Kilometre splits, folded forward per sample (see advanceSplits). */
   const splitState = useRef<SplitState>(emptySplitState())
   const lapState = useRef<Split[]>([])
-  /** Where the last hand-marked lap ended; laps are measured from each other. */
+  /** Where the last manual lap ended. */
   const lastLap = useRef({ meters: 0, seconds: 0 })
   const smoothedSpeed = useRef<number | null>(null)
-  /**
-   * Recent (elapsed, distance) samples, oldest first — the rolling pace window.
-   *
-   * Elapsed rather than wall clock, so a paused run does not leave a hole that
-   * reads as five minutes of standing still the moment it resumes.
-   */
+  /** Recent (elapsed, distance) samples for the rolling pace; elapsed, so pauses leave no hole. */
   const paceWindow = useRef<Array<{ seconds: number; meters: number }>>([])
   const manualSpeed = useRef(2.85)
   const watchId = useRef<number | null>(null)
@@ -166,13 +113,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
   const sourceRef = useRef<RunSource>(initialSource)
   const startedRef = useRef(false)
 
-  /**
-   * Distance over time across the trailing window, in seconds per kilometre.
-   *
-   * The window is trimmed from the front rather than rebuilt, and samples are
-   * only ever appended while running, so a pause costs nothing and resuming
-   * measures forward from the resume.
-   */
+  /** Rolling pace (s/km) over the trailing window; trimmed from the front, appended only while running. */
   const sampleRollingPace = useCallback((elapsed: number): number => {
     const window = paceWindow.current
     window.push({ seconds: elapsed, meters: distance.current })
@@ -203,11 +144,8 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
   }, [activityKey])
 
   /**
-   * Fold one GPS fix into the session.
-   *
-   * Order matters: the cheap rejections come first, and the anchor is only
-   * advanced by a fix that was actually believed. Holding the anchor still
-   * while readings wander is what makes standing at a crossing cost nothing.
+   * Fold one GPS fix into the session: cheap rejections first, and the anchor
+   * only moves on a believed fix, so standing still costs nothing.
    */
   const commitFix = useCallback((position: GeolocationPosition) => {
     const raw: TrackPoint = {
@@ -221,25 +159,20 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
 
     setAccuracy(raw.accuracy)
     setStatus(raw.accuracy > MAX_ACCURACY_M ? 'weak' : 'tracking')
-    // Before the running check: where the phone is does not depend on whether
-    // the clock has been started, and the map needs it either way.
+    // Position updates even before Start — the map needs it
     setPosition({ lat: raw.lat, lng: raw.lng, accuracy: raw.accuracy })
 
     if (!runningRef.current) return
-    // The dial owns the distance in manual mode. Without this the watch that
-    // start()/resume() re-opens adds GPS metres on top of the dial's.
+    // In manual mode the dial owns distance
     if (sourceRef.current === 'manual') return
 
-    // Smoothing has to be reset BEFORE the fix is smoothed, not after it is
-    // classified: averaging the first fix back from a lock against the position
-    // the phone had when it locked puts the result somewhere the user never was.
+    // Reset smoothing before smoothing a fix after a gap
     if (isGap(lastFix.current, raw)) smoothed.current = null
 
     const fix = smoothPosition(smoothed.current, raw)
     const decision = evaluateFix(fix, anchor.current, lastFix.current)
 
-    // Every believed fix advances `previous`, including ones that change
-    // nothing else — it is what the gap check measures silence against.
+    // Every believed fix advances `previous` (the gap check measures from it)
     if (decision.kind !== 'reject') {
       lastFix.current = fix
       smoothed.current = fix
@@ -250,9 +183,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
         return
 
       case 'hold':
-        // The anchor deliberately stays put. Only a fix actively reporting
-        // standing still decays the displayed speed; below-threshold movement
-        // just means not enough has happened yet.
+        // The anchor stays put; only a stationary fix decays the displayed speed
         if (decision.stationary) {
           smoothedSpeed.current = ema(smoothedSpeed.current, 0, SPEED_ALPHA)
         }
@@ -283,8 +214,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
   }, [])
 
   const onGeolocationError = useCallback((error: GeolocationPositionError) => {
-    // A timeout is not a failure — the next fix may well arrive. Only a refused
-    // permission is permanent, and only that one takes the session to manual.
+    // Only a refused permission is permanent (switches to manual); timeouts are not
     if (error.code === error.PERMISSION_DENIED) {
       setStatus('denied')
       setSource('manual')
@@ -311,37 +241,23 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
     setStatus('acquiring')
     watchId.current = navigator.geolocation.watchPosition(commitFix, onGeolocationError, {
       enableHighAccuracy: true,
-      // Never hand back a cached position: a fix from five minutes ago placed
-      // at the current timestamp is indistinguishable from a teleport.
+      // Never a cached position — it would appear as a teleport
       maximumAge: 0,
       timeout: 30_000,
     })
   }, [commitFix, onGeolocationError])
 
   // ── acquire the signal as soon as the screen opens ──
-  //
-  // Not when Start is pressed. Two reasons, and the second is the important one.
-  //
-  // The map has nowhere to point until something reports a position, and until
-  // this ran only on Start there was nothing to report — so the camera sat on a
-  // hardcoded city centre while the athlete stood somewhere else entirely.
-  //
-  // And a cold GPS takes tens of seconds to go from a first coarse fix to one
-  // accurate enough to measure with. Starting that clock when the athlete opens
-  // the screen rather than when they start running means the early, useless
-  // fixes are spent standing still, instead of eating the first minutes of the
-  // run — which is exactly when a rejected fix costs real distance.
+  // So the map can centre on the athlete, and a cold GPS settles before the run starts.
   useEffect(() => {
     if (sourceRef.current === 'manual') return
     startWatch()
-    // startWatch is a no-op if a watch is already up, so this composes with
-    // both recovery and start without racing either.
+    // startWatch is a no-op when already watching
   }, [startWatch])
 
   // ── recovery ──
-  // A run found on launch is resumed rather than offered, because the only
-  // reason one exists is that the page died mid-session and the user is
-  // standing in the street waiting for their app to come back.
+  // ── recovery ──
+  // A saved run is resumed automatically: the page died mid-session.
   useEffect(() => {
     let cancelled = false
 
@@ -352,12 +268,9 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
       gaps.current = saved.gaps
       distance.current = saved.meters
       lastFix.current = saved.points[saved.points.length - 1] ?? null
-      anchor.current = null // the first new fix re-anchors
+      anchor.current = null // the next fix re-anchors
 
-      // Time the app was not running is not time the user was not running —
-      // but it is time we did not measure. Anything longer than a blink is
-      // excluded from elapsed and recorded as a gap, so the total never claims
-      // a precision the track cannot support.
+      // Time the app wasn't running is excluded from elapsed and recorded as a gap
       const dead = Date.now() - saved.savedAt
       const pausedMs = saved.pausedMs + (dead > GAP_MS ? dead : 0)
       if (dead > GAP_MS) {
@@ -366,13 +279,8 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
 
       clock.current = { startedAt: saved.startedAt, pausedAt: 0, pausedMs }
 
-      // Splits cannot be rebuilt from a recovered track — it is simplified and
-      // carries no cumulative distance — so a record written before splits were
-      // persisted resumes counting from where it is now, rather than claiming
-      // times for kilometres nobody measured. Anchoring the resumed boundary at
-      // the CURRENT elapsed matters as much as anchoring it at the current
-      // distance: left at zero, the next kilometre would be timed from the
-      // start of the run and report the whole session as one split.
+      // Splits can't be rebuilt from the saved track: without saved splits,
+      // counting resumes from the current distance and elapsed time
       const resumedAtSec = Math.max(0, (Date.now() - saved.startedAt - pausedMs) / 1000)
       splitState.current = saved.splitState ?? {
         splits: [],
@@ -380,8 +288,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
         boundary: { meters: saved.meters, seconds: resumedAtSec },
       }
       lapState.current = saved.laps ?? []
-      // Laps run back to back from the start, so where the last one ended is
-      // just the sum of them — no extra field to persist and keep in step.
+      // The last lap ended at the sum of all laps
       lastLap.current = lapState.current.reduce(
         (end, lap) => ({ meters: lap.endMeters, seconds: end.seconds + lap.seconds }),
         { meters: 0, seconds: 0 }
@@ -422,8 +329,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
       setElapsedSec(Math.floor(elapsed))
 
       if (runningRef.current) {
-        // Manual mode has no fixes to fold in, so distance comes from the
-        // effort dial and real wall-clock time — never from a tick count.
+        // Manual: distance from the effort dial and wall-clock time
         if (sourceRef.current === 'manual') {
           distance.current += manualSpeed.current * sinceLast
           smoothedSpeed.current = manualSpeed.current
@@ -433,10 +339,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
         setRollingPaceSec(sampleRollingPace(elapsed))
         setAvgPaceSec(averagePace(distance.current, elapsed))
 
-        // Splits are folded here, where distance and elapsed are read from the
-        // same instant. Sampling them from separate effects is what let a
-        // kilometre be timed against an elapsed value from a different tick.
-        // Unrounded elapsed, so a split is not quantised to whole seconds twice.
+        // Splits folded here, where distance and elapsed come from the same instant
         const before = splitState.current.splits.length
         splitState.current = advanceSplits(splitState.current, {
           meters: distance.current,
@@ -444,9 +347,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
         })
         if (splitState.current.splits.length !== before) {
           setSplits(splitState.current.splits)
-          // A kilometre is worth writing down immediately rather than waiting
-          // for the next flush — it is the one moment the user might look away
-          // and the phone might die.
+          // Persist immediately after each kilometre
           flush()
         }
       }
@@ -461,9 +362,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
   const start = useCallback(() => {
     if (startedRef.current) return
     clock.current = { startedAt: Date.now(), pausedAt: 0, pausedMs: 0 }
-    // A second run in the same mounted screen must not inherit the first one's
-    // kilometres — stop() leaves them in place so the caller can still read the
-    // summary it was handed.
+    // A new run must not inherit the previous run's splits
     splitState.current = emptySplitState()
     lapState.current = []
     lastLap.current = { meters: 0, seconds: 0 }
@@ -485,12 +384,10 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
     clock.current.pausedAt = Date.now()
     setRunning(false)
     runningRef.current = false
-    // The window measures a pace, and there is no pace while stopped — carrying
-    // samples across a pause would report the break as a collapse in pace.
+    // No pace while stopped: clear the window
     paceWindow.current = []
     setRollingPaceSec(0)
-    // Dropping the anchor means the distance covered while "paused" is never
-    // silently added when tracking resumes.
+    // Drop the anchor so distance covered while paused is never added
     anchor.current = null
     smoothed.current = null
     smoothedSpeed.current = 0
@@ -506,19 +403,13 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
     }
     setRunning(true)
     runningRef.current = true
-    // Both cleared: the user may be somewhere else entirely, and neither the
-    // gap check nor the smoothing should reach back across the pause.
+    // Cleared: the athlete may have moved during the pause
     lastFix.current = null
     smoothed.current = null
     startWatch()
   }, [startWatch])
 
-  /**
-   * Mark a lap by hand.
-   *
-   * Measured against the previous lap only. Kilometre splits keep their own
-   * origin, so pressing Lap mid-kilometre no longer re-times the kilometre.
-   */
+  /** Mark a lap by hand, measured from the previous lap (kilometre splits are unaffected). */
   const lap = useCallback(() => {
     if (!startedRef.current) return
 
@@ -555,15 +446,12 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
       0,
       Math.floor((reference - clock.current.startedAt - clock.current.pausedMs) / 1000)
     )
-    // Gap-split first, thin second. Thinning the whole track and segmenting the
-    // result made every long straight look like a recording gap — see
-    // segmentTrack.
+    // Segment on gaps first, then thin each segment (see segmentTrack)
     const segments = segmentTrack(points.current, 5)
     const track = segments.flat()
     const route = encodeSegments(segments)
 
-    // The stretch since the last whole kilometre, which no boundary will ever
-    // close now that the run is over.
+    // The partial last kilometre
     const tail = finalSplit(splitState.current, {
       meters: distance.current,
       seconds: elapsed,
@@ -579,7 +467,7 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
       route,
       bounds: routeBounds(route),
       gaps: gaps.current,
-      // From the unrounded distance, before the caller rounds it for storage
+      // From the unrounded distance
       avgPaceSec: Math.round(averagePace(distance.current, elapsed)),
       splits,
       laps: lapState.current,
@@ -588,23 +476,14 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
       source: sourceRef.current,
     }
 
-    // Only once the session has been turned into a summary the caller owns —
-    // clearing earlier would lose the run if writing the set then failed.
+    // Cleared only once the summary is handed over
     void clearRun()
     return summary
   }, [])
 
   /**
-   * Throw away a recovered run and start clean.
-   *
-   * A run is resumed rather than offered, because the usual reason one exists is
-   * that the page died mid-session and the athlete is standing in the street
-   * waiting. But the same rule catches a session that was abandoned an hour ago
-   * and never ended — and that one arrives carrying somebody's old track, an old
-   * distance and an old clock, with no way to say no to it.
-   *
-   * The watch is deliberately left running afterwards: the athlete is still
-   * standing there, still about to run, and still wants a GPS lock.
+   * Discard a recovered run and start clean (e.g. one abandoned long ago).
+   * The GPS watch keeps running.
    */
   const discard = useCallback(() => {
     points.current = []
@@ -642,13 +521,11 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
     manualSpeed.current = mps
   }, [])
 
-  /** Hand the distance to the dial — treadmill, track, or no signal. */
+  /** Switch distance to the manual dial (treadmill, track, no signal). */
   const useManual = useCallback(() => {
     sourceRef.current = 'manual'
     setSource('manual')
-    // Both halves, not just the window. Clearing the samples without clearing
-    // the published value left the last GPS-derived pace on screen — and in the
-    // coach's hands — for the twenty seconds it takes the window to refill.
+    // Clear both the window and the published pace
     paceWindow.current = []
     setRollingPaceSec(0)
     if (watchId.current !== null) {
@@ -657,21 +534,17 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
     }
   }, [])
 
-  /** Hand it back to the GPS. */
+  /** Switch back to GPS. */
   const useGps = useCallback(() => {
     sourceRef.current = 'gps'
     setSource('gps')
-    // Everything positional is stale — the athlete has covered ground the
-    // tracker never saw, and measuring against it would bank all of it at once.
+    // Positional state is stale
     anchor.current = null
     lastFix.current = null
     smoothed.current = null
     paceWindow.current = []
     setRollingPaceSec(0)
-    // The dial has been writing this every tick, so it holds a hand-typed
-    // speed. Left in place it was reported as a GPS reading until the first
-    // 'advance' arrived, and worse, `ema` then blended the typed number into
-    // the first real one.
+    // Clear the dial's typed speed so it is not blended into the first GPS reading
     smoothedSpeed.current = null
     setSpeedMps(0)
     setStatus('acquiring')
@@ -686,9 +559,9 @@ export const useRunTracker = (activityKey: string, initialSource: RunSource = 'g
     status, source, started, running, recovered,
     elapsedSec, meters, speedMps, accuracy, pointCount, gapCount,
     splits, laps, position,
-    /** Pace over the last ~45s — steady enough to coach against. 0 if unknown. */
+    /** Pace over the last ~45 s (for coaching); 0 if unknown. */
     rollingPaceSec,
-    /** Distance over time — the number a run is judged by. Zero until moving. */
+    /** Average pace over the whole run. */
     avgPaceSec,
     start, pause, resume, lap, stop, discard, setManualSpeed, useManual, useGps,
     getPoints: () => points.current,

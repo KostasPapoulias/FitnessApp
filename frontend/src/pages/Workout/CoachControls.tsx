@@ -2,13 +2,8 @@ import { CoachMode, PaceZone } from '../../lib/paceCoach'
 import { fmtTime } from './helpers'
 import { MicIcon, TargetIcon } from '../../components/icons'
 
-// Both switches stay on screen whatever their state — rendering them only when
-// ON meant turning one off deleted the control that turned it back on.
-
-// Two vocabularies for the same three zones. On GPS the athlete is behind a
-// target; on a machine the DIAL is below it, which is a fact about a setting
-// and not about them — "behind target" on a treadmill reads as a rebuke for
-// something the athlete has not done.
+// Pace-coach and voice switches for the cardio screen; both are always shown.
+// Zone wording differs by mode: on a machine it describes the dial, not the athlete.
 const ZONE: Record<CoachMode, Record<PaceZone, { label: string; color: string; tint: string }>> = {
   follow: {
     on: { label: 'On target', color: '#00D4AA', tint: '#0a2a22' },
@@ -44,10 +39,7 @@ interface Props {
   onEditPlan: () => void
   voiceOn: boolean
   onVoice: (on: boolean) => void
-  /**
-   * Which coach is running, which changes every word on this card. Wording
-   * only — the mode itself is decided by the exercise and the source.
-   */
+  /** Which coach is running; changes the wording only. */
   mode: CoachMode
   /** Live only. */
   zone?: PaceZone | null
@@ -108,11 +100,7 @@ export default function CoachControls({
         )}
       </div>
 
-      {/* ── voice commands ──
-          The warning is the point: recognition holds the audio session for as
-          long as it listens, and re-takes it every time the engine restarts,
-          which is what stops the music. Saying so is the difference between a
-          setting and a mystery. */}
+      {/* ── voice commands ── warns that listening pauses music (it holds the audio session) */}
       <button
         onClick={() => onVoice(!voiceOn)}
         className="w-full px-4 py-3 flex items-center gap-3 active:scale-[0.99] transition-transform"

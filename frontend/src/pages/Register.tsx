@@ -13,10 +13,7 @@ export default function Register() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  // Must match the server (credentials.service.ts). It used to say 6, so a
-  // 6–9 character password passed here and was rejected by tphe API — and the
-  // catch below reported that as "email may already be in use", which sent
-  // people off changing the one thing that was fine.
+  // Must match the server (credentials.service.ts)
   const MIN_PASSWORD_LENGTH = 10
 
   const handleSubmit = async () => {
@@ -33,9 +30,7 @@ export default function Register() {
       await register(email, password, name)
       navigate('/')
     } catch (err: any) {
-      // The server says exactly what was wrong — too short, not a valid
-      // address, already registered, too many attempts. Guessing on its behalf
-      // is worse than useless when the guess is wrong.
+      // Show the server's specific reason
       setError(
         err?.response?.data?.error ||
         (err?.response ? t('register.failed') : t('common.offline'))
@@ -46,8 +41,7 @@ export default function Register() {
   return (
     <div className="min-h-dvh bg-dark-900 flex flex-col justify-between px-6
                     pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
-      {/* The account is created in whichever language this shows, so it is
-          chosen here rather than discovered later in Profile. */}
+      {/* The account is created in the language shown here */}
       <div className="flex justify-end">
         <LanguageSwitch />
       </div>

@@ -1,13 +1,7 @@
 /**
- * The decay curve, and the invariant that holds it together.
- *
- * The half-life is deliberately not stored. It is implied by the triple
- * (fatigueLevel, updatedAt, recoveryTargetAt), and the curve reconstructs
- * itself on read — which means `recoveryTargetFor` and `getEffectiveFatigueLevel`
- * have to remain exact inverses of each other. Nothing in the type system says
- * so, and a plausible-looking change to either one would break the pair while
- * leaving both functions individually reasonable. That round trip is the most
- * valuable assertion in this file.
+ * Tests for the fatigue decay curve. `recoveryTargetFor` and
+ * `getEffectiveFatigueLevel` must stay exact inverses — the round-trip test
+ * guards that.
  */
 
 import { test, describe } from 'node:test'
@@ -66,9 +60,7 @@ describe('getEffectiveFatigueLevel', () => {
   })
 
   test('decays exponentially, not linearly', () => {
-    // The old model shed a flat ~2 points/hour for every muscle regardless of
-    // size. Exponential means most of the fatigue goes early: at the halfway
-    // point of the window, far less than half the fatigue is left.
+    // At the window's midpoint far less than half the fatigue remains
     const record = { fatigueLevel: 80, updatedAt: NOW, recoveryTargetAt: at(NOW, 24) }
     const halfway = getEffectiveFatigueLevel(record, at(NOW, 12))
     const linear = 80 - (80 - RECOVERED_BELOW) / 2
@@ -78,7 +70,7 @@ describe('getEffectiveFatigueLevel', () => {
   })
 
   test('halves over one implied half-life', () => {
-    // 80 → 5 is log2(16) = 4 half-lives, so a 24h window is a 6h half-life.
+    // 80 → 5 is 4 half-lives, so a 24 h window is a 6 h half-life
     const record = { fatigueLevel: 80, updatedAt: NOW, recoveryTargetAt: at(NOW, 24) }
     close(getEffectiveFatigueLevel(record, at(NOW, 6)), 40)
     close(getEffectiveFatigueLevel(record, at(NOW, 12)), 20)
@@ -86,11 +78,7 @@ describe('getEffectiveFatigueLevel', () => {
   })
 
   test('lands on zero rather than trailing off below the floor', () => {
-    // Exponential decay never truly reaches zero, so the floor is what makes
-    // "recovered" a state a muscle can actually be in. The curve approaches
-    // RECOVERED_BELOW asymptotically and the window is sized so it arrives
-    // there exactly at the target — so the last reading before the target sits
-    // just above the floor, and the target itself reads 0.
+    // The curve reaches the floor exactly at the target, which reads 0
     const record = { fatigueLevel: 80, updatedAt: NOW, recoveryTargetAt: at(NOW, 24) }
 
     const justBefore = getEffectiveFatigueLevel(record, at(NOW, 23.99))
@@ -122,8 +110,7 @@ describe('getEffectiveFatigueLevel', () => {
 
 describe('recoveryTargetFor', () => {
   test('a level whose half-life lands exactly on the floor is already done', () => {
-    // 10 → one half-life → 5, which IS the floor. Not a special case in the
-    // code, but the one place the round trip below cannot assert "half remains".
+    // 10 → one half-life → 5, the floor itself
     const target = recoveryTargetFor(2 * RECOVERED_BELOW, 4, NOW)
     assert.ok(target)
     assert.equal(
@@ -146,7 +133,7 @@ describe('recoveryTargetFor', () => {
   })
 
   test('spans as many half-lives as it takes to reach the floor', () => {
-    // 80 → 5 is exactly 4 half-lives.
+    // 80 → 5 is exactly 4 half-lives
     const target = recoveryTargetFor(80, 6, NOW)
     assert.ok(target)
     close(target!.getTime() - NOW.getTime(), 4 * 6 * HOUR, 1)
@@ -155,12 +142,7 @@ describe('recoveryTargetFor', () => {
 
 describe('the decay/target round trip', () => {
   test('a level written with its target reads back as recovered at that target', () => {
-    // This is the invariant the whole design rests on. If these two functions
-    // ever stop being inverses, every stored row silently decays along the
-    // wrong curve — with nothing failing and no column to inspect.
-    // Levels start above 2 × RECOVERED_BELOW on purpose: at exactly 10, one
-    // half-life lands on the floor itself, and the function correctly reports
-    // that as recovered rather than as 5.
+    // Levels start above 2 × RECOVERED_BELOW; at 10 one half-life lands on the floor
     for (const level of [25, 50, 80, 100]) {
       for (const halfLife of [4, 12, 48]) {
         const recoveryTargetAt = recoveryTargetFor(level, halfLife, NOW)

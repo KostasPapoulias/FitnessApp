@@ -5,12 +5,8 @@ import { NOTIFICATION_TYPES } from './notification-preference.service'
 import { localDay } from './notification-window.service'
 
 /**
- * The essential tier: deterministic rules over data the app already computes.
- *
- * No AI anywhere in here. These fire on thresholds, they are reproducible, and
- * they keep working when the coach tier suspends itself — which matters most
- * for the overreaching warning, since the athlete least likely to be opening
- * notifications is the one digging themselves into an injury.
+ * The essential notification tier: deterministic threshold rules, no AI.
+ * Keeps working when the coach tier is suspended.
  */
 
 export interface RuleCandidate {
@@ -38,11 +34,8 @@ const lastFinishedSession = (userId: string) =>
   })
 
 /**
- * Evaluate every essential rule for one user.
- *
- * Returns candidates in priority order. The scheduler sends at most one per
- * tick, so ordering here is what decides which message wins when two fire at
- * once — and a warning to back off always beats an invitation to train.
+ * Evaluate every essential rule for one user. Returned in priority order —
+ * the scheduler sends at most one per tick, and warnings beat invitations.
  */
 export const evaluateEssentialRules = async (
   userId: string,
@@ -52,16 +45,14 @@ export const evaluateEssentialRules = async (
   const today = localDay(new Date(), timezone)
 
   // ── 1. Overreaching ──
-  // Highest priority and marked urgent: acute:chronic ratio is the best-evidenced
-  // early warning for overuse injury, and it fires precisely when the athlete
-  // feels fine and is about to train through it.
+  // Highest priority: an acute:chronic spike is the main overuse-injury warning
   const load = await getTrainingLoad(userId)
   if (load.established && load.ratio != null && load.ratio >= RAMP_RATIO) {
     candidates.push({
       type: NOTIFICATION_TYPES.OVERREACHING,
       title: '⚠️ Ramping too fast',
       body: `Your last week is ${load.ratio}× your usual load. That ratio is the strongest predictor of overuse injury — take an easy day, even if you feel fine.`,
-      // Weekly: repeating this daily would train the user to ignore it
+      // Weekly, so it is not ignored as noise
       dedupeKey: `${NOTIFICATION_TYPES.OVERREACHING}:${today.slice(0, 7)}:${Math.floor(Number(today.slice(8)) / 7)}`,
       url: '/profile',
       urgent: true,
@@ -104,7 +95,7 @@ export const evaluateEssentialRules = async (
       type: NOTIFICATION_TYPES.INACTIVITY,
       title: '🏋️ It’s been a while',
       body: `${idleDays} days since your last session. Your muscles are recovered — a short one still counts.`,
-      // Every other day at most, so a long break is not a daily guilt-trip
+      // At most once per day
       dedupeKey: `${NOTIFICATION_TYPES.INACTIVITY}:${today}`,
       url: '/',
     })

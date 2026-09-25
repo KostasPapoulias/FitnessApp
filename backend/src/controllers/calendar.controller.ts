@@ -1,16 +1,12 @@
 import { Response } from 'express';
-// Import the client directly rather than via '../server'. Going through server
-// creates a cycle (server → routes → controller → server) that breaks any
-// attempt to load this module on its own. server.ts only re-exports this same
-// singleton, so the instance is identical.
+// Imported directly, not via '../server', to avoid an import cycle.
 import prisma from '../lib/prisma';
 import type { AuthRequest } from '../server';
 import { log } from '../lib/logger'
 import { fatigueColor } from '../services/data-export.service'
 import { INTL_LOCALE, Locale, localeOf } from '../lib/locale'
 
-// Muscle -> muscle-group mapping, mirrors the groups used on the
-// Calendar "Muscles" tab (Chest / Back / Legs / Shoulders / Arms / Core / Calves).
+// Muscle → group, matching the Calendar "Muscles" tab.
 const MUSCLE_GROUP: Record<string, string> = {
   'Chest': 'Chest',
   'Back': 'Back', 'Lats': 'Back', 'Traps': 'Back', 'Lower Back': 'Back',
@@ -22,11 +18,7 @@ const MUSCLE_GROUP: Record<string, string> = {
 }
 const GROUP_ORDER = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Calves']
 
-/**
- * The groups as the athlete reads them. Only these seven are translated here —
- * individual muscle names come from the database and are still English until
- * the catalogue carries Greek.
- */
+/** Group labels per language (muscle names themselves are still English). */
 const GROUP_LABELS: Record<Locale, Record<string, string>> = {
   en: Object.fromEntries(GROUP_ORDER.map(g => [g, g])),
   el: {
@@ -35,12 +27,7 @@ const GROUP_LABELS: Record<Locale, Record<string, string>> = {
   },
 }
 
-/**
- * The imbalance line, which names muscle groups and has to agree with them in
- * number. Written per language rather than assembled from fragments: Greek
- * puts the verb elsewhere and a template built for English word order produces
- * something no Greek speaker would write.
- */
+/** The muscle-balance insight sentence, written per language for correct grammar. */
 const muscleInsightFor = (
   locale: Locale, neglected: string[], overloaded: string[]
 ): string => {
@@ -74,45 +61,36 @@ const muscleInsightFor = (
   return 'Your training is well balanced across muscle groups over the last 8 weeks.'
 }
 
-// Calendar day key (YYYY-MM-DD) in LOCAL time.
-// toISOString() must never be used for this: it renders the UTC date, so for a
-// user east of UTC a local midnight resolves to the previous day and a workout
-// lands on the wrong square. Session timestamps and grid cells have to be keyed
-// the same way or they never line up.
+// YYYY-MM-DD in local time. Never toISOString(), which uses the UTC date and
+// puts sessions on the wrong day east of UTC.
 const dayKey = (d: Date) => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
 }
 
-// Last instant of a day — for `lte` bounds that must include the whole day
+// Last instant of a day, for inclusive `lte` bounds.
 const endOfDay = (d: Date) => {
   const e = new Date(d)
   e.setHours(23, 59, 59, 999)
   return e
 }
 
-// Get all workout days for a given month
-// GET /api/calendar?month=4&year=2025
-
+// GET /api/calendar?month=4&year=2026 — per-day summaries for one month
 export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
   try {
-    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1; // Default to current month
+    const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
     
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 1);
 
-    // Month view only needs per-session totals + exercise count — never the
-    // actual exercises/muscles, so select just that instead of a deep include.
+    // Per-session totals and exercise count only
     const sessions = await prisma.workoutSession.findMany({
       where: {
         userId: req.userId!,
         dateTime: {gte: start, lt: end},
-      // Only completed sessions are history. `duration` is written by the
-      // finish claim and nothing else, so `duration: null` is an abandoned
-      // session — it carries no fatigue, no volume and no RPE, and listing it
-      // put empty phantom entries in the calendar.
+      // Finished sessions only (duration is written at finish)
         duration: { not: null }
       },
       select: {
@@ -125,7 +103,7 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
       },
       orderBy: { dateTime: 'asc' }
     });
-    // Build a map of date string -> aggregated session summary
+    // Aggregate per local day; RPE is volume-weighted
     const dayAgg: Record<string, {
       sessionId: string
       totalVolume: number
@@ -201,15 +179,11 @@ export const getCalendarMonth = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/calendar/:date  date = "2026-04-25"
-// Returns full session detail for a specific day
+// GET /api/calendar/:date (YYYY-MM-DD) — sessions, sets and fatigue snapshot for one day
 export const getCalendarDay = async (req: AuthRequest, res: Response) => {
   try {
     const { date } = req.params
-    // "2026-07-25" through `new Date()` parses as UTC midnight, which is a
-    // different instant from the local day the grid keys by. Build the window
-    // from local date parts so tapping a day shows the same sessions the grid
-    // counted for it.
+    // Built from local date parts so the window matches the grid's local days
     const [y, m, d] = String(date).split('-').map(Number)
     if (!y || !m || !d) {
       res.status(400).json({ success: false, error: 'Invalid date, expected YYYY-MM-DD' })
@@ -222,7 +196,7 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
       where: {
         userId: req.userId!,
         dateTime: { gte: dayStart, lt: dayEnd },
-        // Completed sessions only — see getCalendarMonth.
+        // Finished sessions only
         duration: { not: null }
       },
       include: {
@@ -237,10 +211,7 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
             sets: {
               include: {
                 strength: true, cardio: true, calisthenics: true,
-                // Everything about the run EXCEPT the route and the splits.
-                // The day view shows pace and elevation on the row; the route
-                // is tens of kilobytes and is fetched only if the run is
-                // opened — see GET /api/workout/sets/:setId/run.
+                // Summary only; the route and splits are fetched when the run is opened
                 runTrack: {
                   select: {
                     distanceM: true, durationSec: true, avgPaceSec: true,
@@ -264,7 +235,7 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
 
     const sessionIds = sessions.map(s => s.id)
 
-    // Get the fatigue snapshot for that day from the logs
+    // The day's body map: each muscle's last log from its sessions
     const fatigueLogs = await prisma.muscleFatigueLog.findMany({
       where: {
         userId: req.userId!,
@@ -318,15 +289,14 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
           avgRpe:       session.avgRpe,
           notes:        session.notes,
           exercises: session.workoutExercises.map(we => ({
-            // The id travels so the note can be edited from the day view — the
-            // notes PATCH is addressed by (session, workoutExercise).
+            // Needed to edit the note from the day view
             workoutExerciseId: we.id,
             name:       we.exercise.name,
             notes:      we.notes,
             categories: we.exercise.categoryLinks.map(cl => cl.category.name),
             muscles:    we.exercise.muscleLinks.map(ml => ml.muscle.name),
             sets:       we.sets.map(s => ({
-              // The id travels so a run row can ask for its own route.
+              // Needed to fetch the run's route
               id:        s.id,
               setNumber: s.setNumber,
               rpe:       s.rpe,
@@ -334,8 +304,6 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
               cardio:    s.cardio,
               calisthenics: s.calisthenics,
               run:       s.runTrack,
-              // wod:       s.wod,
-              // mobility:  s.mobility
             }))
           }))
         })),
@@ -354,26 +322,19 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/calendar/activity
-// GitHub-style 53-week training heatmap + streak stats
+// GET /api/calendar/activity — 53-week training heatmap + streak stats
 export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    // Grid runs to the Saturday of this week, at midnight — the cursor below
-    // steps day by day from `start` and compares against `today`, so both must
-    // stay at midnight or today's cell would read as "future".
+    // The grid ends on this week's Saturday; both dates stay at midnight so today is not "future"
     const gridEnd = new Date(today); gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()))
     const TOTAL_WEEKS = 53
-    const start = new Date(gridEnd); start.setDate(gridEnd.getDate() - TOTAL_WEEKS * 7 + 1) // Sunday, 53 weeks back
-    // The QUERY bound has to cover the whole final day. Using gridEnd directly
-    // (Saturday 00:00) silently dropped every session logged later that day —
-    // invisible all week, then on Saturday it hid the whole of today.
+    const start = new Date(gridEnd); start.setDate(gridEnd.getDate() - TOTAL_WEEKS * 7 + 1)
+    // The query must cover the whole final day
     const queryEnd = endOfDay(gridEnd)
 
-    // Year-to-date is a different window from the 53-week grid, and neither
-    // read depends on the other — so they go out together rather than one after
-    // the other. At a ~515 ms round trip that is half this endpoint's latency.
+    // Year-to-date window, read in parallel with the grid
     const yearStart = new Date(today.getFullYear(), 0, 1)
 
     const [sessions, yearSessions] = await Promise.all([
@@ -382,8 +343,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
         select: { dateTime: true, totalVolume: true }
       }),
       prisma.workoutSession.findMany({
-        // endOfDay, not `today`: a midnight bound excluded everything logged
-        // today, so the year total was always a day behind.
+        // endOfDay so today's sessions count
         where: { userId, dateTime: { gte: yearStart, lte: endOfDay(today) }, duration: { not: null } },
         select: { dateTime: true }
       }),
@@ -395,8 +355,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
       volumeByDay.set(key, (volumeByDay.get(key) ?? 0) + (s.totalVolume ?? 0))
     }
 
-    // Bucket active days into quartiles (relative to this user's own volume
-    // range) so the heatmap adapts instead of using fixed kg thresholds.
+    // Heat levels by quartile of the user's own daily volume
     const activeVolumes = Array.from(volumeByDay.values()).sort((a, b) => a - b)
     const quantile = (p: number) => {
       if (!activeVolumes.length) return 0
@@ -411,7 +370,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
       return 4
     }
 
-    // The heatmap's month labels, in the reader's language — 'Σεπ', not 'Sep'.
+    // Month labels in the reader's language
     const monthName = new Intl.DateTimeFormat(INTL_LOCALE[localeOf(res)], { month: 'short' })
     const MONTHS = Array.from({ length: 12 }, (_, m) => monthName.format(new Date(2021, m, 1)))
     const weeks: { monthLabel: string; days: { date: string; level: number; future: boolean }[] }[] = []
@@ -435,15 +394,14 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
       weeks.push({ days, monthLabel: labelThisWeek })
     }
 
-    // Streaks — chronological, past/today only.
+    // Streaks over past days only
     const flat = weeks.flatMap(w => w.days).filter(d => !d.future)
     let longest = 0, run = 0
     for (const d of flat) { if (d.level > 0) { run++; longest = Math.max(longest, run) } else run = 0 }
     let current = 0
     for (let i = flat.length - 1; i >= 0; i--) { if (flat[i].level > 0) current++; else break }
 
-    // Year-to-date totals (independent of the 53-week rolling window — the
-    // read for these was issued at the top, alongside the grid's).
+    // Year-to-date totals
     const totalThisYear = new Set(yearSessions.map(s => dayKey(s.dateTime))).size
     const daysElapsed = Math.floor((today.getTime() - yearStart.getTime()) / 86400000) + 1
     const consistencyPct = daysElapsed > 0 ? Math.round((totalThisYear / daysElapsed) * 100) : 0
@@ -459,8 +417,7 @@ export const getCalendarActivity = async (req: AuthRequest, res: Response) => {
   }
 }
 
-// GET /api/calendar/muscles
-// Weekly set volume per muscle group (last 8 weeks) + imbalance/coach insights
+// GET /api/calendar/muscles — weekly sets per muscle group (8 weeks) + balance insight and coach tip
 export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!
@@ -470,8 +427,7 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     rangeStart.setDate(rangeStart.getDate() - WEEKS * 7 + 1)
     rangeStart.setHours(0, 0, 0, 0)
 
-    // Eight weeks of volume, and the current per-muscle fatigue used for the
-    // coach tip at the bottom. Independent reads, issued together.
+    // 8 weeks of volume and current fatigue, batched
     const [workoutExercises, fatigue] = await Promise.all([
       prisma.workoutExercise.findMany({
         where: {
@@ -517,8 +473,7 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
     const avgRecent = withRecent.reduce((s, r) => s + r.recent, 0) / withRecent.length
     const groupLabel = GROUP_LABELS[localeOf(res)]
     const muscleRows = withRecent.map(r => ({
-      // Translated here rather than in the client: the insight sentence below
-      // names the same groups and the two must not disagree.
+      // Translated here so it matches the insight sentence
       name: groupLabel[r.name] ?? r.name,
       cells: r.cells,
       status: r.recent === 0
@@ -531,8 +486,7 @@ export const getCalendarMuscles = async (req: AuthRequest, res: Response) => {
 
     const muscleInsight = muscleInsightFor(localeOf(res), neglected, overloaded)
 
-    // AI coach tip, derived from current per-muscle fatigue levels (read at the
-    // top, alongside the volume query).
+    // Coach tip from current fatigue per group
     const fatigueByGroup: Record<string, number[]> = {}
     for (const f of fatigue) {
       const g = MUSCLE_GROUP[f.muscle.name]

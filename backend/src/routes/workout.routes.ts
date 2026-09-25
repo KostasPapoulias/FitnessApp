@@ -29,22 +29,12 @@ router.post('/plan-suggestions', getPlanSuggestions)
  * @returns created workout session
  */
 router.post('/sessions', startSession)
-/*
- * GET /api/workout/sessions is deliberately gone.
- *
- * It deep-included every set of every modality for up to 50 sessions with no
- * cursor — measured at 122 KB and ~12 s for twenty. History moved to the
- * cursor-paged `/api/progress/history`, and its last caller (CardioPlan,
- * pre-filling one distance and one time) now asks
- * `/api/progress/exercises/:id/history?limit=1` for the 0.8 KB it needs.
- */
 /**
  * @route GET /api/workout/sessions/active
  * @protected
  * @returns the session still open, or null
  *
- * MUST stay above `/sessions/:id` — Express matches in order, and registered
- * after it "active" is swallowed as an id and answers 404.
+ * Must stay above `/sessions/:id`, which would otherwise capture "active".
  */
 router.get('/sessions/active', getActiveSession)
 /**
@@ -68,10 +58,7 @@ router.post('/sessions/:id/exercises', addExercise)
 /**
  * @route PATCH /api/workout/sessions/:id/exercises/:workoutExerciseId
  * @protected
- * @returns the exercise id and its stored notes
- *
- * Unlike every other write under a session, this one does NOT re-score or
- * rebuild fatigue — notes are not a model input. See the controller.
+ * @returns the exercise id and its stored notes (no fatigue rebuild)
  */
 router.patch('/sessions/:id/exercises/:workoutExerciseId', updateExerciseNotes)
 /**

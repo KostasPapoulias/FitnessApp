@@ -25,17 +25,15 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
 
   const perSide = ex ? isPerSide(ex.exercise.name) : false
 
-  // A hold is the one part of the app where the athlete is deliberately still
-  // with their eyes shut, so the countdown and the side change have to be
-  // audible — reading the ring is exactly what they cannot do.
+  // Audible cues: the athlete is holding still, often with eyes closed
   const cue = useLiveCues()
 
-  // refs for the interval closure
+  // Refs for the interval closure
   const st = useRef({ paused, side, leftDone, perSide, target, secs, started })
   st.current = { paused, side, leftDone, perSide, target, secs, started }
   const doneRef = useRef(false)
 
-  // reset when the pose (exercise/set) changes
+  // Reset when the pose changes
   useEffect(() => {
     setSecs(target); setPaused(false); setSide('left'); setLeftDone(false)
     doneRef.current = false
@@ -53,9 +51,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
     doneRef.current = true
     cue.buzz('complete')
     cue.interrupt(cues.poseComplete(nextPoseName()))
-    // Both sides count. `isPerSide` means the athlete held `target` seconds on
-    // the left AND `target` on the right, and logging one of them threw half
-    // the time under tension away before it reached the fatigue model.
+    // Per-side holds log both sides' time
     const held = st.current.perSide ? st.current.target * 2 : st.current.target
     onAdvance({ reps: held, weight: 0, rpe: set?.rpe ?? 6, restSeconds: 0 })
   }
@@ -75,37 +71,29 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
   const cueRef = useRef(cue)
   cueRef.current = cue
 
-  // Announce the pose as it opens, so the first thing heard is what to get into
-  // rather than a number with no movement attached to it.
+  // Announce the pose as it opens
   useEffect(() => {
     if (!started || !ex) return
     cue.say(cues.holdStart(ex.exercise.name, target, perSide ? 'left' : undefined))
   }, [started, currentExerciseIndex, currentSetIndex]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 1s tick
+  // 1 s tick
   useEffect(() => {
     const id = setInterval(() => {
       const c = st.current
       if (!c.started || c.paused || doneRef.current) return
-      // Counted off the value about to be displayed, not the one on screen —
-      // otherwise "one" is spoken while the ring still reads 2 and the hold
-      // ends a second after the voice says it has.
+      // Count off the value about to show, so voice and ring agree
       cueRef.current.countdown(c.secs - 1)
       if (c.secs > 1) { setSecs(s => s - 1); return }
-      // boundary
+      // Boundary
       if (c.perSide && !c.leftDone) switchRef.current()
       else { completeRef.current() }
     }, 1000)
     return () => clearInterval(id)
   }, [])
 
-  // Hands are on the floor in most of these positions, so the screen is the
-  // one control the athlete cannot reach. Everything the buttons below do is
-  // reachable by voice.
-  //
-  // Above the early returns, because it is a hook and the two below it are
-  // conditional. `onNext` is declared further down and that is fine — the
-  // handler only ever runs long after this function has finished.
+  // Voice control — hands are usually on the floor. Above the early returns
+  // (it is a hook); `onNext` is declared below but only runs later.
   useModalityVoice(registerVoice, command => {
     switch (command.kind) {
       case 'pauseRest':  setPaused(true); return true
@@ -141,8 +129,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
   if (perSide) poseCounter += ` · ${side === 'left' ? 'Left side' : 'Right side'}`
 
   const nextLabel = perSide && !leftDone ? 'Switch Side →' : 'Next Pose →'
-  // Tapping through has to go via the same two functions as the clock running
-  // out, or a manual switch is silent while an automatic one speaks.
+  // Manual advance goes through the same functions as the clock, so it speaks too
   const onNext = () => {
     if (perSide && !leftDone) switchSide()
     else complete()

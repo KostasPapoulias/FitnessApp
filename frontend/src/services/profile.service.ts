@@ -8,7 +8,7 @@ export const profileService = {
 
   updateProfile: async (data: {
     name?: string
-    /** Legacy. Send birthDate instead — the recovery model prefers it. */
+    /** Legacy — send birthDate instead. */
     age?: number
     weight?: number
     height?: number
@@ -41,12 +41,7 @@ export const profileService = {
     return res.data.data
   },
 
-  /**
-   * A measurement series, oldest first.
-   *
-   * Only WEIGHT is ever written today — the other BiometricType values need a
-   * wrist device or a tape measure, and are not being estimated.
-   */
+  /** A measurement series, oldest first (only WEIGHT is written today). */
   getBiometrics: async (
     type: 'WEIGHT' | 'BODY_FAT' | 'LEAN_MASS' | 'HEART_RATE' | 'HRV' | 'SLEEP_SCORE' = 'WEIGHT',
     days?: number

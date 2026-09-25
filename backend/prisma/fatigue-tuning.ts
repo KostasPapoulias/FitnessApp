@@ -1,18 +1,8 @@
-// Tuning tables for the fatigue model.
-//
-// Extracted from seed.ts so they can be applied on their own: the full seed
-// makes several hundred sequential round trips, which a remote database will
-// drop halfway through, and these values are the ones the fatigue model cannot
-// work without. See scripts/apply-fatigue-tuning.ts.
-//
-// Keyed by exercise name, matching exercise-catalogue.ts. The seed checks that
-// every key here names a real exercise and reports the ones that do not —
-// a typo or a renamed movement otherwise fails silently, leaving the exercise
-// on its modality default with nobody any the wiser.
+// Tuning tables for the fatigue model, keyed by exercise name (matching
+// exercise-catalogue.ts). Re-applied by the seed and by
+// scripts/apply-fatigue-tuning.ts; the seed reports keys that match no exercise.
 
-// Muscle → hours for its fatigue to halve. Small, endurance-biased muscles
-// clear overnight; big hip/spinal movers take days. These drive the exponential
-// recovery curve in fatigue.service.ts.
+// Muscle → hours for its fatigue to halve (drives the recovery curve).
 export const MUSCLE_HALF_LIVES: [string, number][] = [
   ['Chest', 15],
   ['Back', 16],
@@ -31,10 +21,8 @@ export const MUSCLE_HALF_LIVES: [string, number][] = [
   ['Lower Back', 20],
 ]
 
-// How much tissue damage a movement does per unit of work, with a normal
-// barbell lift and a run both at 1.0. This is separate from impactFactor, which
-// only says WHICH muscles are involved — using one number for both is what made
-// the model score cycling as harder on the legs than running.
+// Tissue damage per unit of work (normal barbell lift and a run = 1.0).
+// Separate from impactFactor, which only says which muscles are involved.
 export const MODALITY_DAMAGE: Record<string, number> = {
   Strength: 1.0,
   Calisthenics: 1.0,
@@ -43,14 +31,8 @@ export const MODALITY_DAMAGE: Record<string, number> = {
   Mobility: 0,      // restorative, not fatiguing
 }
 
-// Three things earn an override, and everything else is left at its modality
-// default:
-//   · loaded stretch and heavy eccentrics, which is what actually makes you
-//     sore two days later — hinges, deep lunges, overhead triceps work;
-//   · guided or supported work, where the machine does the stabilising, so the
-//     same tonnage costs less tissue;
-//   · isometrics and carries, which fatigue heavily while barely damaging
-//     anything, and would otherwise be scored like a set of squats.
+// Overrides only for: loaded stretch and heavy eccentrics (higher); guided or
+// supported work (lower); isometrics and carries (much lower).
 export const DAMAGE_OVERRIDES: Record<string, number> = {
   // ── Strength: hinges and heavy eccentrics ──────────────────────────────
   'Barbell Good Morning': 1.4,
@@ -137,8 +119,7 @@ export const DAMAGE_OVERRIDES: Record<string, number> = {
   'L-Sit On Floor': 0.7,
 
   // ── Cardio ─────────────────────────────────────────────────────────────
-  // The headline fix. Weight-bearing, impact-heavy work damages legs far more
-  // per minute than smooth, supported work.
+  // Weight-bearing, impact-heavy work damages legs more per minute than supported work.
   'Wind Sprints': 1.5,              // near-maximal speed, and where hamstrings tear
   'Jump Rope': 1.1,
   'Run': 1.0,
@@ -167,8 +148,7 @@ export const DAMAGE_OVERRIDES: Record<string, number> = {
   'Kettlebell Hang Clean': 1.1,
   'Double Under': 1.1,
   'Wall Walk': 1.1,
-  // Concentric-only: the sled has no lowering phase and the ropes never
-  // resist you, so both cost far less tissue than the effort suggests.
+  // Concentric-only: no lowering phase, so far less tissue damage.
   'Battle Rope Waves': 0.8,
   'Sled Push': 0.8,
 
@@ -249,10 +229,8 @@ export const DAMAGE_OVERRIDES: Record<string, number> = {
   'Toes-to-Bar': 1.1,
 }
 
-// Typical speed for distance-based activities, used to turn distance covered
-// into comparable work — 15 km cycled is nothing like 15 km run. Anything not
-// listed (jump rope, the stair climber, and every non-cardio movement) is
-// scored on duration.
+// Typical speed (km/h), to turn distance into comparable work. Unlisted
+// movements are scored on duration.
 export const REFERENCE_SPEED_KMH: Record<string, number> = {
   'Wind Sprints': 20,
   'Cycling': 25,                    // outdoors, on the road
@@ -265,18 +243,11 @@ export const REFERENCE_SPEED_KMH: Record<string, number> = {
   'Walking On Incline Treadmill': 5,
 }
 
-// What measures a cardio movement's work, which decides the whole shape of the
-// run screen and not merely whether a coach is offered.
-//
-//   'gps'     distance, and the phone can measure it — a map, a route, a live pace
-//   'machine' distance, but nothing measures it for you — the athlete sets the speed
-//   'reps'    no distance exists; the work is counted instead
-//
-// Kept apart from REFERENCE_SPEED_KMH deliberately. The two disagree in both
-// directions and that is not an error: the elliptical has a reference speed and
-// no GPS, the stair climber has neither and is still a pace-able machine to the
-// athlete standing on it. Deriving one from the other means a calibration
-// change silently removes a map.
+// What measures a cardio movement's work, which decides the run screen:
+//   'gps'     measurable distance — map, route, live pace
+//   'machine' distance the athlete sets, nothing to track
+//   'reps'    no distance; the work is counted
+// Independent of REFERENCE_SPEED_KMH.
 export const CARDIO_TRACKING: Record<string, 'gps' | 'machine' | 'reps'> = {
   // Outdoors, and the phone can follow it.
   'Run': 'gps',
@@ -285,19 +256,13 @@ export const CARDIO_TRACKING: Record<string, 'gps' | 'machine' | 'reps'> = {
   'Walking': 'gps',
   'Cycling': 'gps',
 
-  // Indoor and fixed. All have a pace; none can be followed. The two cross
-  // trainers and the treadmill are machines the athlete stands on — they had
-  // been carried over as 'gps' from the outdoor movements they replaced, which
-  // would have drawn a map of somebody standing still.
+  // Indoor and fixed: a pace, but nothing to follow.
   'Cycle Cross Trainer': 'machine',
   'Stationary Bike Walk': 'machine',
   'Walk Elliptical Cross Trainer': 'machine',
   'Walking On Incline Treadmill': 'machine',
 
-  // No kilometre exists at any effort, so the work is counted instead. These
-  // matter more than they look: 'gps' is the fallback for anything unlisted,
-  // so leaving a floor movement out opens a map and waits for a fix that is
-  // never going to move.
+  // No distance at any effort, so counted. Unlisted defaults to 'gps', so these must be listed.
   'Jump Rope': 'reps',
   'Walking On Stepmill': 'reps',
   'Mountain Climber': 'reps',
@@ -306,19 +271,12 @@ export const CARDIO_TRACKING: Record<string, 'gps' | 'machine' | 'reps'> = {
   'Bear Crawl': 'reps',
 }
 
-// Counts per minute at a typical continuous effort — the counting twin of
-// REFERENCE_SPEED_KMH, and calibrated the same way: a movement performed at
-// exactly this cadence scores precisely what its duration alone would have
-// scored, so adding a count can only ever refine the estimate, never inflate
-// it. Faster than the reference costs more, slower costs less, and that
-// difference is the density the clock could never see.
+// Counts per minute at a typical continuous effort. Working at exactly this
+// cadence scores the same as duration alone; faster costs more, slower less.
 export const REFERENCE_CADENCE_RPM: Record<string, number> = {
-  // Single unders, turned by the wrists. Doubles roughly halve the count for
-  // the same minute, which is exactly the discount the density term should
-  // apply — they are not twice the work.
+  // Single unders; doubles roughly halve the count per minute.
   'Jump Rope': 110,
-  // Floors, as the console reports them. Nobody counts steps, and the number
-  // on the machine is the one an athlete can actually enter.
+  // Floors, as the console reports them.
   'Walking On Stepmill': 6,
   // Counted per limb touching down, which is how anyone says it out loud.
   'Mountain Climber': 90,
@@ -328,8 +286,7 @@ export const REFERENCE_CADENCE_RPM: Record<string, number> = {
   'Bear Crawl': 40,
 }
 
-// What the count is called out loud and on screen. Wording only — the model
-// never reads it.
+// What the count is called, on screen. Wording only.
 export const REP_UNITS: Record<string, string> = {
   'Jump Rope': 'skips',
   'Walking On Stepmill': 'floors',
@@ -339,19 +296,8 @@ export const REP_UNITS: Record<string, string> = {
   'Bear Crawl': 'paces',
 }
 
-// Working load for a set of ~10 reps, as a FRACTION OF BODYWEIGHT, for a
-// trained adult male reference athlete (the "intermediate" tier).
-//
-// This is the table that stops a lateral raise opening at 60 kg. It has to be
-// per-movement rather than per-muscle: a leg press and a leg extension train
-// the same muscle and differ by roughly a factor of eight. Figures are working
-// weights, NOT one-rep maxes — a 1.2× bodyweight squat for 10 is an ordinary
-// intermediate set, while a 1.2× max would be a beginner's.
-//
-// Per-side movements (dumbbell work) are quoted as the weight of ONE dumbbell,
-// which is what the athlete actually selects off the rack. This is also why the
-// implement variations cannot share a figure: a dumbbell bench press is logged
-// at roughly a third of the barbell number for the same effort.
+// Working load for ~10 reps as a fraction of bodyweight, for a trained adult
+// male reference. Working weights, not maxes. Dumbbell work is per dumbbell.
 export const LOAD_FACTORS: Record<string, number> = {
   // ── Chest ──────────────────────────────────────────────────────────────
   'Barbell Decline Bench Press': 0.95,
@@ -531,8 +477,7 @@ export const damageFor = (exerciseName: string, modalityName: string): number =>
 export const referenceSpeedFor = (exerciseName: string): number | null =>
   REFERENCE_SPEED_KMH[exerciseName] ?? null
 
-// 'gps' for anything unlisted, which is what every cardio session did before
-// this table existed. A custom exercise must not lose its map to an omission.
+// 'gps' for anything unlisted.
 export const cardioTrackingFor = (exerciseName: string): string =>
   CARDIO_TRACKING[exerciseName] ?? 'gps'
 
@@ -542,8 +487,6 @@ export const referenceCadenceFor = (exerciseName: string): number | null =>
 export const repUnitFor = (exerciseName: string): string | null =>
   REP_UNITS[exerciseName] ?? null
 
-// Null rather than 0 for anything unlisted: 0 would read as "this movement is
-// unloaded", which is a claim, whereas null is the absence of one and lets the
-// caller fall back instead of suggesting an empty bar.
+// Null for anything unlisted, so callers fall back rather than suggesting 0 kg.
 export const loadFactorFor = (exerciseName: string): number | null =>
   LOAD_FACTORS[exerciseName] ?? null

@@ -1,7 +1,6 @@
 /**
- * Checks the progress/history reads and the sleep readiness modifier, against a
- * throwaway user that is deleted again at the end (User cascades to everything
- * it owns).
+ * Checks the progress/history reads and the sleep modifier against a throwaway
+ * user, deleted at the end.
  *
  *   npx tsx scripts/verify-progress-history.ts
  */
@@ -91,8 +90,7 @@ async function main() {
 
     const { finishViaController } = await import('./_verify_finish_helper')
 
-    // Two strength sessions three weeks apart, the older one heavier, so the
-    // e1RM series has to be able to go DOWN.
+    // The older session is heavier, so the e1RM series must be able to go down
     const heavier = await prisma.workoutSession.create({
       data: { userId: user.id, dateTime: new Date(Date.now() - 21 * DAY) },
     })
@@ -201,11 +199,8 @@ async function main() {
     check('the window has a non-zero curve', first.points.some(p => p.level > 0))
     check('sessions inside the window are listed as hits', first.hits.length > 0)
 
-    // Decay is asserted against a BACKDATED log written directly. `finishSession`
-    // stamps MuscleFatigueLog at now() regardless of the session's dateTime, so
-    // a session backdated by this script still logs its fatigue today — which is
-    // correct for real use (you finish a session when you do it) and useless for
-    // testing a curve.
+    // Decay is checked against a backdated log written directly (finishSession
+    // always stamps logs at now())
     const older = await prisma.muscle.findFirst({
       where: { fatigueLogs: { none: { userId: user.id } } },
       select: { id: true, name: true },

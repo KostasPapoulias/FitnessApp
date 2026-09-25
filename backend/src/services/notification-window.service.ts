@@ -1,12 +1,6 @@
 import prisma from '../lib/prisma'
 
-/**
- * When a notification may be sent, as opposed to whether the user wants it.
- *
- * Every gate in here exists to stop the app becoming something people mute.
- * Notification fatigue is the failure mode that kills this whole feature, and
- * it is far easier to prevent than to recover from.
- */
+/** When a notification may be sent: quiet hours, activity, daily cap and spacing. */
 
 /** Sending while the user is already in the app is pure noise. */
 const RECENTLY_ACTIVE_MINUTES = 30
@@ -14,18 +8,13 @@ const RECENTLY_ACTIVE_MINUTES = 30
 /** Nothing may follow another notification inside this window. */
 const MIN_GAP_MINUTES = 60
 
-/**
- * Local hour (0–23) for an instant in a given IANA zone.
- *
- * Intl is the only correct way to do this — offsets change with DST, so any
- * arithmetic on a stored offset is wrong twice a year.
- */
+/** Local hour (0–23) in an IANA zone, via Intl so DST is handled. */
 export const localHour = (date: Date, timezone: string): number => {
   try {
     const hour = new Intl.DateTimeFormat('en-GB', {
       timeZone: timezone, hour: '2-digit', hour12: false
     }).format(date)
-    // en-GB renders midnight as "24" in some engines
+    // Some engines render midnight as "24"
     return Number(hour) % 24
   } catch {
     return date.getUTCHours()
@@ -35,7 +24,7 @@ export const localHour = (date: Date, timezone: string): number => {
 /** Local calendar day as YYYY-MM-DD — the basis for per-day dedupe keys. */
 export const localDay = (date: Date, timezone: string): string => {
   try {
-    // en-CA formats as YYYY-MM-DD, which sorts and compares correctly
+    // en-CA formats as YYYY-MM-DD
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit'
     }).format(date)
@@ -44,10 +33,7 @@ export const localDay = (date: Date, timezone: string): string => {
   }
 }
 
-/**
- * Quiet hours, which normally wrap midnight (22:00 → 08:00). Equal start and
- * end means the user disabled them rather than requesting 24 hours of silence.
- */
+/** Quiet hours, which may wrap midnight. Equal start and end means disabled. */
 export const isQuietHour = (hour: number, startHour: number, endHour: number): boolean => {
   if (startHour === endHour) return false
   return startHour > endHour
@@ -61,10 +47,8 @@ export interface WindowVerdict {
 }
 
 /**
- * Every timing gate, in the order that fails cheapest first.
- *
- * `urgent` skips only the daily cap and the minimum gap — never quiet hours.
- * Nothing this app has to say justifies waking someone at 3am.
+ * Every timing gate, cheapest first. `urgent` skips the daily cap and spacing,
+ * never quiet hours.
  */
 export const checkSendWindow = async (
   userId: string,
@@ -92,9 +76,7 @@ export const checkSendWindow = async (
 
   if (options.urgent) return { ok: true }
 
-  // 3. Daily cap, as a rolling 24 hours rather than a calendar day. A calendar
-  //    reset allows three at 23:00 and three more at 00:05, which is precisely
-  //    the burst the cap exists to prevent.
+  // 3. Daily cap over a rolling 24 h, so it cannot burst across midnight
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
   const sentToday = await prisma.notification.count({
     where: { userId, sentAt: { gte: dayAgo } }
@@ -132,13 +114,7 @@ export const sentWithin = async (
   return count > 0
 }
 
-/**
- * Record that the user is using the app.
- *
- * Throttled in memory so an active session does not write on every request —
- * the value only needs to be accurate to within a few minutes for the
- * suppression check above.
- */
+/** Record that the user is in the app. Throttled to one write per 5 minutes. */
 const lastWrite = new Map<string, number>()
 const WRITE_THROTTLE_MS = 5 * 60 * 1000
 
@@ -147,9 +123,7 @@ export const touchLastSeen = (userId: string) => {
   if ((lastWrite.get(userId) ?? 0) > now - WRITE_THROTTLE_MS) return
   lastWrite.set(userId, now)
 
-  // Fire and forget: a request must never fail or wait because of this, and
-  // updateMany rather than upsert so it cannot create a preferences row —
-  // which would be a silent opt-in.
+  // Fire and forget; updateMany so it can never create a preferences row (a silent opt-in)
   prisma.notificationPreference
     .updateMany({ where: { userId }, data: { lastSeenAt: new Date() } })
     .catch(() => {})

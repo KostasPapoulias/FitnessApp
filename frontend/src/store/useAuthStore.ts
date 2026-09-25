@@ -20,25 +20,14 @@ interface AuthStore {
   fetchMe: () => Promise<void>
 }
 
-/**
- * The request interceptor authorises from `somatrack_token`, so that key — not
- * the persisted store — is what decides whether this device is signed in.
- * A 401 wipes it without touching the store, and the two must not disagree.
- */
+/** The stored token (`somatrack_token`) alone decides whether the device is signed in. */
 const storedToken = (): string | null =>
   typeof localStorage === 'undefined' ? null : localStorage.getItem('somatrack_token')
 
 /**
- * Squares the device's language with the account's, once the account is known.
- *
- * The account normally wins, so signing in on a new phone brings your language
- * with you. A language picked on a signed-out screen is the exception — that
- * was a choice, made seconds ago, and every account the migration created sits
- * on the 'en' default — so it is saved to the account instead of reverted.
- *
- * A failed save leaves the choice pending rather than dropping it, and the next
- * launch's fetchMe tries again. The device keeps showing what was picked
- * either way.
+ * Squares the device's language with the account's: the account wins, unless
+ * the language was picked on a signed-out screen, in which case it is saved to
+ * the account. A failed save stays pending and retries next launch.
  */
 const reconcileLocale = (accountLanguage: unknown) => {
   const { locale, pendingSync, setLocale, markSynced } = useLocaleStore.getState()
@@ -50,7 +39,7 @@ const reconcileLocale = (accountLanguage: unknown) => {
     }
     settingsService.updateSettings({ language: locale })
       .then(() => {
-        // Only if nothing newer was picked while the request was in flight.
+        // Only if nothing newer was picked meanwhile
         if (useLocaleStore.getState().locale === locale) markSynced()
       })
       .catch(() => {})
@@ -64,24 +53,14 @@ export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
       user: null,
-      // Seeded from the token that is already on the device.
-      //
-      // Starting these at null/false meant every cold launch began signed out:
-      // `Protected` bounced to /login, Login painted, `fetchMe` came back a
-      // moment later and bounced it straight back in. Nothing was wrong — the
-      // app just rendered its answer before it had asked the question. A token
-      // on disk is grounds to assume a session; `fetchMe` and the 401
-      // interceptor both revoke it if the assumption turns out to be wrong.
+      // Seeded from the stored token, so a cold launch doesn't render Login
+      // first; fetchMe and the 401 interceptor revoke it if it is invalid
       token: storedToken(),
       isAuthenticated: !!storedToken(),
       isLoading: false,
       isBootstrapping: !!storedToken(),
 
-      // isLoading is cleared in a finally on both of these. Clearing it only on
-      // the success path left the button disabled and reading "Creating
-      // account…" forever after any rejection — the form could not be corrected
-      // and retried without reloading the app, which is how a rejected password
-      // became an apparent dead end.
+      // isLoading is cleared in `finally`, so a rejected attempt can be retried
       login: async (email, password) => {
         set({ isLoading: true })
         try {
@@ -98,7 +77,7 @@ export const useAuthStore = create<AuthStore>()(
       register: async (email, password, name) => {
         set({ isLoading: true })
         try {
-          // The account starts in whatever language Register was showing.
+          // The account starts in the language Register was showing
           const language = useLocaleStore.getState().locale
           const res = await api.post('/auth/register', { email, password, name, language })
           const { token, user } = res.data.data
@@ -124,19 +103,15 @@ export const useAuthStore = create<AuthStore>()(
           localStorage.removeItem('somatrack_token')
           set({ user: null, token: null, isAuthenticated: false })
         } finally {
-          // Whatever the answer, the launch-time guess has been settled and the
-          // app can stop holding its splash.
+          // The launch check is settled; the splash can go
           set({ isBootstrapping: false })
         }
       }
     }),
     {
       name: 'somatrack_auth',
-      // The user, not the token. Restoring the profile synchronously is what
-      // keeps `Protected`'s onboarding gate from bouncing a returning user
-      // through the form while `fetchMe` is still in flight. The token is
-      // deliberately left to `somatrack_token` alone — persisting it in two
-      // places let a 401 clear one and not the other.
+      // Persist the user (so the onboarding gate doesn't bounce on launch) but
+      // not the token, which lives only in `somatrack_token`
       partialize: (state) => ({ user: state.user })
     }
   )

@@ -13,8 +13,7 @@ interface RestTimerProps {
   workoutTime: string
   onDone: () => void
   onSkip: () => void
-  /** Pause lives in ActiveWorkout so a spoken "pause" can reach it — the voice
-   *  session is owned one level up, where it can outlive this screen. */
+  /** Owned by ActiveWorkout, so a spoken "pause" can reach it. */
   paused: boolean
   onPausedChange: (paused: boolean) => void
 }
@@ -41,8 +40,7 @@ export default function RestTimer({
   const pausedRef = useRef(false)
 
   const { haptic, audio } = useSessionPrefsStore()
-  // Read through refs inside the interval: the tick closure is created once per
-  // `seconds` change and would otherwise hold whatever the toggles were then.
+  // Read through refs inside the interval, which is created once per `seconds` change
   const cueRef = useRef({ haptic, audio })
   cueRef.current = { haptic, audio }
 
@@ -63,9 +61,7 @@ export default function RestTimer({
           onDoneRef.current()
           return 0
         }
-        // Warning at ten seconds, then a tap on each of the last three, so the
-        // athlete can rack up without watching the screen. onDone owns the
-        // end-of-rest alert itself.
+        // Warning at 10 s, then a tap on each of the last three; onDone owns the final alert
         if (next === 10 && cueRef.current.audio) void announce('Ten seconds.')
         if (next <= 3 && cueRef.current.haptic) void hapticCountdownTick()
         return next
@@ -106,10 +102,7 @@ export default function RestTimer({
         ? `Set ${nSet + 1} · ${curEx!.exercise.name}`
         : `Set 1 · ${nextExObj!.exercise.name}`)
     : ''
-  // Calisthenics load is signed — negative is assistance from a band or a
-  // machine, which the backend records as such. Clamping it at zero here (and
-  // labelling it WEIGHT) is why adjusting an assisted set from the rest timer
-  // could never take the load below bodyweight.
+  // Calisthenics load is signed (negative = assistance), so it is not clamped at zero
   const nextIsCalisthenics = nextExObj?.exercise.modality === 'Calisthenics'
   const loadFloor = (v: number) => nextIsCalisthenics ? v : Math.max(0, v)
 
@@ -132,8 +125,7 @@ export default function RestTimer({
 
       {/* Ring */}
       <div className="flex justify-center mt-5">
-        {/* 280px was the page's full content width at 320px — the ring sat
-            edge to edge with nothing to spare. It scales down instead now. */}
+        {/* Scales down on narrow screens */}
         <div className="relative w-full max-w-[280px] aspect-square">
           <svg width="100%" height="100%" viewBox="0 0 280 280" style={{ transform: 'rotate(-90deg)' }}>
             <circle cx="140" cy="140" r={radius} fill="none" stroke="#1E1E1E" strokeWidth="14" />
@@ -170,9 +162,7 @@ export default function RestTimer({
             <p className="text-[10px] tracking-widest text-dark-400">NEXT SET · ADJUST NOW</p>
             <p className="text-xs text-dark-300 max-w-[55%] truncate text-right">{nextName}</p>
           </div>
-          {/* Three steppers across can't hold −/value/+ on one line: at 320px
-              each column is ~68px inside its padding, which the two buttons
-              alone fill. The value takes its own line above them. */}
+          {/* Value on its own line above the buttons, to fit three columns at 320px */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* reps */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
@@ -217,9 +207,7 @@ export default function RestTimer({
         </div>
       )}
 
-      {/* What will actually happen when the timer hits zero. This used to
-          promise a vibration unconditionally, including when the toggle was
-          off and on devices that cannot vibrate at all. */}
+      {/* What happens when the timer ends, per the haptic/audio settings */}
       {(haptic || audio) && (
         <div className="mt-3.5 flex items-center gap-2.5 px-3.5 py-3 rounded-btn border border-dashed border-dark-600">
           {haptic

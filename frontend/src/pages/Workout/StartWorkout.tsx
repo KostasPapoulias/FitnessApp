@@ -9,7 +9,7 @@ import { workoutService, ActiveSession } from '../../services/workout.service'
 import { MessageKey, useT } from '../../i18n'
 import { MicIcon, TargetIcon } from '../../components/icons'
 
-// ── modality catalogue (id → dictionary keys), matching the prototype ──
+// ── modality catalogue (id → dictionary keys) ──
 type ModId = 'strength' | 'calisthenics' | 'cardio' | 'mobility' | 'wod'
 const MODALITIES: { id: ModId; label: MessageKey; desc: MessageKey; cta: MessageKey }[] = [
   { id: 'strength',     label: 'modality.strength',     desc: 'modality.strengthDesc',     cta: 'modality.strengthCta' },
@@ -18,9 +18,7 @@ const MODALITIES: { id: ModId; label: MessageKey; desc: MessageKey; cta: Message
   { id: 'mobility',     label: 'modality.mobility',     desc: 'modality.mobilityDesc',     cta: 'modality.mobilityCta' },
   { id: 'wod',          label: 'modality.wod',          desc: 'modality.wodDesc',          cta: 'modality.wodCta' },
 ]
-// Sent to the browse/exercise screens, which filter on it, and matched against
-// the catalogue server-side. NOT display text: translating these would query
-// the API for a modality called "Δύναμη" and come back empty.
+// API modality names — not display text, so never translated.
 const MOD_LABEL: Record<ModId, string> = {
   strength: 'Strength', calisthenics: 'Calisthenics', cardio: 'Cardio',
   mobility: 'Mobility', wod: 'WOD',
@@ -68,9 +66,7 @@ export default function StartWorkout() {
 
   const [modality, setModality] = useState<ModId>('strength')
 
-  // Persisted and device-local — the screen that owns these switches is
-  // unmounted by the time the workout they govern starts, so they cannot live
-  // in local state and still reach the live session.
+  // Persisted per device, so the live session can read them
   const {
     voice, haptic, audio, voiceSupported, paceCoach,
     setVoice, setHaptic, setAudio, setPaceCoach, probeVoiceSupport,
@@ -82,7 +78,7 @@ export default function StartWorkout() {
 
   const activeMod = MODALITIES.find(m => m.id === modality)!
 
-  // Today, e.g. "Tuesday, July 15" — in the app's language, not the device's.
+  // Today's date in the app's language
   const todayLabel = new Date().toLocaleDateString(intl, {
     weekday: 'long', month: 'long', day: 'numeric',
   })
@@ -90,8 +86,7 @@ export default function StartWorkout() {
   const handleBrowse = () => {
     clearExercises()
     const label = MOD_LABEL[modality]
-    // Strength picks a muscle group first; every other modality picks
-    // exercises / a type / movements directly (filtered by modality).
+    // Strength picks a muscle group first; other modalities go straight to exercises
     if (modality === 'strength') {
       navigate('/workout/browse', { state: { modality: label } })
     } else {
@@ -112,11 +107,7 @@ export default function StartWorkout() {
         <p className="text-dark-300 text-[13px] mt-1 mb-5">{todayLabel}</p>
       </div>
 
-      {/* Standby first. Someone who planned a session already decided what to
-          do — making them rebuild it from the modality grid is the app
-          forgetting on their behalf. */}
-      {/* Above standby: an unfinished workout is a decision already in
-          progress, and it must be resolved before another one is started. */}
+      {/* An unfinished workout first, then anything on standby */}
       <UnfinishedStrip />
 
       <StandbyStrip />
@@ -158,8 +149,7 @@ export default function StartWorkout() {
           {
             icon: <IcMic />,
             label: t('start.voice'),
-            // Unsupported is stated rather than hidden: a missing row reads as
-            // a bug, an explained one reads as a device limit.
+            // Unsupported is explained, not hidden
             sub: voiceSupported === false
               ? t('start.voiceUnsupported')
               : t('start.voiceExamples'),
@@ -178,10 +168,7 @@ export default function StartWorkout() {
             sub: t('start.audioSub'),
             on: audio, set: setAudio,
           },
-          // Pace coaching is NOT in this list on purpose. It only means
-          // anything on a run, and a switch that does nothing for four of the
-          // five session types teaches people to ignore the whole card. It is
-          // its own block below, shown when Cardio is the chosen modality.
+          // Pace coaching is not listed here — it has its own block, shown for cardio only
         ].map((item, i, rows) => (
           <div key={item.label}
             className={`flex items-center gap-3 py-3.5 ${i < rows.length - 1 ? 'border-b border-dark-700' : ''}`}>
@@ -197,9 +184,7 @@ export default function StartWorkout() {
         ))}
       </div>
 
-      {/* A way in to the full list, rather than a paragraph of it. Shown only
-          when voice is on and can work — a command list under a dead switch is
-          just noise. */}
+      {/* Voice command list, only when voice is on and supported */}
       {voice && voiceSupported !== false && (
         <button
           onClick={() => setShowVoiceHelp(true)}
@@ -220,11 +205,7 @@ export default function StartWorkout() {
         </button>
       )}
 
-      {/* Pace coach — cardio only, because it is the only modality with a pace.
-          On/off and nothing else: the pace itself is chosen on the run screen,
-          where the activity is actually known. Choosing "5:00 per kilometre"
-          here, before picking between an outdoor run and a jump rope, was
-          asking for a number that might turn out to mean nothing. */}
+      {/* Pace coach on/off — cardio only; the pace itself is chosen on the run screen */}
       {modality === 'cardio' && (
         <>
           <Eyebrow>{t('start.paceCoachEyebrow')}</Eyebrow>
@@ -232,8 +213,7 @@ export default function StartWorkout() {
             onClick={() => {
               const next = !paceCoach
               setPaceCoach(next)
-              // It has no channel but speech, so switching it on switches cues
-              // on with it rather than leaving a switch that does nothing.
+              // It speaks, so enabling it turns audio cues on too
               if (next && !audio) setAudio(true)
             }}
             className="w-full mb-6 flex items-center gap-3 bg-dark-800 border border-dark-600
@@ -270,24 +250,8 @@ export default function StartWorkout() {
 }
 
 /**
- * What is already lined up, above the "what shall I do today" grid.
- *
- * Renders nothing at all when there is neither a standby workout nor a saved
- * plan — an empty prompt on a screen someone opened to start training is just
- * an obstacle between them and the barbell.
- */
-/**
- * The workout that was started and never finished.
- *
- * `startSession` creates a row on the Start tap and only `finishSession` writes
- * `duration`, so anything interrupted in between — a force quit, a dead
- * battery, or just changing your mind — used to sit in the database forever and
- * show up in the calendar as a blank entry.
- *
- * The prompt is the honest half of the fix: an interrupted session usually has
- * real sets in it, and silently binning them because the app never asked is a
- * worse bug than the clutter. Anything still open after a threshold is swept
- * server-side, so ignoring this costs nothing.
+ * The unfinished workout, if any: resume or discard. Sessions left open are
+ * also swept server-side after a while.
  */
 function UnfinishedStrip() {
   const navigate = useNavigate()
@@ -300,8 +264,7 @@ function UnfinishedStrip() {
     let cancelled = false
     workoutService.getActiveSession()
       .then(session => { if (!cancelled) setActive(session) })
-      // A failed lookup hides the strip. The sweep still clears it later, and
-      // an error banner on the Start screen helps nobody mid-gym.
+      // A failed lookup just hides the strip
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
@@ -382,8 +345,7 @@ function StandbyStrip() {
         setNext(scheduled[0] ?? null)
         setPlanCount(templates.length)
       })
-      // A failed lookup just means the strip stays hidden; the rest of the
-      // screen is what the athlete came for.
+      // A failed lookup just hides the strip
       .catch(() => {})
       .finally(() => { if (!cancelled) setReady(true) })
 
@@ -417,8 +379,7 @@ function StandbyStrip() {
         {isToday
           ? t('start.standbyToday')
           : t('start.standbyOn', {
-              // `upper` rather than toUpperCase: Greek loses the accent when
-              // uppercased, and keeping it reads as a typo.
+              // Locale-aware uppercase (Greek drops accents)
               date: upper(when.toLocaleDateString(intl, {
                 weekday: 'short', day: 'numeric', month: 'short',
               })),

@@ -11,28 +11,15 @@ import {
 import { useT } from '../i18n'
 import { CakeIcon, ScaleIcon, TargetIcon } from '../components/icons'
 
-// The gated stage of onboarding.
-//
-// One question per screen on purpose. A single long form is faster to build and
-// measurably worse to finish on a phone — the numeric fields here each need a
-// different keyboard, and stacking them means every mistake is a scroll away
-// from the error that explains it.
-//
-// Nothing is submitted until the last step, so a user can move backwards freely
-// and change an answer without a half-written profile existing server-side.
-//
-// EVERY numeric field holds a STRING, not a number. Storing them as numbers
-// meant clearing a field ran Number('') === 0, which stamped a hard 0 into the
-// input the moment you deleted the last digit. Parsing happens at the edges —
-// on validate and on submit — and nowhere in between.
+// The gated onboarding stage: one question per screen, submitted only at the
+// end. Numeric fields hold strings (Number('') is 0); parsing happens on
+// validate and submit.
 
 type Sex = OnboardingAnswers['sex']
 type Level = OnboardingAnswers['fitnessLevel']
 type Goal = OnboardingAnswers['goal']
 
-// Values only — the labels are dictionary keys built from them (`sex.male`,
-// `level.beginnerBlurb`), which the typecheck resolves, so a value with no
-// label in either language cannot be added here.
+// Values only; labels are dictionary keys built from them.
 const SEXES: Sex[] = ['male', 'female', 'other', 'prefer_not_to_say']
 const LEVELS: Level[] = ['beginner', 'intermediate', 'advanced']
 const GOALS: Goal[] = ['hypertrophy', 'strength', 'endurance', 'weight_loss']
@@ -57,9 +44,7 @@ export default function Onboarding() {
   // Metric fields
   const [cm, setCm] = useState('')
   const [kg, setKg] = useState('')
-  // Imperial fields. Held separately rather than derived from cm/kg: deriving
-  // them meant every keystroke round-tripped through a conversion, so typing
-  // "5" then "10" inches made the feet box twitch as the value re-split.
+  // Imperial fields held separately, so typing doesn't re-split through a conversion
   const [feet, setFeet] = useState('')
   const [inches, setInches] = useState('')
   const [lb, setLb] = useState('')
@@ -73,7 +58,7 @@ export default function Onboarding() {
 
   const birth = useMemo(() => resolveBirthDate(birthParts), [birthParts])
 
-  // Height and weight resolved to metric, whatever was typed.
+  // Height and weight in metric, whatever was typed
   const measurements = useMemo(() => {
     if (imperial) {
       const f = num(feet), i = num(inches), l = num(lb)
@@ -117,8 +102,7 @@ export default function Onboarding() {
         ...(daysPerWeek != null ? { trainingDaysPerWeek: daysPerWeek } : {}),
         ...(years != null ? { experienceYears: years } : {}),
       })
-      // Refresh the cached user so the route guard sees onboardingCompletedAt
-      // and stops redirecting back here.
+      // Refresh the user so the route guard sees onboardingCompletedAt
       await fetchMe()
       navigate('/', { replace: true })
     } catch (err: any) {
@@ -138,7 +122,7 @@ export default function Onboarding() {
     <div className="min-h-dvh bg-dark-900 flex flex-col px-6
                     pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]">
 
-      {/* Progress. The intro step is included so the bar is never empty. */}
+      {/* Progress (the intro step counts, so the bar is never empty) */}
       <div className="flex gap-1.5 mb-8">
         {Array.from({ length: TOTAL_STEPS }, (_, i) => (
           <div key={i}

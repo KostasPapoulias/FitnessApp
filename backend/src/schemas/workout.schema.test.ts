@@ -1,12 +1,6 @@
 /**
- * The bounds that stop nonsense becoming training history.
- *
- * Worth testing for a reason the fatigue tests are not: these assertions are
- * about values that are *rejected*, and a schema that silently stops rejecting
- * something looks exactly like a schema that is working. Loosening a bound by
- * accident — an `.optional()` where `.nullish()` was meant, a `z.number()` that
- * lost its `.min()` in a refactor — produces no error anywhere until bad data
- * is already in Postgres.
+ * Tests that the request schemas keep rejecting out-of-range values — a
+ * loosened bound fails silently until bad data is stored.
  */
 
 import { test, describe } from 'node:test'
@@ -37,7 +31,6 @@ describe('logSetSchema', () => {
   })
 
   test('rejects a negative weight', () => {
-    // The example from the TODO. Accepted before, and it became fatigue input.
     rejects(logSetSchema, { ...strengthSet, weight: -50 })
   })
 
@@ -79,7 +72,7 @@ describe('logSetSchema', () => {
   })
 
   test('rejects a string where a number belongs', () => {
-    // `'80' > 100` is false, which is how a string used to pass a range check.
+    // `'80' > 100` is false, which is how strings once passed a range check
     rejects(logSetSchema, { ...strengthSet, weight: '100' })
     rejects(logSetSchema, { ...strengthSet, rpe: '8' })
   })
@@ -97,9 +90,7 @@ describe('logSetSchema', () => {
   })
 
   test('distance is kilometres, so a client sending metres is rejected', () => {
-    // SetCardio.distance is km rounded to 2dp (RunTrack.distanceM is the metre
-    // one). The bound inherited from the old clamp table read it as metres and
-    // allowed 500_000, so a 5 km run sent as 5000 was stored as 5000 km.
+    // Distance is km; a client sending metres must be rejected
     accepts(logSetSchema, {
       workoutExerciseId: 'we_1', setNumber: 1, setType: 'CARDIO', time: 1800, distance: 5,
     })
@@ -153,8 +144,7 @@ describe('updateSetSchema', () => {
   })
 
   test('rejects out of range rather than clamping it', () => {
-    // The old clampField stored 10000 kg as 1000 and told nobody, so the
-    // athlete's history gained a lift they never did.
+    // Out of range is rejected, never silently clamped
     rejects(updateSetSchema, { weight: 10_000 })
     rejects(updateSetSchema, { rpe: 99 })
   })
@@ -171,8 +161,7 @@ describe('overrideFatigueSchema', () => {
   })
 
   test('rejects what the old hand-written check let through', () => {
-    // `undefined < 0` is false and `undefined > 100` is false, so an absent
-    // field passed the range test and reached Prisma. So did a string.
+    // An absent field or a string once passed the hand-written range check
     rejects(overrideFatigueSchema, {})
     rejects(overrideFatigueSchema, { fatigueLevel: undefined })
     rejects(overrideFatigueSchema, { fatigueLevel: '80' })

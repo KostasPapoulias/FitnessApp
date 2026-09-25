@@ -1,19 +1,13 @@
 import type { MessageKey } from './en'
 
-// Greek. Typed against the English keys, so a missing or misspelt key fails
-// the typecheck rather than showing up on a phone.
-//
-// Conventions, so later screens stay consistent with these:
-//   - Informal second person (εσύ), as the English addresses "you".
-//   - Gym vocabulary Greek lifters actually use stays as is: σετ, RPE, PR, 1RM,
-//     HRV, kg/cm. Translating "set" to "σειρά" reads like a textbook.
-//   - No gendered adjectives about the athlete — Greek adjectives agree with
-//     the person, and the app does not know who is reading. Nouns instead
-//     ("Κούραση", not "Κουρασμένος"), or a verb in the second person.
+// Greek, typed against the English keys. Conventions:
+//   - Informal second person (εσύ).
+//   - Gym terms stay as used: σετ, RPE, PR, 1RM, HRV, kg/cm.
+//   - No gendered adjectives about the athlete: use nouns ("Κούραση") or
+//     second-person verbs.
 //   - Readiness = ετοιμότητα, recovery = αποκατάσταση, fatigue = κόπωση,
 //     session/workout = προπόνηση, training load = προπονητικό φορτίο.
-//   - Sentence case for headings. Several are uppercased in CSS, and with
-//     <html lang="el"> the browser drops the accents there on its own.
+//   - Sentence case; CSS uppercasing with lang="el" drops the accents itself.
 
 export const el: Record<MessageKey, string> = {
   //  Shared
@@ -557,8 +551,7 @@ export const el: Record<MessageKey, string> = {
   'start.smartFeatures': 'ΕΞΥΠΝΕΣ ΛΕΙΤΟΥΡΓΙΕΣ',
   'start.voice': 'Φωνητικές εντολές',
   'start.voiceUnsupported': 'Αυτή η συσκευή δεν έχει αναγνώριση φωνής',
-  // The commands themselves are English until the Greek voice grammar lands,
-  // so the examples stay in English and the note says so.
+  // Voice commands are English-only for now
   'start.voiceExamples': '«Set done», «eight reps at sixty» — στα αγγλικά',
   'start.haptic': 'Δόνηση στο τέλος του διαλείμματος',
   'start.hapticSub': 'Δονείται όταν τελειώνει το διάλειμμα',

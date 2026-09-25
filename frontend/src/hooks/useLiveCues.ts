@@ -7,23 +7,9 @@ import {
 } from '../lib/haptics'
 
 /**
- * The audio and haptic channel, gated once.
- *
- * Every cue in the app used to hang off the rest path — the `onDone` handler in
- * `ActiveWorkout` and the countdown inside `RestTimer`. That is the only place
- * a *strength* session waits for a clock, so it looked like the whole feature.
- * It is not: a metcon, a run and a mobility hold are the three parts of the app
- * where the phone is guaranteed to be out of your hands, and they were silent.
- *
- * The reason they were silent is that each one owns its own timer, and wiring
- * cues into three more timers means three more copies of
- * `if (audio) … if (haptic) …`. So the gate lives here instead and the views
- * call `say` / `buzz` unconditionally. A view that respects the switches by
- * construction cannot forget to.
- *
- * `speak` vs `interrupt` is the rank already established in `lib/speech.ts`:
- * a split announcement can wait its turn, "switch side" cannot — it is
- * instruction, and instruction arriving late is worse than not arriving.
+ * Audio and haptic cues for the live screens, gated once by the session's
+ * audio/haptic switches so views can call `say` / `buzz` unconditionally.
+ * `interrupt` is for instructions that cannot wait (e.g. "switch side").
  */
 
 export type BuzzKind =
@@ -64,13 +50,8 @@ export function useLiveCues() {
   }, [haptic])
 
   /**
-   * The last three seconds of any timer, said once each.
-   *
-   * Called from a 1Hz tick, so it has to be idempotent per second — a tick that
-   * fires twice in the same second (a re-render, a resumed interval) would
-   * otherwise stack "two, two" into the queue. The ref remembers the last
-   * number spoken rather than the last time it ran, which also makes a paused
-   * and resumed countdown replay correctly instead of skipping.
+   * The last three seconds of a timer, each spoken once. Tracks the last number
+   * spoken, so repeated ticks or a resume never double up.
    */
   const spokenAt = useRef<number | null>(null)
   const countdown = useCallback((secondsLeft: number) => {

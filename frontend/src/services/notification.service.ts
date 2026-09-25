@@ -4,7 +4,7 @@ export interface NotificationPreferences {
   pushEnabled: boolean
   /** Rule-driven: readiness, overreaching, inactivity. Never auto-suspends. */
   essentialEnabled: boolean
-  /** AI-planned nudges. Backs off and suspends itself when ignored. */
+  /** AI-planned nudges; back off and suspend when ignored. */
   coachEnabled: boolean
   timezone: string
   quietStartHour: number
@@ -24,19 +24,13 @@ export interface NotificationRecord {
   body: string
   status: string
   sentAt: string | null
-  /** Confirmed rendered on a device. Absent means unconfirmed, NOT undelivered. */
+  /** Confirmed rendered on a device. Absent means unconfirmed, not undelivered. */
   displayedAt: string | null
   clickedAt: string | null
   failReason: string | null
 }
 
-/**
- * The types a user can switch individually.
- *
- * `coach_nudge` is deliberately absent: the AI tier is controlled by the
- * `coachEnabled` flag rather than a per-type row, because the suspension and
- * backoff logic keys off that flag. A type row would let the two disagree.
- */
+/** Individually switchable types. `coach_nudge` is controlled by `coachEnabled` instead. */
 export const NOTIFICATION_CATALOGUE = [
   {
     type: 'readiness_ready',
@@ -49,8 +43,7 @@ export const NOTIFICATION_CATALOGUE = [
     icon: '⚠️',
     label: 'Injury risk warning',
     description: 'When your recent load spikes well above what you’re conditioned for.',
-    /** Disabling gets a confirm — it fires exactly when you feel fine and are
-     *  about to train through it, which is when it is easiest to dismiss. */
+    /** Turning it off asks for confirmation. */
     safety: true,
   },
   {
@@ -80,12 +73,7 @@ export const notificationService = {
   },
 }
 
-/**
- * The device's IANA zone, e.g. "Europe/Athens".
- *
- * Nothing timed can work without it — the server has no way to know what "9am"
- * means for a given user otherwise.
- */
+/** The device's IANA timezone, e.g. "Europe/Athens". */
 export const deviceTimezone = (): string => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'

@@ -4,29 +4,13 @@ import TrendChart from '../progress/TrendChart'
 import { MessageKey, useT } from '../../i18n'
 
 /**
- * Bodyweight over time, with BMI.
- *
- * The Biometric series was written from onboarding and every profile edit and
- * never read back — `onboarding.controller` even names the chart it was feeding.
- * This is that chart.
- *
- * The story is mostly ONE number, so the current weight and BMI lead as a stat
- * tile and the line supports them, rather than a plot with the headline buried
- * in it. Single series, so there is no legend: the heading names it.
- *
- * BMI is derived here and never stored. It is a pure function of two columns
- * already on the profile, and a stored copy would silently disagree with them
- * the first time either changed.
- *
- * The plot itself is `TrendChart` — this card's own scrub-and-table
- * implementation became the shared one when the progress screen needed two more
- * charts of the same kind. What stays here is what is specific to bodyweight:
- * the stat tile, BMI, and the unit conversion.
+ * Bodyweight over time with BMI. Current weight and BMI lead as a stat tile;
+ * the chart is TrendChart. BMI is derived, never stored.
  */
 
 const SERIES = '#00D4AA'      // brand-teal
 
-/** WHO bands. Colour is never the only cue — the label always says which. */
+/** WHO bands; the label always states the band, not just the colour. */
 const bmiBand = (bmi: number): { label: MessageKey; tone: string } =>
   bmi < 18.5 ? { label: 'bodyweight.underweight', tone: 'text-brand-yellow' } :
   bmi < 25   ? { label: 'bodyweight.normal',      tone: 'text-brand-green' } :
@@ -54,8 +38,7 @@ export default function BodyweightCard({ points, heightCm, imperial }: Props) {
     return latest.value / (metres * metres)
   }, [latest, heightCm])
 
-  // Converted for display only. Everything upstream is metric, and turning the
-  // series imperial anywhere but here is how a stored kilogram becomes a pound.
+  // Converted for display only; everything upstream is metric
   const trendPoints = useMemo(
     () => points.map(p => ({ at: p.measuredAt, value: p.value })),
     [points]
@@ -64,8 +47,7 @@ export default function BodyweightCard({ points, heightCm, imperial }: Props) {
   return (
     <div className="bg-dark-800 rounded-card border border-dark-600 overflow-hidden">
 
-      {/* Stat tile. Proportional figures on the hero — tabular-nums makes a
-          large number look loose, and nothing is aligned under it. */}
+      {/* Stat tile */}
       <div className="p-4 pb-2 flex items-end justify-between gap-3">
         <div>
           <p className="text-dark-300 text-xs uppercase tracking-wider">{t('bodyweight.title')}</p>
@@ -96,9 +78,7 @@ export default function BodyweightCard({ points, heightCm, imperial }: Props) {
         </p>
       )}
 
-      {/* A non-zero baseline is correct here: bodyweight moves by a few percent,
-          and anchoring at zero would flatten a real trend into a straight line.
-          The minimum span stops a stable weight becoming dramatic noise. */}
+      {/* Non-zero baseline, with a minimum span so a stable weight looks stable */}
       <TrendChart
         points={trendPoints}
         format={fmtWeight}

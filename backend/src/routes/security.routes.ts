@@ -38,8 +38,7 @@ router.delete('/pin', removePin)
 /**
  * @route POST /api/security/pin/verify
  * @protected
- * @returns unlocks the app. Rate limited on top of the per-account lockout,
- *          since the account counter alone can be reset by re-registering.
+ * @returns unlocks the app; rate limited on top of the per-account lockout
  */
 router.post('/pin/verify', pinLimiter, verifyPin)
 

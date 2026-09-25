@@ -5,26 +5,12 @@ import { INTL_LOCALE, Locale, MessageKey, Params, translate } from '../i18n'
 import type { DataExport, ExportSession, ExportSet } from '../services/export.service'
 
 /**
- * The data export as one self-contained HTML file.
+ * The data export as one self-contained HTML file: a readable report with a
+ * muscle map per session, plus the full export embedded as JSON.
  *
- * HTML because the brief was "keep everything, and each session's body map
- * too" — JSON and CSV can hold the numbers but not the picture, and a PDF
- * would mean shipping a PDF engine to the phone. An HTML file opens in any
- * browser on any device, prints to PDF from there, and needs nothing
- * installed. The complete machine-readable export is embedded in it as JSON,
- * with a button to save that on its own — the portability half is the
- * embedded data, the readable half is the page.
- *
- * The body maps are the one thing that needed care. Each traced body is ~17 KB
- * of path data, and inlining a front and back per session made a long history
- * tens of megabytes. Instead each body is written ONCE as a <symbol>, every
- * session draws it with <use>, and the colours come from CSS custom
- * properties set on that session's <svg>. Custom properties inherit into a
- * <use> shadow tree where ordinary selectors cannot reach, so each copy
- * colours independently for a couple of hundred bytes.
- *
- * Everything the athlete typed goes through `esc`. A note is free text, and
- * this file is opened as a page with scripts enabled.
+ * Each body SVG is written once as a <symbol> and reused with <use>; a
+ * session's colours come from CSS custom properties, which inherit into the
+ * <use> shadow tree. Everything the athlete typed goes through `esc`.
  */
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -41,12 +27,8 @@ const esc = (v: unknown): string =>
 const GROUP_IDS = [...new Set(Object.values(MUSCLE_NAME_TO_GROUP).flat())]
 
 /**
- * One traced body as a <symbol>.
- *
- * Group ids become `data-m` attributes: the front and back both have (say) a
- * Shoulders group, and two elements with one id in the same document is
- * invalid. The root group's black fill becomes the unworked-muscle grey, which
- * every muscle group inherits unless its own custom property is set.
+ * One traced body as a <symbol>. Group ids become `data-m` attributes (front
+ * and back share names); the root fill becomes the unworked grey.
  */
 const bodySymbol = (side: 'front' | 'back', gender: string | null) => {
   const svg = bodySvg(side, gender)
@@ -56,8 +38,7 @@ const bodySymbol = (side: 'front' | 'back', gender: string | null) => {
     .replace(/<\/svg>\s*$/, '')
     .replace(/<metadata[\s\S]*?<\/metadata>/g, '')
     .replace(/>[^<]+</g, '><')
-    // Spaces allowed around `=`: the male trace writes `id = "Chest"`, and a
-    // pattern without them left every one of its muscles uncoloured.
+    // Spaces allowed around `=` (the male trace writes `id = "Chest"`)
     .replace(/\bid\s*=\s*"/g, 'data-m="')
     .replace(/fill="#000000"/g, 'fill="#2A2A2A"')
   return `<symbol id="body-${side}" viewBox="${viewBox}">${inner}</symbol>`
@@ -93,7 +74,7 @@ export function buildExportHtml(
       : '—'
   const n = (v: number | null | undefined, digits = 1) =>
     v == null ? '—' : (Math.round(v * 10 ** digits) / 10 ** digits).toLocaleString(intl)
-  // fmtTime is minutes:seconds, which prints a long session as "65:00"
+  // h:mm:ss for an hour or more
   const dur = (sec: number | null | undefined) => {
     if (sec == null) return '—'
     if (sec < 3600) return fmtTime(sec)
@@ -189,8 +170,7 @@ export function buildExportHtml(
       <div class="mapRow">
         <div class="map" style="${esc(vars)}" role="img" aria-label="${esc(t('export.musclesAfter'))}">
           ${(['front', 'back'] as const).map(side =>
-            // Sized by the symbol's own viewBox, so the narrower female trace
-            // keeps its proportions. xlink:href as well for Safari before 12.1.
+            // Sized by the symbol's viewBox; xlink:href for older Safari
             `<svg><use href="#body-${side}" xlink:href="#body-${side}" width="100%" height="100%"/></svg>`,
           ).join('')}
         </div>
@@ -452,8 +432,7 @@ export function buildExportHtml(
 
 <script type="application/json" id="somatrack-data">${json}</script>
 <script>
-  // Saves the embedded export on its own. Reads it back out of the page
-  // rather than carrying a second copy, so the file holds the data once.
+  // Saves the embedded JSON by reading it back out of the page
   function saveJson() {
     var text = document.getElementById('somatrack-data').textContent;
     var blob = new Blob([JSON.stringify(JSON.parse(text), null, 2)], { type: 'application/json' });
@@ -475,14 +454,9 @@ export const exportFileName = (data: DataExport) =>
   `somatrack-export-${data.exportedAt.slice(0, 10)}.html`
 
 /**
- * Hand the file to the person.
- *
- * The share sheet first where there is one, because on a phone it is how a
- * file reaches Files, Drive or an email — but only with a live tap behind it:
- * the export takes seconds to fetch, iOS forgets the gesture by then and
- * refuses with NotAllowedError, and that is the case the anchor download below
- * exists for. Dismissing the sheet is an answer, not a failure, so AbortError
- * ends here rather than downloading anyway.
+ * Save the file: the share sheet on touch devices, else a download. If the
+ * share is refused (the tap's activation expired during the fetch), fall back
+ * to the download; a dismissed sheet ends there.
  */
 export async function saveExportFile(name: string, html: string): Promise<void> {
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
@@ -495,7 +469,7 @@ export async function saveExportFile(name: string, html: string): Promise<void> 
       return
     } catch (err) {
       if ((err as DOMException)?.name === 'AbortError') return
-      // NotAllowedError and friends: fall through to a plain download
+      // NotAllowedError etc.: fall back to a download
     }
   }
 
@@ -506,6 +480,6 @@ export async function saveExportFile(name: string, html: string): Promise<void> 
   document.body.appendChild(a)
   a.click()
   a.remove()
-  // Revoked late: some browsers start reading the blob after click() returns
+  // Revoked later; some browsers read the blob after click() returns
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

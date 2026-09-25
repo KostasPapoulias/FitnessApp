@@ -3,30 +3,21 @@ import { NOTIFICATION_TYPES } from './notification-preference.service'
 import { sendNotification } from './notification-sender.service'
 
 /**
- * Backs the coach tier off when it is being ignored, and eventually stops it.
- *
- * The single most important rule in here: only a notification confirmed
- * DISPLAYED and not clicked counts as ignored. A push lost to a flat battery,
- * a dead subscription or an offline phone never displayed, and treating that as
- * disinterest would punish people for bad connectivity by silencing their
- * coach.
- *
- * The essential tier is never touched. Someone who stops opening notifications
- * is exactly who still needs to be told they are ramping into an injury.
+ * Backs off the coach tier when its notifications are ignored, then suspends
+ * it. Only notifications confirmed displayed and not clicked count as ignored.
+ * The essential tier is never affected.
  */
 
 /** Ignored this many in a row → cut the daily cap right down. */
 const BACKOFF_THRESHOLD = 3
 /** Ignored this many in a row → stop the coach tier entirely. */
 const SUSPEND_THRESHOLD = 6
-/** Cap while backed off. */
 const BACKOFF_CAP = 1
 
 export const applyEngagementBackoff = async (userId: string) => {
   const pref = await prisma.notificationPreference.findUnique({ where: { userId } })
   if (!pref?.coachEnabled || pref.coachSuspendedAt) return
 
-  // Coach notifications only, newest first, and only ones we KNOW were shown.
   const shown = await prisma.notification.findMany({
     where: {
       userId,
@@ -38,7 +29,7 @@ export const applyEngagementBackoff = async (userId: string) => {
     select: { clickedAt: true },
   })
 
-  // Unbroken run of displayed-but-never-opened, counting back from the newest
+  // Consecutive displayed-but-unopened, newest first
   let streak = 0
   for (const notification of shown) {
     if (notification.clickedAt) break
@@ -53,8 +44,7 @@ export const applyEngagementBackoff = async (userId: string) => {
       data: { ignoredStreak: streak, coachSuspendedAt: new Date() },
     })
 
-    // One goodbye, through the essential tier so the suspension itself cannot
-    // suppress it, and dedupe-keyed so it can never repeat.
+    // One goodbye via the essential tier, deduped so it never repeats
     await sendNotification({
       userId,
       type: NOTIFICATION_TYPES.COACH_SUSPENDED,
@@ -70,8 +60,7 @@ export const applyEngagementBackoff = async (userId: string) => {
     where: { userId },
     data: {
       ignoredStreak: streak,
-      // Narrow to one a day rather than stopping outright — a quiet week is not
-      // the same as disinterest, and this is recoverable from a single tap.
+      // Narrow to one a day rather than stopping outright
       ...(streak >= BACKOFF_THRESHOLD && pref.dailyCap > BACKOFF_CAP
         ? { dailyCap: BACKOFF_CAP }
         : {}),
@@ -79,10 +68,7 @@ export const applyEngagementBackoff = async (userId: string) => {
   })
 }
 
-/**
- * Any tap is a strong positive signal, so it clears the streak immediately
- * rather than waiting for the next tick to recount.
- */
+/** A tap clears the ignored streak immediately. */
 export const registerEngagement = async (userId: string) => {
   await prisma.notificationPreference.updateMany({
     where: { userId, ignoredStreak: { gt: 0 } },

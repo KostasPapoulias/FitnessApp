@@ -1,7 +1,4 @@
-/**
- * Invokes the real finishSession controller with a minimal req/res pair, so the
- * verification exercises the shipped code path rather than a copy of its maths.
- */
+/** Calls the real finishSession controller with a minimal req/res pair. */
 import { PrismaClient } from '@prisma/client'
 import { finishSession } from '../src/controllers/workout.controller'
 

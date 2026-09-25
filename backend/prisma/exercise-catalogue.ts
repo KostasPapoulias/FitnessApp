@@ -1,60 +1,28 @@
-// The exercise catalogue: everything the seed knows how to create.
+// The exercise catalogue the seed creates. Calibration numbers live in
+// fatigue-tuning.ts, keyed by name; an exercise without an entry gets its
+// modality defaults.
 //
-// Split out of seed.ts the same way fatigue-tuning.ts was, and for the same
-// reason — this is content, edited far more often than the code that applies
-// it, and it is now long enough that the two do not belong in one file.
-//
-// Calibration numbers (damageFactor, loadFactor, referenceSpeedKmh) live in
-// fatigue-tuning.ts and are keyed by exercise name. An exercise added here
-// without an entry there still works: it just gets its modality's default
-// damage, no reference speed, and no first-time weight suggestion.
-//
-// ── naming ────────────────────────────────────────────────────────────────
-// Where the same movement exists on different kit, each implement gets its own
-// row, named for the implement: "Barbell Overhead Press", "Dumbbell Shoulder
-// Press", "Machine Shoulder Press". This is not cosmetic. `canPerform` in
-// training-constraints.service requires ALL of an exercise's equipment, so one
-// row tagged ['Barbell', 'Dumbbell'] means "needs both" and sorts to the bottom
-// for someone who owns only dumbbells. The variations also genuinely differ:
-// a machine press is guided and does less damage per unit of work, and a
-// dumbbell pair is loaded per hand, so they cannot share a loadFactor either.
-//
-// A bare name (Bench Press, Deadlift, Squat) means the barbell version, which
-// is what those names mean everywhere else in the sport.
+// Naming: each implement gets its own row ("Barbell Overhead Press",
+// "Dumbbell Shoulder Press") — `canPerform` requires ALL of an exercise's
+// equipment, and the variants differ in damage and load. A bare name means
+// the barbell version.
 
 // muscle impact tuple: [muscleName, impactFactor]
-//
-// impactFactor says how hard THIS movement drives THAT muscle, 0–1, and only
-// that — how much damage the work does is damageFactor's job. Rough scale:
-//   0.9–1.0  the movement's reason for existing
-//   0.6–0.8  a genuine second mover, trained but not the target
-//   0.3–0.5  stabiliser or assistant; involved, barely fatigued
+// impactFactor (0–1) is how hard the movement drives the muscle:
+//   0.9–1.0  the target   0.6–0.8  second mover   0.3–0.5  stabiliser
 export type M = [string, number]
 
 export interface Ex {
   name: string
   modality: string
-  /**
-   * Form cues, not a restatement of the name. This is the only prose in the
-   * app about how to actually perform the movement, and ExerciseDetail renders
-   * it verbatim — "Barbell flat bench chest press" told a reader nothing they
-   * could not get from the title.
-   */
+  /** Form cues shown on the exercise detail screen. */
   description: string
   categories?: string[]
   equipment?: string[]
   muscles: M[]
   /**
-   * Media id — the filename the thumbnail and the animation share, with no
-   * extension: `0025-EIeI8Vf` serves `/exercises/0025-EIeI8Vf.jpg` and
-   * `/exercises/0025-EIeI8Vf.gif` from the backend's static route.
-   *
-   * The id rather than two URLs, because the two always agree and storing
-   * them separately is an invitation for them to stop agreeing. Optional: the
-   * WOD block and outdoor Walking and Cycling have no artwork — the source
-   * library is a bodybuilding catalogue and depicts none of them — so
-   * anything rendering a thumbnail has to tolerate its absence rather than
-   * assume every exercise has one.
+   * Media id — the shared filename of the thumbnail (.jpg) and animation (.gif).
+   * Optional: some exercises have no artwork.
    */
   media?: string
 }
@@ -67,24 +35,14 @@ export const EQUIPMENT = [
   'Dumbbell', 'Barbell', 'Kettlebell', 'Bodyweight', 'Treadmill', 'Cable Machine',
   'Machine', 'Pull-up Bar', 'Bench', 'Resistance Band', 'Foam Roller', 'Rower',
   'Bike', 'Jump Rope', 'Yoga Mat', 'Plyo Box', 'Medicine Ball', 'EZ Bar', 'Dip Bars',
-  // Added with the equipment-variation catalogue. Each one exists because a
-  // movement genuinely needs it and no existing entry describes it: tagging a
-  // Smith machine squat as 'Machine' would tell someone with only a cable stack
-  // that they can do it.
+  // Equipment added for the implement-specific variants
   'Smith Machine', 'Trap Bar', 'Ab Wheel', 'Gymnastic Rings', 'Sled',
   'Battle Ropes', 'Elliptical', 'Stair Climber',
 ]
 
 /**
- * Old name → new name, applied before anything else on every seed run.
- *
- * Renaming in place rather than adding the new name and abandoning the old one:
- * an Exercise id is referenced by every logged set, strength estimate and
- * template that ever used it, so a "rename" that creates a fresh row silently
- * orphans the athlete's history and leaves a duplicate in the list.
- *
- * Only applied when the old name exists and the new one does not, so a second
- * run is a no-op and a hand-created row is never overwritten.
+ * Old name → new name, applied in place on every seed run so exercise ids
+ * (and all history) are kept. No-op once applied.
  */
 export const RENAMES: [from: string, to: string][] = [
   ['Shoulder Press', 'Barbell Seated Overhead Press'],
@@ -112,10 +70,7 @@ export const RENAMES: [from: string, to: string][] = [
   ['Leg Curl', 'Lever Lying Leg Curl'],
 
   // ── the exercises-dataset import ──────────────────────────────────────
-  // Our names were written independently of the media library; these adopt
-  // the library's, so Exercise.name and the artwork filename can never drift
-  // apart. Applied in place by applyRenames(), which updates the row by id —
-  // every logged set, strength estimate, template and favourite survives.
+  // Adopts the media library's names, so names and artwork filenames match.
   ['Ab Wheel Rollout', 'Wheel Rollerout'],
   ['Archer Push-up', 'Archer Push Up'],
   ['Arnold Press', 'Dumbbell Arnold Press'],
@@ -224,8 +179,7 @@ export const RENAMES: [from: string, to: string][] = [
   ['Weighted Decline Sit-up', 'Weighted Decline Sit-Up'],
   ['Weighted Dip', 'Weighted Bench Dip'],
   ['Wrist Curl', 'Dumbbell Reverse Wrist Curl'],
-  // Stranded long before this import: it has logged sets and a strength
-  // estimate but has not been in the catalogue for some time.
+  // Not in the catalogue, but still has logged history
   ['Planks', 'Weighted Front Plank'],
 ]
 

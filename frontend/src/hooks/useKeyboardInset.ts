@@ -4,17 +4,8 @@ import { useEffect, useState } from 'react'
 const KEYBOARD_MIN_HEIGHT = 80
 
 /**
- * Height in px that the on-screen keyboard covers at the bottom of the viewport.
- * 0 when the keyboard is closed.
- *
- * Uses visualViewport: the layout viewport keeps its full height while the
- * visual viewport shrinks, so the difference is the keyboard. This lets us
- * lift only the elements we choose instead of the whole page — the bottom nav
- * can stay pinned and get covered.
- *
- * Note: on Android WebView with the default adjustResize behaviour the OS
- * shrinks the layout viewport itself, so this reports 0 and the nav gets
- * pushed up with everything else.
+ * Height (px) the on-screen keyboard covers, from visualViewport; 0 when closed.
+ * Reports 0 on Android WebView with adjustResize, where the OS resizes the layout itself.
  */
 export const useKeyboardInset = () => {
   const [inset, setInset] = useState(0)

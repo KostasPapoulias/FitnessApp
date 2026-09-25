@@ -1,34 +1,16 @@
-// Everything the app holds about one athlete, in one document.
+// Everything the app holds about one athlete, as one JSON document. The client
+// renders it into a report and embeds the JSON in it.
 //
-// This is the portability half of the account controls — Delete Account has
-// always been real, and Export was an alert saying "coming soon". The shape is
-// a plain JSON tree the client turns into a readable report, and embeds
-// verbatim in that report, so the file a person downloads carries both a page
-// they can read and the data another program can.
-//
-// What is left out, and why:
-//   - Credentials: the password hash, the PIN hash, reset tokens and
-//     `tokenVersion`. They are about the account's security, not the person,
-//     and a copy in a Downloads folder is a copy an attacker can brute-force.
-//   - Push subscription endpoints and keys. They are bearer credentials for
-//     sending to the device, not information about the athlete.
-//   - AI spend counters. Operational accounting for the budget cap.
-//
-// Every read goes out in one Promise.all. The database is remote and ~290 ms
-// away, and there are sixteen independent reads here — issued in sequence
-// they would take nearly five seconds before any work began.
+// Deliberately excluded: credentials (password/PIN hashes, reset tokens,
+// tokenVersion), push subscription keys, and AI spend counters.
 
 import prisma from '../lib/prisma'
 
 export const EXPORT_FORMAT = 'somatrack-export'
-/** Bumped when a field is renamed or removed, so an importer can tell. */
+/** Bumped when a field is renamed or removed. */
 export const EXPORT_VERSION = 1
 
-/**
- * The colour a muscle's post-session fatigue is drawn in on the body map.
- * Shared with the calendar's day view, so a session looks the same in the
- * export as it did in the app.
- */
+/** Body-map colour for a muscle's fatigue level; shared with the calendar day view. */
 export const fatigueColor = (level: number): string =>
   level >= 70 ? '#EF4444' : level >= 35 ? '#FACC15' : '#4ADE80'
 
@@ -57,7 +39,7 @@ export const buildDataExport = async (userId: string) => {
       select: {
         preferredUnit: true, notificationEnabled: true, inactivityDaysThreshold: true,
         theme: true, aiConsentEnabled: true, language: true,
-        // Read only to say whether a PIN exists. The hash itself never leaves.
+        // Read only to report whether a PIN exists
         pinHash: true,
       },
     }),
@@ -195,17 +177,14 @@ export const buildDataExport = async (userId: string) => {
     })),
 
     sessions: sessions.map(s => {
-      // The body map after this session: each muscle's LAST log from it, the
-      // same reduction the calendar's day view makes. A muscle hit by two
-      // exercises has two logs, and the later one is where it ended up.
+      // The body map after this session: each muscle's last log from it
       const lastByMuscle = new Map<string, typeof s.fatigueLogs[number]>()
       for (const l of s.fatigueLogs) lastByMuscle.set(l.muscle.name, l)
 
       return {
         id: s.id,
         dateTime: iso(s.dateTime),
-        // An unfinished session is exported too — it is still data the app
-        // holds — but flagged, because none of it reached the fatigue model.
+        // Unfinished sessions are included but flagged — they never reached the fatigue model
         finished: s.duration != null,
         durationSec: s.duration,
         avgRpe: s.avgRpe,
@@ -248,8 +227,7 @@ export const buildDataExport = async (userId: string) => {
               timeSec: set.wod.time,
             },
             mobility: set.mobility && { timeSec: set.mobility.time },
-            // The whole run, route included. It is the heaviest part of the
-            // file, and the part nobody could reconstruct from anything else.
+            // The whole run, route included
             run: set.runTrack && {
               startedAt: iso(set.runTrack.startedAt),
               distanceM: set.runTrack.distanceM,
@@ -272,9 +250,7 @@ export const buildDataExport = async (userId: string) => {
       e1rmKg: Math.round(e.e1rm * 10) / 10,
       updatedAt: iso(e.updatedAt),
     })),
-    // Stored as of the last write; the app decays these on read. Exported raw
-    // with the timestamps that define the curve, rather than a value computed
-    // at export time that would already be wrong by the time it is opened.
+    // Stored values plus the timestamps that define their decay curves
     currentFatigue: {
       muscles: muscleFatigue.map(m => ({
         muscle: m.muscle.name,

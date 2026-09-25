@@ -4,7 +4,7 @@ import { RunPayload } from '../lib/runPayload'
 export interface PlanSuggestion {
   exerciseId: string
   sets: { reps: number; weight: number; rpe: number; restSeconds: number }[]
-  /** How the numbers were arrived at — drives the note shown on the plan screen */
+  /** How the numbers were arrived at; drives the note on the plan screen. */
   basis: 'progression' | 'repeat' | 'deload' | 'return' | 'estimate' | 'default'
   note: string
   e1rm: number | null
@@ -12,8 +12,7 @@ export interface PlanSuggestion {
 }
 
 export const workoutService = {
-  // What the athlete should actually be lifting, from their own history.
-  // Batched: the plan screen needs every exercise at once.
+  // Suggested sets from the athlete's history, batched for the plan screen
   getPlanSuggestions: async (
     exercises: { exerciseId: string; fallback: PlanSuggestion['sets'] }[]
   ): Promise<PlanSuggestion[]> => {
@@ -35,13 +34,7 @@ export const workoutService = {
     return res.data.data
   },
 
-  /**
-   * Write (or clear) the note on one exercise in a session.
-   *
-   * An empty string is a real value here, meaning "cleared" — the server
-   * collapses it to null. Sending `undefined` instead would leave the old text
-   * in place, which is the opposite of what an emptied field means.
-   */
+  /** Write or clear an exercise note; '' clears it (the server stores null). */
   updateExerciseNotes: async (
     sessionId: string,
     workoutExerciseId: string,
@@ -73,12 +66,7 @@ export const workoutService = {
     return res.data.data
   },
 
-  /**
-   * The full recorded run behind a cardio set — route included.
-   *
-   * Its own request because the route is by far the largest thing a session
-   * owns, and the calendar lists dozens of sets it would never draw.
-   */
+  /** The full recorded run for a cardio set, route included. */
   getRunTrack: async (setId: string) => {
     const res = await api.get(`/workout/sets/${setId}/run`)
     return res.data.data as RunPayload | null
@@ -89,25 +77,13 @@ export const workoutService = {
     return res.data.data
   },
 
-  /**
-   * The workout that was started and never finished, if there is one.
-   *
-   * Powers the resume-or-discard prompt. `setCount` is what makes the prompt
-   * honest — discarding an empty session and discarding six logged sets are
-   * not the same decision.
-   */
+  /** The unfinished session, if any, with its set count, for the resume prompt. */
   getActiveSession: async (): Promise<ActiveSession | null> => {
     const res = await api.get('/workout/sessions/active')
     return res.data.data
   },
 
-  /**
-   * Remove a session and everything derived from it.
-   *
-   * For a finished session the server reverses the fatigue it caused, rebuilds
-   * readiness and re-derives the strength estimates — so this is never just a
-   * row disappearing from a list.
-   */
+  /** Delete a session; for a finished one the server also reverses its fatigue and estimates. */
   deleteSession: async (sessionId: string) => {
     const res = await api.delete(`/workout/sessions/${sessionId}`)
     return res.data.data as { id: string; reversed: boolean }

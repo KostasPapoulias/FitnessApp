@@ -2,37 +2,23 @@ import { useEffect, useRef, useState } from 'react'
 import { useDeviceType } from './useDeviceType'
 
 /**
- * A small amount of counter-rotation driven by how the phone is held, so an
- * element appears to hang and stay upright rather than being painted onto the
- * screen.
+ * Slight counter-rotation from how the phone is held, so an element seems to
+ * hang level. Phone gyroscope only, no fallback animation. iOS 13+ needs a
+ * permission granted from a user gesture.
  *
- * Deliberately understated. The output is a fraction of the real tilt and hard
- * clamped, because a decoration that tracks the device one-to-one stops reading
- * as physics and starts reading as a bug.
- *
- * Uses DeviceOrientationEvent directly — no Capacitor plugin needed, this works
- * in a Home Screen web app. The one platform wrinkle is iOS 13+, which requires
- * an explicit permission grant triggered by a user gesture.
- *
- * Phone and gyroscope only. There is no time-based fallback animation: with no
- * sensor the element is meant to sit still, because the movement is supposed to
- * be the phone's, not a loop playing at it.
- *
- * If it appears dead on a phone, the sensor is the thing to check before the
- * code — a declined iOS prompt is remembered in `PERMISSION_KEY` and never asked
- * again, and Chrome only delivers `deviceorientation` in a secure context, so a
- * dev server on plain http over the LAN gets nothing at all.
+ * If it seems dead: a declined iOS prompt is remembered in PERMISSION_KEY
+ * (clear it to re-test), and Chrome only delivers `deviceorientation` over https.
  */
 
 /** Real tilt beyond this contributes nothing more. */
 const MAX_INPUT_DEG = 35
 /** Furthest the element ever rotates, in degrees. */
 const MAX_OUTPUT_DEG = 5.5
-/** Ignore below this, or hand tremor makes it twitch while sitting still. */
+/** Ignore tilt below this (hand tremor). */
 const DEAD_ZONE_DEG = 1.5
-/** Per-frame approach to the target. Lower is heavier and slower to settle. */
+/** Per-frame easing toward the target; lower is heavier. */
 const EASING = 0.075
-/** localStorage key — iOS should only ever be asked once. */
+/** localStorage key; iOS is only ever asked once. */
 const PERMISSION_KEY = 'somatrack_tilt_permission'
 
 type PermissionState = 'unknown' | 'granted' | 'denied'
@@ -50,8 +36,7 @@ export const useDeviceTilt = (): number => {
   const { isPhone } = useDeviceType()
   const [tilt, setTilt] = useState(0)
 
-  // Target and current live in refs: the animation frame reads them every tick
-  // and re-rendering on each raw sensor event would be ~60 renders a second.
+  // Refs, read by the animation frame, so sensor events don't re-render
   const target = useRef(0)
   const current = useRef(0)
 
@@ -59,7 +44,7 @@ export const useDeviceTilt = (): number => {
     if (!isPhone) return
     if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return
 
-    // Someone who has asked for less motion has asked for this too
+    // Respect reduced motion
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
     if (reduced.matches) return
 
@@ -68,8 +53,7 @@ export const useDeviceTilt = (): number => {
     let cancelled = false
 
     const onOrientation = (event: DeviceOrientationEvent) => {
-      // gamma is left-right tilt in portrait. Null on devices without the
-      // sensor, and on desktop browsers that fire the event with no data.
+      // gamma is left-right tilt; null without the sensor
       if (event.gamma == null) return
 
       const raw = clamp(event.gamma, -MAX_INPUT_DEG, MAX_INPUT_DEG)
@@ -77,14 +61,13 @@ export const useDeviceTilt = (): number => {
         ? 0
         : raw - Math.sign(raw) * DEAD_ZONE_DEG
 
-      // Negative: the element rotates AGAINST the tilt, which is what makes it
-      // read as staying level with the ground rather than following the screen.
+      // Rotate against the tilt, so the element stays level
       target.current = -(beyondDeadZone / MAX_INPUT_DEG) * MAX_OUTPUT_DEG
     }
 
     const tick = () => {
       const next = current.current + (target.current - current.current) * EASING
-      // Below a hundredth of a degree nothing is visible; stop re-rendering
+      // Skip invisible changes
       if (Math.abs(next - current.current) > 0.005) {
         current.current = next
         setTilt(Math.round(next * 100) / 100)
@@ -92,9 +75,7 @@ export const useDeviceTilt = (): number => {
       frame = requestAnimationFrame(tick)
     }
 
-    // Started with the listener, not before it: with no sensor reporting there
-    // is nothing for the loop to ease towards, and a frame loop that only ever
-    // computes zero is a wasted wake-up on every frame the phone paints.
+    // The frame loop starts with the listener, not before
     const listen = () => {
       if (listening || cancelled) return
       listening = true
@@ -102,8 +83,7 @@ export const useDeviceTilt = (): number => {
       frame = requestAnimationFrame(tick)
     }
 
-    // iOS 13+ only. The prompt appears solely inside a user gesture, so it has
-    // to wait for the first tap — asking on load is impossible.
+    // iOS 13+: the prompt only appears inside a user gesture, so wait for the first tap
     const requestOnce = async () => {
       document.removeEventListener('touchend', requestOnce)
       document.removeEventListener('click', requestOnce)
@@ -113,8 +93,7 @@ export const useDeviceTilt = (): number => {
         localStorage.setItem(PERMISSION_KEY, result)
         if (result === 'granted') listen()
       } catch {
-        // Denied, or not called from a real gesture. Either way, drop it —
-        // this is decoration and must never nag.
+        // Denied: never ask again
         localStorage.setItem(PERMISSION_KEY, 'denied')
       }
     }
@@ -122,17 +101,14 @@ export const useDeviceTilt = (): number => {
     const stored = localStorage.getItem(PERMISSION_KEY) as PermissionState | null
 
     if (!needsPermission() || stored === 'granted') {
-      // Android and everything else: no gate, just listen
+      // Elsewhere: no permission gate
       listen()
     } else if (stored !== 'denied') {
       document.addEventListener('touchend', requestOnce, { once: true })
       document.addEventListener('click', requestOnce, { once: true })
     }
 
-    // One cleanup for every path. The permission branch used to return its own
-    // early, which meant a granted iOS session left the orientation listener
-    // and the frame loop running after Home unmounted — and started a second
-    // loop on the way back in.
+    // One cleanup for every path, so no listener or frame loop outlives the component
     return () => {
       cancelled = true
       document.removeEventListener('touchend', requestOnce)

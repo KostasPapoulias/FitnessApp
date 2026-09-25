@@ -12,22 +12,15 @@ import { lazyRetry } from '../lib/lazyRetry'
 import { useT } from '../i18n'
 import { AlertTriangleIcon, FlameIcon, ModalityIcon, NoteIcon, PencilIcon, TrashIcon } from '../components/icons'
 
-// Pulls MapLibre in with it, so it is loaded only when a route is opened —
-// the calendar itself must not cost a map.
+// Lazy: RunDetail pulls in MapLibre, loaded only when a route is opened.
 const RunDetail = lazyRetry(() => import('../components/RunDetail'))
-//import { useFatigueStore } from '../store/useFatigueStore'
 
-// Weekday and month names come from Intl rather than a table: Greek needs
-// both the standalone month ("Ιανουάριος 2026") and correct short weekdays,
-// and the browser already has them for every locale.
-//
-// 1 Jan 2023 was a Sunday, so a week from it enumerates the columns in the
-// order the grid draws them.
+// Weekday names from Intl, in the grid's column order (1 Jan 2023 was a Sunday).
 const weekdayNamesFor = (intl: string) =>
   Array.from({ length: 7 }, (_, i) =>
     new Intl.DateTimeFormat(intl, { weekday: 'short' }).format(new Date(2023, 0, 1 + i)))
 
-// The tab's identity, not its label — the label is looked up for display.
+// Tab identity; labels are looked up for display.
 type Tab = 'Month' | 'Activity' | 'Muscles'
 
 interface DaySummary {
@@ -123,11 +116,7 @@ export default function Calendar() {
   const today = new Date()
   const [tab, setTab] = useState<Tab>('Month')
 
-  // `?date=YYYY-MM-DD` opens straight onto a day. This is what makes a row in
-  // History openable: the calendar already renders sets, runs and the per-day
-  // muscle map, so a second session-detail screen would be two places to fix
-  // the same bug. Read once, on mount — a link is a starting point, and
-  // watching it would fight the user every time they picked another day.
+  // `?date=YYYY-MM-DD` opens a day directly (used by History). Read once on mount.
   const [searchParams] = useSearchParams()
   const linkedDate = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get('date') ?? '')
     ? searchParams.get('date')!
@@ -141,11 +130,8 @@ export default function Calendar() {
   const [isLoadingMonth, setIsLoadingMonth] = useState(true)
   const [isLoadingDay,   setIsLoadingDay]   = useState(false)
   /**
-   * Which exercise has its sets open in a sheet, as IDENTIFIERS rather than as
-   * the object itself. Deleting a set reloads the day, and a snapshot taken
-   * when the sheet opened would keep rendering the set that is no longer
-   * there. `sessionId` also decides whether the rows are tappable, and the
-   * sheet renders far from the row that opened it.
+   * The exercise whose sets sheet is open, as ids — the sheet re-reads the day
+   * so it follows edits.
    */
   const [openExercise, setOpenExercise] =
     useState<{ sessionId: string; index: number } | null>(null)
@@ -153,9 +139,7 @@ export default function Calendar() {
     useState<{ set: any; exerciseName: string } | null>(null)
   /** The run whose route is open over the calendar, if any. */
   const [openRun, setOpenRun] = useState<{ setId: string; title: string } | null>(null)
-  // Which session's sets are currently correctable. Off by default: history is
-  // read almost always and edited almost never, and a set table that is always
-  // tappable invites changes nobody meant to make.
+  // The session whose sets are editable; off by default
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [editingSet, setEditingSet] = useState<{ set: any; exerciseName: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null)
@@ -176,7 +160,6 @@ export default function Calendar() {
     Muscles: t('calendar.tabMuscles'),
   }
 
-  // Load month data
   useEffect(() => {
     setIsLoadingMonth(true)
     calendarService.getMonth(month, year)
@@ -184,7 +167,6 @@ export default function Calendar() {
       .finally(() => setIsLoadingMonth(false))
   }, [month, year])
 
-  // Load day detail when date selected
   useEffect(() => {
     if (!selectedDate) { setDayDetail(null); return }
     setIsLoadingDay(true)
@@ -193,13 +175,7 @@ export default function Calendar() {
       .finally(() => setIsLoadingDay(false))
   }, [selectedDate])
 
-  /**
-   * Re-read the day and the month after an edit.
-   *
-   * Both, not just the day: deleting a session changes the month grid's dot and
-   * its volume total as well, and leaving the grid stale showed a day still
-   * marked as trained after its only workout had been removed.
-   */
+  /** Re-read the day and the month after an edit (the month grid changes too). */
   const reloadAfterMutation = async () => {
     const [day, monthData] = await Promise.all([
       selectedDate ? calendarService.getDay(selectedDate) : Promise.resolve(null),
@@ -209,9 +185,7 @@ export default function Calendar() {
     setDays(monthData.days ?? {})
   }
 
-  // Re-read on every render from the current day, so the sheet follows an
-  // edit instead of going stale. If the last set of an exercise goes, the
-  // exercise goes with it and the sheet closes on its own.
+  // Re-read from the current day on each render, so the sheet follows edits
   const openExerciseData = openExercise
     ? dayDetail?.sessions
         .find(s => s.id === openExercise.sessionId)
@@ -219,12 +193,8 @@ export default function Calendar() {
     : null
 
   /**
-   * Save a note from the day view, then patch it into the loaded day.
-   *
-   * No reload afterwards, unlike every other edit here: a note is not a
-   * fatigue input, so nothing else on the screen can have changed, and
-   * re-reading the day and the month is two round trips to learn that.
-   * Resolves false rather than throwing so ExerciseNotes can say "Not synced".
+   * Save a note, then patch it into the loaded day (notes change nothing else,
+   * so no reload). Resolves false on failure, for the "Not synced" marker.
    */
   const handleSaveNotes = async (sessionId: string, exercise: any, notes: string) => {
     if (!exercise.workoutExerciseId) return false
@@ -233,8 +203,7 @@ export default function Calendar() {
     } catch {
       return false
     }
-    // The server stores a cleared note as null — mirror that, so the day row
-    // does not render an empty note strip.
+    // The server stores a cleared note as null
     const stored = notes.trim() || null
     setDayDetail(prev => prev && {
       ...prev,
@@ -279,14 +248,14 @@ export default function Calendar() {
     }
   }
 
-  // Load activity/streak data once — needed for the header streak label too
+  // Activity and streak data, loaded once (the header uses it too)
   useEffect(() => {
     calendarService.getActivity()
       .then(setActivity)
       .finally(() => setIsLoadingActivity(false))
   }, [])
 
-  // Lazy-load muscle balance data on first visit to the Muscles tab
+  // Muscle balance data, loaded on first visit to its tab
   useEffect(() => {
     if (tab !== 'Muscles' || muscles) return
     setIsLoadingMuscles(true)
@@ -295,7 +264,7 @@ export default function Calendar() {
       .finally(() => setIsLoadingMuscles(false))
   }, [tab, muscles])
 
-  // Scroll the heatmap to today when the Activity tab is opened
+  // Scroll the heatmap to today when the Activity tab opens
   useEffect(() => {
     if (tab === 'Activity' && activity && heatScrollRef.current) {
       heatScrollRef.current.scrollLeft = heatScrollRef.current.scrollWidth
@@ -526,7 +495,7 @@ export default function Calendar() {
             {selectedDate && !isLoadingDay && dayDetail && (
               <div className="flex flex-col gap-4">
 
-                {/* Session summary — two column with mini SVG */}
+                {/* Session summary with the mini body map */}
                 <div className="bg-dark-800 rounded-card border border-dark-600 p-4">
                   <p className="text-dark-300 text-xs uppercase tracking-wider mb-3">
                     {new Date(selectedDate).toLocaleDateString(intl, {
@@ -606,9 +575,7 @@ export default function Calendar() {
                   <div className="flex flex-col gap-4">
                     {effectiveSessions.map((session, sIdx) => (
                       <div key={session.id} className="flex flex-col gap-3">
-                        {/* Swipe left for the bin, right to correct sets.
-                            SwipeActions stops the gesture propagating, so this
-                            never also slides Calendar to another tab. */}
+                        {/* Swipe left for delete, right to edit sets */}
                         <SwipeActions
                           left={{
                             label: editingSession === session.id ? t('calendar.editDone') : t('calendar.edit'),
@@ -656,10 +623,7 @@ export default function Calendar() {
                           const totalVol   = ex.sets.reduce((sum: number, s: any) =>
                             sum + (s.strength ? s.strength.reps * s.strength.weight : 0), 0)
 
-                          // A cardio entry is a run, not a set table: reps and
-                          // weight columns are empty for every row of it, and
-                          // the distance, the pace and the route are the whole
-                          // record of what happened.
+                          // Cardio entries show distance and pace, not a set table
                           const cardioSets = ex.sets.filter((s: any) => s.cardio)
                           const isCardio   = cardioSets.length > 0
                           const cardioKm   = cardioSets.reduce(
@@ -671,10 +635,7 @@ export default function Calendar() {
                             <div key={key}
                               className="bg-dark-800 border border-dark-600 rounded-card overflow-hidden">
 
-                              {/* Tap to open the sets in a sheet. Expanding in
-                                  place pushed every later exercise down the
-                                  page, and on a phone the row you tapped often
-                                  scrolled out of view as it opened. */}
+                              {/* Tap to open the sets in a sheet */}
                               <button
                                 onClick={() => setOpenExercise({ sessionId: session.id, index: idx })}
                                 className="w-full flex items-center gap-3 p-4 text-left
@@ -708,10 +669,7 @@ export default function Calendar() {
                                 <span className="text-dark-500 text-base">›</span>
                               </button>
 
-                              {/* The note under its sets, clamped — the whole
-                                  of it is in the sheet this row opens. Part of
-                                  the same tap target, so it never reads as a
-                                  second thing to press. */}
+                              {/* The note, clamped; part of the same tap target */}
                               {ex.notes && (
                                 <button
                                   onClick={() => setOpenExercise({ sessionId: session.id, index: idx })}
@@ -765,10 +723,7 @@ export default function Calendar() {
 
                   {/* Heatmap */}
                   <div ref={heatScrollRef} className="overflow-x-auto flex-1 min-w-0 pb-1 no-scrollbar">
-                    {/* Trailing padding gives the last (current) month's label room to
-                        overflow its 13px column without being clipped by the scroll
-                        boundary — without it, the label the view auto-scrolls to by
-                        default gets cut off / appears to vanish while scrolling. */}
+                    {/* Trailing padding so the current month's label isn't clipped */}
                     <div className="pr-8">
                       <div className="flex gap-[13px] mb-[3px]">
                         {activity.weeks.map((wk, wi) => (
@@ -907,13 +862,9 @@ export default function Calendar() {
         </div>
       )}
 
-      {/* The route, over everything. Its own layer rather than a route change:
-          closing it must put the athlete back on the same day, scrolled to the
-          same place, with the same exercise sheet still open. It is z-[70] so
-          it covers that sheet rather than opening behind it. */}
+      {/* The run's route as an overlay (z-[70]), so closing it returns to the same day and sheet */}
       {openRun && (
-        // A failed chunk here used to take the whole calendar down with it.
-        // Closing the sheet is always the right escape, so the fallback is one.
+        // A failed chunk only closes the sheet
         <ChunkBoundary
           label="run-detail"
           fallback={retry => (
@@ -943,8 +894,7 @@ export default function Calendar() {
         </ChunkBoundary>
       )}
 
-      {/* Rendered before SetEditSheet on purpose: both are z-[60], so DOM
-          order decides, and the set editor is opened FROM this sheet. */}
+      {/* Before SetEditSheet: both are z-[60], and the set editor opens from this sheet */}
       {openExercise && openExerciseData && (
         <ExerciseSetsSheet
           exercise={openExerciseData}
@@ -969,8 +919,7 @@ export default function Calendar() {
         />
       )}
 
-      {/* z-[70]: this one is raised over the exercise sheet it is confirmed
-          from, which is itself z-[60] like every other modal. */}
+      {/* z-[70]: above the exercise sheet it is confirmed from */}
       {confirmDeleteSet && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-6"
              data-no-page-swipe>
@@ -1009,8 +958,7 @@ export default function Calendar() {
         </div>
       )}
 
-      {/* z-60: BottomNav is fixed at z-50 and renders after <main>, so at equal
-          z-index it paints over the dialog and eats the confirm button. */}
+      {/* z-[60]: above BottomNav */}
       {confirmDelete && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmDelete(null)} />

@@ -3,18 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { progressService } from '../services/progress.service'
 import { HistoryRow } from '../types'
 
-/**
- * Workout history, newest first.
- *
- * The calendar could answer "what did I do on the 14th". This answers "what have
- * I been doing" — a different question that a month grid cannot express, because
- * the interesting spans cross month boundaries and most days are empty.
- *
- * Cursor-paged rather than offset-paged, and rows are lean: names and totals,
- * with the sets fetched only when a session is opened in the calendar. The old
- * `getSessions` deep-included every set of every modality for fifty sessions,
- * which is what made paging it impossible in the first place.
- */
+/** Workout history, newest first, cursor-paged with lean rows. */
 
 const fmtDate = (iso: string) => {
   const date = new Date(iso)
@@ -33,14 +22,7 @@ const fmtDuration = (minutes: number) =>
     ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
     : `${minutes}m`
 
-/**
- * The one-line summary of what a session was.
- *
- * Built from what the session actually contains rather than from a stored label:
- * a run shows its distance, lifting shows its tonnage, and anything with neither
- * falls back to sets. A row that says "0 kg" for an hour of mobility work reads
- * as a bug in the app rather than as a description of the session.
- */
+/** A session's one-line summary: distance, tonnage, or set count, by what it contains. */
 const summarise = (session: HistoryRow): string => {
   const parts: string[] = [`${session.setCount} set${session.setCount === 1 ? '' : 's'}`]
   if (session.distanceKm > 0) parts.unshift(`${session.distanceKm} km`)
@@ -62,9 +44,7 @@ export default function History() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('All')
 
-  // Refetches from scratch when the filter changes. Keeping the loaded pages and
-  // filtering them on the client would page through a filtered list using
-  // cursors from an unfiltered one, which skips rows.
+  // Refetch from scratch on filter change (cursors are per-filter)
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
@@ -108,8 +88,7 @@ export default function History() {
         <h1 className="text-xl font-extrabold text-white">History</h1>
       </div>
 
-      {/* Horizontally scrolled rather than wrapped: six chips do not fit a 430px
-          phone, and a second row of filters pushes the list below the fold. */}
+      {/* Filter chips scroll horizontally rather than wrapping */}
       <div className="flex gap-2 mb-4 overflow-x-auto -mx-4 px-4 pb-1">
         {MODALITY_FILTERS.map(m => (
           <button
@@ -155,10 +134,7 @@ export default function History() {
         {sessions.map(session => (
           <button
             key={session.id}
-            // The calendar owns the detail view — it already renders sets, runs
-            // and the per-day muscle map, and a second detail screen would be
-            // two places to fix the same bug. Landing on the session's own day
-            // is the closest thing to opening it.
+            // The calendar shows session detail; open the session's day there
             onClick={() => navigate(`/calendar?date=${session.dateTime.slice(0, 10)}`)}
             className="w-full bg-dark-800 rounded-card border border-dark-600 p-3.5
                        text-left active:bg-dark-700 transition-colors"

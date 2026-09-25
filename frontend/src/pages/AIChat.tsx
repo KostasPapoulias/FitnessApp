@@ -1,4 +1,4 @@
-// At the top of AIChat.tsx — replace the existing imports and add these
+// A chat thread with the AI coach, including its proposal cards.
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { aiService } from '../services/ai.service'
@@ -16,9 +16,7 @@ export default function AIChat() {
   const navigate  = useNavigate()
   const { threadId } = useParams<{ threadId: string }>()
   const location  = useLocation()
-  // Router state covers in-app navigation; `?ask=` covers arrivals from outside
-  // the app, where no state can be attached — a tapped push notification opens
-  // a URL and nothing else, so the topic has to travel in the query string.
+  // First message from router state, or `?ask=` (e.g. from a tapped push notification)
   const firstMessage =
     (location.state?.firstMessage as string | undefined) ??
     new URLSearchParams(location.search).get('ask') ??
@@ -33,10 +31,7 @@ export default function AIChat() {
   const isUnsaved = threadId === NEW_THREAD
 
   const [messages,   setMessages]   = useState<Message[]>([])
-  // Cards the coach has drafted and the athlete has not yet acted on. Kept
-  // beside the messages rather than inside them: a proposal has its own
-  // lifecycle — it can be applied, dismissed or expire — while a message never
-  // changes once sent.
+  // Proposal cards, kept apart from messages since they change state (applied, dismissed, expired)
   const [proposals,  setProposals]  = useState<AiProposal[]>([])
   const [input,      setInput]      = useState('')
   const [isLoading,  setIsLoading]  = useState(false)
@@ -50,9 +45,7 @@ export default function AIChat() {
   const sentFirst = useRef(false)
   const historyLoaded = useRef(false)
 
-  // Load history for this specific thread. Guarded by a ref because adopting
-  // the real thread id changes the route param, and re-fetching then would
-  // clobber the messages already on screen.
+  // Load this thread's history once — adopting the new thread id must not refetch
   useEffect(() => {
     if (historyLoaded.current) return
     if (isUnsaved || !threadId) {
@@ -65,8 +58,7 @@ export default function AIChat() {
         if (data.messages?.length > 0) {
           setMessages(data.messages)
         }
-        // Anything still awaiting a decision comes back with the conversation,
-        // so a card scrolled past is not lost on reload.
+        // Undecided cards come back with the conversation
         if (data.proposals?.length > 0) {
           setProposals(data.proposals)
         }
@@ -82,16 +74,9 @@ export default function AIChat() {
     }
   }, [isLoadingHistory, firstMessage])
 
-  // Also re-pin to the bottom when the keyboard opens, so the latest message
-  // isn't left behind the newly-raised input bar.
-  //
-  // The message list is scrolled directly rather than through
-  // `scrollIntoView()` on a trailing marker. `scrollIntoView` walks EVERY
-  // scrollable ancestor up to the document, and on a phone that included the
-  // document itself — so posting a message scrolled the page behind this fixed
-  // shell, which on iOS collapses the URL bar, resizes the viewport under a
-  // `position: fixed` element and leaves the bottom of the chat (where a
-  // proposal card's buttons sit) somewhere other than where it is drawn.
+  // Keep the list pinned to the bottom, also when the keyboard opens. Scrolls
+  // the list directly: scrollIntoView would also scroll the document behind
+  // this fixed shell (which misplaces it on iOS).
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
@@ -119,8 +104,7 @@ export default function AIChat() {
         activeThreadId === null
       )
 
-      // First message of an unsaved chat — adopt the id the server just
-      // created so follow-ups land in the same thread and a refresh works.
+      // First message of a new chat: adopt the id the server created
       if (activeThreadId === null && data.threadId) {
         setActiveThreadId(data.threadId)
         navigate(`/ai/chat/${data.threadId}`, { replace: true })
@@ -134,20 +118,15 @@ export default function AIChat() {
       }
       setMessages(prev => [...prev, aiMsg])
       if (data.proposals?.length > 0) {
-        // Stamped with the id of the message just added, because the server
-        // binds them to the stored assistant row only after it has replied —
-        // the copies returned here carry no messageId yet. Without this the
-        // card has nothing to sit next to and falls to the end of the thread,
-        // which is where it used to jump to on every later message.
+        // Stamped with this reply's id so the card sits under it (the server
+        // binds messageId only after replying)
         setProposals(prev => [
           ...prev,
           ...data.proposals.map((p: AiProposal) => ({ ...p, messageId: p.messageId ?? aiMsg.id })),
         ])
       }
     } catch (err: any) {
-      // 429 is the daily AI budget or the per-minute rate limit. The server
-      // already phrases those for a human, so show its reason rather than
-      // burying a real limit under "something went wrong".
+      // 429 (budget or rate limit): show the server's reason
       const limited = err?.response?.status === 429
       setMessages(prev => [...prev, {
         id:          Date.now().toString() + '_err',
@@ -165,7 +144,7 @@ export default function AIChat() {
   const proposalsFor = (messageId: string) =>
     proposals.filter(p => p.messageId === messageId)
 
-  // Cards with no message of their own, kept so nothing silently disappears.
+  // Cards whose message isn't in the loaded history, so none disappear
   const orphanProposals = proposals.filter(
     p => !p.messageId || !messages.some(m => m.id === p.messageId)
   )
@@ -174,19 +153,13 @@ export default function AIChat() {
     readinessScore >= 70 ? '#4ADE80' :
     readinessScore >= 40 ? '#FACC15' : '#EF4444'
 
-  // The shell is a fixed, full-height flex column so the message list can own
-  // the scrolling. Previously the header/input were independently `fixed` and
-  // the list used guessed padding, which let messages slide under both.
-  //
-  // Desktop: start after the sidebar instead of spanning the whole viewport.
-  // Phone: mirror the bottom nav's centred 430px column.
+  // A fixed full-height column; the message list is the only scroller.
+  // Desktop starts after the sidebar; phone matches the nav's 430px column.
   const shellClass = isPhone
     ? 'fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[430px]'
     : 'fixed top-0 right-0'
 
-  // Keyboard open -> sit directly on top of it, letting the bottom nav stay
-  // pinned at 0 and be covered. Closed -> clear the nav (phone only).
-  // --bottom-nav-h is measured and published by BottomNav.
+  // Sits on the keyboard when open, otherwise clears the nav (--bottom-nav-h)
   const shellBottom = keyboardInset > 0
     ? `${keyboardInset}px`
     : (isPhone ? `var(--bottom-nav-h, ${BOTTOM_NAV_HEIGHT}px)` : '0px')
@@ -201,9 +174,7 @@ export default function AIChat() {
       }}
     >
 
-      {/* Header with back button */}
-      {/* Fixed to the viewport top, so it sits outside AppLayout's inset and
-          has to clear the status bar itself. */}
+      {/* Header, clearing the status bar itself (fixed, outside AppLayout's inset) */}
       <div className="flex-shrink-0 bg-dark-900
               px-5 pb-3 pt-[calc(1rem+var(--safe-top))] border-b border-dark-700
               flex items-center gap-3">
@@ -248,12 +219,7 @@ export default function AIChat() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {/* Each card sits under the reply that drafted it, not at the end
-                of the thread. Anchored by `messageId`, which the server stores
-                when it saves the reply, so it survives a reopen and stays put
-                when the conversation continues past it — floating them at the
-                bottom made a plan look like it was drafted in answer to
-                whatever was asked last. */}
+            {/* Each card sits under the reply that drafted it (by messageId) */}
             {messages.map(msg => (
               <div key={msg.id} className="flex flex-col gap-4">
                 <MessageBubble message={msg} intl={intl} />
@@ -266,10 +232,7 @@ export default function AIChat() {
                 ))}
               </div>
             ))}
-            {/* Anything the messages could not claim: a card whose message is
-                older than the twenty this thread replays, or a thread that came
-                back with a pending card and no messages at all. Dropping these
-                would lose a plan the athlete can still accept. */}
+            {/* Cards not attached to a loaded message, so an acceptable plan is never lost */}
             {orphanProposals.map(proposal => (
               <ProposalCard
                 key={proposal.id}
@@ -300,9 +263,7 @@ export default function AIChat() {
       <div
         className="flex-shrink-0 bg-dark-900 px-4 pt-3 border-t border-dark-700"
         style={{
-          // Clear the home indicator only when nothing else already covers it:
-          // the keyboard when it's up, and the bottom nav (which now pads
-          // itself out of the inset) when the shell is stacked on top of it.
+          // Clear the home indicator only when neither the keyboard nor the nav covers it
           paddingBottom: keyboardInset > 0 || isPhone
             ? 12
             : 'calc(var(--safe-bottom) + 12px)',

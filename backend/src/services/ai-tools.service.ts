@@ -9,31 +9,22 @@ import {
 } from './custom-exercise.service'
 
 /**
- * What the coach is allowed to look up, and what it is allowed to draft.
+ * The AI coach's tools and its safety model.
  *
- * The split is the whole safety model, so it is worth stating plainly:
+ *   READ tools run immediately, always scoped to the caller's userId (never
+ *   supplied by the model), and change nothing.
+ *   WRITE tools never touch the app's tables: they validate a draft, store it
+ *   as an AiProposal and return a card the athlete must tap. An invented id or
+ *   misheard weight would otherwise become training history.
  *
- *   READ tools run. They are scoped to the caller's own userId — which the
- *   model never supplies and cannot influence — and they cannot change
- *   anything, so there is nothing to confirm and no reason to make the athlete
- *   approve a lookup mid-conversation.
- *
- *   WRITE tools do not run. They validate a draft, store it as an AiProposal,
- *   and return a card for the athlete to tap. The model has no path to the
- *   app's own tables at all. This is not caution about tone or phrasing: an
- *   invented exercise id or a misheard weight becomes training history, and
- *   fatigue, training load and every future suggestion are computed from that
- *   history. A wrong number does not stay wrong in one place.
- *
- * Deliberately absent, and not by oversight: nothing deletes, nothing edits a
- * set that was already performed, and nothing touches security settings or
- * sends a notification directly. Completed sessions are append-only to the AI.
+ * Nothing here deletes, edits a performed set, changes security settings or
+ * sends a notification.
  */
 
 /** How long a drafted card stays applicable. */
 export const PROPOSAL_TTL_MS = 30 * 60 * 1000
 
-/** Stops a confused model looping through lookups on one message. */
+/** Caps tool calls per message. */
 export const MAX_TOOL_CALLS_PER_MESSAGE = 6
 
 const READ_TOOLS = [
@@ -70,13 +61,7 @@ const setSchema = {
   },
 } as const
 
-/**
- * A tool the model may call, described in plain JSON Schema.
- *
- * Deliberately not a provider's own type. These declarations outlived one
- * provider migration already; keeping them in the format every provider derives
- * from means the next one costs an adapter, not a rewrite of all 800 lines.
- */
+/** A tool declaration in plain JSON Schema, provider-neutral. */
 export interface ToolDeclaration {
   name: string
   description: string
@@ -253,7 +238,7 @@ const intArg = (value: unknown, fallback: number, max: number) => {
 
 const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000)
 
-/** Parse a model-supplied timestamp, refusing anything unusable. */
+/** Parse a model-supplied timestamp; null when unusable. */
 const parseDate = (value: unknown): Date | null => {
   if (typeof value !== 'string' || !value.trim()) return null
   const date = new Date(value)
@@ -276,10 +261,7 @@ const describeSet = (set: {
 
 // ── read execution ────────────────────────────────────────────────────────
 
-/**
- * Run a lookup. Always scoped to `userId` from the verified token — the model
- * has no say in whose data it reads.
- */
+/** Run a read tool, scoped to `userId` from the verified token. */
 export const executeReadTool = async (
   userId: string,
   name: string,
@@ -290,17 +272,7 @@ export const executeReadTool = async (
       const limit = intArg(args.limit, 15, 40)
       const query = typeof args.query === 'string' ? args.query.trim() : ''
 
-      /**
-       * Words the model adds for precision but the catalogue spells differently.
-       *
-       * This used to be one `contains` over the whole phrase, which meant the
-       * query had to be a contiguous substring of the name. "Barbell Squat"
-       * therefore returned nothing at all while "Barbell Back Squat" sat in the
-       * catalogue — the model searched correctly, found zero, and refused to
-       * invent an id exactly as instructed, so the conversation dead-ended with
-       * no proposal. Matching each word independently fixes the whole class:
-       * word order stops mattering, and so do the words in between.
-       */
+      // Each word matched independently, so word order and extra words don't matter
       const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
 
       const runSearch = (words: string[]) => prisma.exercise.findMany({
@@ -312,7 +284,7 @@ export const executeReadTool = async (
           ...(args.muscle
             ? { muscleLinks: { some: { muscle: { name: { equals: String(args.muscle), mode: 'insensitive' as const } } } } }
             : {}),
-          // Catalogue movements plus this athlete's own, never another user's.
+          // Catalogue movements plus this athlete's own
           OR: [{ createdByUserId: null }, { createdByUserId: userId }],
         },
         include: { modality: true, muscleLinks: { include: { muscle: true } } },
@@ -323,10 +295,7 @@ export const executeReadTool = async (
       let exercises = await runSearch(terms)
       let widenedTo: string | null = null
 
-      // Still nothing: fall back to the most distinctive single word. "barbell
-      // squats" finds nothing on the plural but "squats" → "squat" does, and
-      // a slightly-too-broad list the model can pick from beats an empty one it
-      // has to give up on.
+      // Nothing found: retry with singular words, then the longest single word
       if (exercises.length === 0 && terms.length > 0) {
         const singular = terms.map(t => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t))
         exercises = await runSearch(singular)
@@ -343,9 +312,7 @@ export const executeReadTool = async (
 
       return {
         count: exercises.length,
-        // Say what actually happened. A bare count of 0 gave the model nothing
-        // to act on, so it apologised and stopped; naming the next move keeps
-        // the conversation going instead.
+        // Tell the model what happened and what to try next
         ...(widenedTo ? { note: `No exact match for "${query}" — showing results for "${widenedTo}" instead.` } : {}),
         ...(exercises.length === 0
           ? { hint: `Nothing matched "${query}". Search again with one distinctive word (e.g. "squat" rather than "barbell squat"), or use the muscle filter. Do not invent an exerciseId.` }
@@ -398,9 +365,7 @@ export const executeReadTool = async (
           notes: s.notes,
           exercises: s.workoutExercises.map(we => ({
             name: we.exercise.name,
-            // The athlete's own words about the movement — "left knee twinged",
-            // "grip gave out before the back did". The sets say what happened;
-            // this is often the only record of why.
+            // The athlete's own note on the exercise
             notes: we.notes,
             sets: we.sets.map(set => ({
               reps: set.strength?.reps ?? set.calisthenics?.reps ?? set.wod?.reps ?? null,
@@ -581,13 +546,8 @@ export interface ProposalSummary {
 }
 
 /**
- * Validate a draft and stage it for the athlete.
- *
- * Returns both what to tell the model and what to show the user. The two differ
- * on purpose: the model is told, in the function response, that nothing has
- * been saved — without that it reliably announces "done, I've added it to your
- * plan", and the athlete then never taps the card because they believe the work
- * is finished.
+ * Validate a draft and stage it as a proposal card. Returns what to tell the
+ * model (explicitly "not saved", or it claims the work is done) and the card.
  */
 export const createProposal = async (
   userId: string,
@@ -607,8 +567,7 @@ export const createProposal = async (
       })
 
       const scheduledFor = parseDate(args.scheduledFor)
-      // A reminder without a date to remind about is meaningless, and silently
-      // keeping it would schedule a push for a workout that is not on the plan.
+      // A reminder without a date is dropped
       const reminderAt = scheduledFor ? parseDate(args.reminderAt) : null
 
       const detail = await prisma.exercise.findMany({
@@ -620,8 +579,7 @@ export const createProposal = async (
       const payload = { template: clean, scheduledFor: scheduledFor?.toISOString() ?? null, reminderAt: reminderAt?.toISOString() ?? null }
 
       const row = await prisma.aiProposal.create({
-        // Structurally plain JSON; the interfaces it is built from just lack the
-        // index signature Prisma's Json input type asks for.
+        // Cast: plain JSON, but the interfaces lack Prisma's index signature
         data: { userId, threadId, kind: 'create_template', payload: payload as unknown as Prisma.InputJsonObject, expiresAt },
       })
 
@@ -705,10 +663,7 @@ export const createProposal = async (
     }
 
     if (name === 'propose_exercise') {
-      // Prepared, not created. Everything is resolved and checked now so the
-      // card shows the athlete exactly what would be saved — including which
-      // muscles the model's names actually matched, which is the part most
-      // worth them checking before they tap.
+      // Prepared, not created — the card shows exactly what would be saved
       const prepared = await prepareCustomExercise(userId, {
         name: args.name,
         modality: args.modality,
@@ -749,8 +704,7 @@ export const createProposal = async (
           status: 'drafted_not_saved',
           message:
             'A card has been shown to the athlete. The exercise does NOT exist until they tap it, so you cannot use it in a workout yet. Tell them it is ready to review — do NOT say it has been created or added.',
-          // Fed back so the model can correct itself out loud if a name it gave
-          // resolved to a muscle it did not mean.
+          // Lets the model correct a name that matched the wrong muscle
           resolvedMuscles: prepared.muscleLinks.map(l => `${l.muscleName} (${l.role})`),
         },
         proposal: {
@@ -767,13 +721,10 @@ export const createProposal = async (
 
     return { toModel: { error: `Unknown tool "${name}".` }, proposal: null }
   } catch (error) {
-    // A rejected draft is information the model can act on — usually it means a
-    // made-up exercise id, and telling it so gets a corrected second attempt
-    // instead of a silent failure the athlete never sees explained.
+    // A rejected draft goes back to the model so it can correct itself
     const message =
       error instanceof TemplateValidationError ? error.message :
-      // Carries the muscle and modality vocabulary back to the model, so a
-      // rejected draft becomes a corrected one rather than an apology.
+      // Includes the valid vocabulary, so the retry can succeed
       error instanceof CustomExerciseError ? error.message :
       'That draft could not be prepared.'
     return { toModel: { error: message }, proposal: null }
@@ -790,12 +741,8 @@ export class ProposalError extends Error {
 }
 
 /**
- * Turn an accepted card into real data.
- *
- * This is the only function in the AI path that writes to the app's own tables,
- * and it is reachable only from a request carrying the athlete's own token. It
- * applies the payload that was staged and shown — never anything the model says
- * afterwards — so what gets saved is what was on the card they looked at.
+ * Apply an accepted card — the only AI-path function that writes app data.
+ * Reachable only with the athlete's own token; applies exactly the staged payload.
  */
 export const applyProposal = async (userId: string, proposalId: string) => {
   const row = await prisma.aiProposal.findFirst({ where: { id: proposalId, userId } })
@@ -819,9 +766,7 @@ export const applyProposal = async (userId: string, proposalId: string) => {
   const payload = row.payload as any
 
   if (row.kind === 'create_template') {
-    // Re-validated on the way in as well as on the way out. The row has been
-    // sitting in the database, and an exercise could have been removed from the
-    // catalogue since it was drafted.
+    // Re-validated: the catalogue may have changed since drafting
     const template = await createTemplate(userId, { ...payload.template, source: 'ai' })
 
     let scheduled = null
@@ -856,10 +801,7 @@ export const applyProposal = async (userId: string, proposalId: string) => {
   }
 
   if (row.kind === 'create_exercise') {
-    // Re-prepared from the payload rather than trusting what was checked at
-    // draft time. The card may have sat for half an hour, and the duplicate
-    // check in particular is a claim about the catalogue right now — the
-    // athlete could have created the same movement by hand in between.
+    // Re-prepared: the duplicate check must reflect the catalogue now
     let prepared
     try {
       prepared = await prepareCustomExercise(userId, payload)
@@ -892,25 +834,9 @@ export const rejectProposal = async (userId: string, proposalId: string) => {
 }
 
 /**
- * Cards still awaiting a decision in a thread.
- *
- * Read when a conversation is reopened so the athlete can still act on
- * something they scrolled past. Expired rows are filtered rather than returned
- * greyed out — a card that cannot be tapped is only a reminder of a missed one.
- */
-/**
- * Every card this thread has produced, for redrawing the conversation.
- *
- * Not just the pending ones. A card is part of what was said: reopening a
- * thread and finding the plan the coach drafted simply gone reads as data
- * loss, whether it went because the athlete accepted it or because thirty
- * minutes passed. Applied and expired cards come back in a resolved state so
- * the transcript still makes sense; rejected ones do not, because "no thanks"
- * is an answer and re-showing it would be arguing.
- *
- * `status` is derived, not just read: a row can still say 'pending' while its
- * expiresAt has gone by, and offering that as tappable is the stale-draft
- * problem `expiresAt` exists to prevent.
+ * Every card a thread produced, for redrawing the conversation. Rejected
+ * cards are omitted; `status` is derived so an expired pending card shows as
+ * expired.
  */
 export const listThreadProposals = async (userId: string, threadId: string) => {
   const rows = await prisma.aiProposal.findMany({
@@ -940,13 +866,7 @@ export const listThreadProposals = async (userId: string, threadId: string) => {
   })
 }
 
-/**
- * The declarations above, in the shape the chat-completions API expects.
- *
- * The whole adapter is this function. Everything else about tools — what they
- * do, what they are allowed to touch, how a write becomes a proposal — is
- * provider-neutral and stays that way.
- */
+/** The declarations in the chat-completions `tools` shape — the only provider adapter. */
 export const toolsForChatCompletions = () =>
   TOOL_DECLARATIONS.map(tool => ({
     type: 'function' as const,

@@ -104,20 +104,7 @@ export default function WodPlan() {
         </div>
       </div>
 
-      {/*
-        Movements — reps AND load.
-
-        The load row is the whole point of this block. This screen used to step
-        reps only, so `set.weight` was never written and `WodView` logged the
-        metcon with no weight at all: a 43 kg thruster and an air squat reached
-        the fatigue model as the same movement, on the modality that costs the
-        most systemically of anything in the app.
-
-        Unsigned, unlike calisthenics — nothing in a metcon is band-assisted, so
-        there is no negative half of the axis to model. Zero means bodyweight
-        and is the common case, which is why the row stays quiet until it is
-        stepped rather than showing "0 kg" against every air squat.
-      */}
+      {/* Movements: reps and load per round. Load is never negative; 0 means bodyweight. */}
       <p className="text-[11px] font-bold tracking-[1.4px] text-dark-300 mb-3">EACH ROUND</p>
       <div className="flex flex-col gap-2.5">
         {selectedExercises.map((se, ei) => {

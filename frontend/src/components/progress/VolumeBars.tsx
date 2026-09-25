@@ -2,19 +2,9 @@ import { useMemo, useState } from 'react'
 import { VolumeWeek } from '../../types'
 
 /**
- * Weekly training volume, as bars.
- *
- * Bars rather than a line because each week is a discrete total, not a sample of
- * something continuous — and because the zeros matter. A week off is the thing
- * that explains the weeks either side of it, and a line would slope straight
- * through it.
- *
- * Three metrics behind one control, not three charts. They answer the same
- * question in different units and they disagree usefully: a week of running
- * moves `load` a long way and `volumeKg` barely at all, so an athlete looking at
- * tonnage alone would conclude they had done nothing. Sets are the fallback for
- * anyone whose training is mostly bodyweight, where tonnage is close to
- * meaningless.
+ * Weekly training volume as bars (zeros show weeks off). One control switches
+ * between tonnage, systemic load and sets — tonnage alone reads as nothing
+ * for runners and bodyweight work.
  */
 
 type Metric = 'volumeKg' | 'load' | 'sets'
@@ -28,10 +18,7 @@ const METRICS: { key: Metric; label: string; help: string }[] = [
 const BAR = '#00D4AA'      // brand-teal
 const BAR_DIM = '#2A2A2A'  // dark-600, for a week with nothing in it
 
-/**
- * `weekStart` is a bare YYYY-MM-DD, which `new Date()` reads as UTC midnight —
- * so west of UTC it renders as the day before. Built from the parts instead.
- */
+/** Formats a YYYY-MM-DD week from its parts (new Date would read it as UTC). */
 const fmtWeek = (dateOnly: string) => {
   const [y, m, d] = dateOnly.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -55,13 +42,8 @@ interface Props {
 
 export default function VolumeBars({ weeks, thisWeek, previousWeek }: Props) {
   /**
-   * Opens on whichever metric the athlete's training actually registers in.
-   * Defaulting to tonnage for a runner shows an empty chart, which reads as a
-   * bug rather than as a fact about their training.
-   *
-   * An initialiser, deliberately — not a value derived on every render. Deriving
-   * it would override the segmented control: tapping "Tonnage" would recompute
-   * back to "Sets" and the button would appear dead.
+   * Opens on the metric the athlete's training registers in. An initialiser
+   * only — deriving it every render would override the control.
    */
   const [metric, setMetric] = useState<Metric>(() => {
     const totalVolume = weeks.reduce((sum, w) => sum + w.volumeKg, 0)
@@ -100,8 +82,7 @@ export default function VolumeBars({ weeks, thisWeek, previousWeek }: Props) {
             )}
           </div>
 
-          {/* Segmented control. Three narrow buttons rather than a dropdown —
-              switching between these is the main thing done on this card. */}
+          {/* Metric switch */}
           <div className="flex bg-dark-900 rounded-full p-0.5 border border-dark-600 flex-shrink-0">
             {METRICS.map(m => (
               <button
@@ -121,9 +102,7 @@ export default function VolumeBars({ weeks, thisWeek, previousWeek }: Props) {
         </p>
       </div>
 
-      {/* Bars. Flex with a per-bar height rather than an SVG: there are at most
-          52 of them, they need no curve fitting, and each one is its own tap
-          target this way. */}
+      {/* Bars as flex items, each its own tap target */}
       <div className="px-4 pb-1">
         <div className="flex items-end gap-[3px] h-[120px]">
           {weeks.map((week, i) => {
@@ -156,9 +135,7 @@ export default function VolumeBars({ weeks, thisWeek, previousWeek }: Props) {
         </div>
       </div>
 
-      {/* Tapped week. Reads out every metric, not just the selected one — once
-          a week is picked, "how much of that was running" is the next question,
-          and switching the control to find out loses the selection. */}
+      {/* The tapped week, with every metric */}
       {active ? (
         <div className="px-4 py-3 border-t border-dark-700">
           <p className="text-white text-sm font-semibold">

@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useRef } from 'react'
 
-// Define the swipeable route order
+// Swipeable routes, in order
 const SWIPE_ROUTES = ['/', '/calendar', '/ai', '/profile']
 
 export const useSwipeNavigation = () => {

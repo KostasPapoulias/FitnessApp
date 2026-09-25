@@ -1,12 +1,6 @@
 /**
- * Server-side language: which one a request asked for, and whether the Greek
- * table still recognises the English it was written against.
- *
- * The second half is the one worth having. Translations are keyed by the exact
- * English a controller sends, so rewording a message quietly drops it back to
- * English — nothing fails, a Greek screen just grows an English sentence. These
- * tests generate the real messages from the real validators, so a reworded one
- * fails here instead.
+ * Tests for request-language resolution and that every message the validators
+ * can produce still has a Greek translation (rewording the English drops it).
  */
 
 import { test, describe } from 'node:test'

@@ -9,8 +9,6 @@ import {
 
 const router = Router()
 
-// Every route here reads one athlete's own training history. There is no public
-// read — unlike the exercise catalogue, none of this exists without a user.
 router.use(verifyToken)
 
 /**
@@ -24,9 +22,6 @@ router.get('/summary', getProgressSummary)
  * @route GET /api/progress/history?cursor=&limit=&modality=
  * @protected
  * @returns a page of finished sessions, newest first, plus the next cursor
- *
- * Declared before `/strength/:exerciseId` and friends purely for readability —
- * the paths do not collide.
  */
 router.get('/history', getWorkoutHistory)
 

@@ -1,28 +1,16 @@
 /**
- * Request shapes for the workout endpoints.
- *
- * These are the highest-stakes bodies in the app. A WorkoutSet is not a record
- * that can be corrected later and forgotten about — it is the input to the
- * fatigue model, so a bad one moves the athlete's readiness score, the colours
- * on the body map, tomorrow's suggested weights and the AI coach's advice. The
- * value of validating here is not that it prevents a crash; nothing crashed
- * before. It is that it stops nonsense becoming history.
+ * Request shapes for the workout endpoints. Logged sets feed the fatigue
+ * model, so these bounds are what keep bad values out of training history.
  */
 
 import {
   z, id, kg, addedKg, reps, count, rpe, seconds, distanceKm, rounds, restSeconds, notes,
 } from '../lib/validate'
 
-/** Sets per exercise. High enough for a long EMOM, low enough to bound a loop. */
+/** Sets per exercise. */
 const setNumber = z.number().int().min(1).max(200)
 
-/**
- * Fields every set carries, whatever the modality.
- *
- * RPE and rest are `nullish` rather than optional-with-a-default: an unrecorded
- * effort is genuinely different from an effort of 7, and the fatigue model
- * treats it that way (see `rpeFactor`). Defaulting here would erase that.
- */
+/** Fields every set carries. RPE and rest are nullish: unrecorded differs from a default. */
 const setBase = {
   workoutExerciseId: id,
   setNumber,
@@ -30,17 +18,7 @@ const setBase = {
   restSeconds: restSeconds.nullish(),
 }
 
-/**
- * A logged set, discriminated by modality.
- *
- * A discriminated union rather than one object with every field optional. The
- * flat version cannot say that a CARDIO set has no `weight` and a STRENGTH set
- * has no `rounds`, so it would validate `{ setType: 'CARDIO', weight: 200 }`
- * and hand it to the controller intact, to be ignored somewhere further down.
- * Here the field is dropped at the boundary and, more usefully, TypeScript
- * narrows on `setType` — reading `body.weight` in the cardio branch stops
- * compiling rather than silently being undefined.
- */
+/** A logged set, discriminated by `setType` so each modality accepts only its own fields. */
 export const logSetSchema = z.discriminatedUnion('setType', [
   z.object({
     ...setBase,
@@ -52,8 +30,7 @@ export const logSetSchema = z.discriminatedUnion('setType', [
     ...setBase,
     setType: z.literal('CALISTHENICS'),
     reps: reps.optional(),
-    // Negative is assistance (a band, a machine), so this is the one load that
-    // is allowed below zero.
+    // Negative is assistance (band or machine)
     addedWeight: addedKg.optional(),
     /** Seconds under tension for an isometric hold logged without reps. */
     duration: seconds.nullish(),
@@ -63,20 +40,9 @@ export const logSetSchema = z.discriminatedUnion('setType', [
     setType: z.literal('CARDIO'),
     distance: distanceKm.nullish(),
     time: seconds.nullish(),
-    /**
-     * Counted work for a movement with no distance — skips, floors, jacks.
-     *
-     * Carried in `reps` because that is the column it lands in, but bounded by
-     * `count`: 1000 is a ceiling for a set of squats and nine minutes of
-     * skipping, and the rope is the one that would have been rejected.
-     */
+    /** Counted work with no distance (skips, floors) — bounded by `count`. */
     reps: count.nullish(),
-    /**
-     * The recorded route. Left unchecked here on purpose — `validateRun` in the
-     * controller already owns it, and it is the only thing that knows the point
-     * budget and the coordinate rules. Duplicating those here would give two
-     * places to change and one of them would be missed.
-     */
+    /** The recorded route; validated by `validateRun` in the controller. */
     run: z.unknown().optional(),
   }),
   z.object({
@@ -87,11 +53,7 @@ export const logSetSchema = z.discriminatedUnion('setType', [
     /** Reps per round — with `rounds`, this is the metcon's score. */
     reps: reps.nullish(),
     rounds: rounds.nullish(),
-    /**
-     * External load on this movement. `kg`, not `addedKg`: a metcon has no
-     * band-assisted movement, so unlike calisthenics there is no reason to
-     * accept a negative here and every reason not to.
-     */
+    /** External load, never negative. */
     weight: kg.nullish(),
   }),
   z.object({
@@ -105,28 +67,13 @@ export const logSetSchema = z.discriminatedUnion('setType', [
 export type LogSetBody = z.infer<typeof logSetSchema>
 
 /**
- * Editing a recorded set.
- *
- * Three states per field, and they mean different things: absent leaves the
- * value alone, `null` clears it, a number replaces it. `.nullish()` is what
- * preserves that distinction — `.optional()` alone would make "clear this
- * field" unexpressible.
- *
- * This replaced a clamp. Clamping looked safer and was not: a weight typed as
- * 10000 was silently stored as 1000, so the athlete's history gained a lift
- * they never did and nothing told them. Out of range now fails loudly.
+ * Editing a recorded set. Absent leaves a field alone, `null` clears it, a
+ * number replaces it. Out-of-range values are rejected, not clamped.
  */
 export const updateSetSchema = z.object({
   rpe: rpe.nullish(),
   restSeconds: restSeconds.nullish(),
-  /**
-   * `count`, not `reps`, because this one shape edits every set type and has no
-   * way to know which it is looking at. The tight rep bound would make a rope
-   * count above 1000 uneditable — a certain failure on an ordinary session,
-   * traded against a hypothetical mistyped strength edit. The logging path,
-   * which is where essentially all data actually enters, still applies the
-   * tight bound per set type.
-   */
+  /** `count`, not `reps`: this shape edits every set type, including rope counts. */
   reps: count.nullish(),
   weight: kg.nullish(),
   addedWeight: addedKg.nullish(),
@@ -144,25 +91,12 @@ export const startSessionSchema = z.object({
 
 export const addExerciseSchema = z.object({
   exerciseId: id,
-  // Position in the session's exercise list. Bounded so a client bug cannot
-  // write an index Postgres has to sort around forever.
+  // Bounded position in the session's exercise list
   orderIndex: z.number().int().min(0).max(500),
   notes: notes.nullish(),
 })
 
-/**
- * Notes written against one exercise in a session.
- *
- * Nullable rather than optional-only, and the distinction is the whole point:
- * `undefined` never reaches here (the field is the only thing in the body), so
- * `null` is how the client says "I cleared this", which has to be storable.
- * Were it optional-only, deleting a note would be unexpressible and the last
- * text written would be permanent.
- *
- * Unbounded except by the shared `notes` scalar (2000 chars). This is prose a
- * human types about their own training — there is no physical bound to set,
- * and the only failure it can cause is a large-ish string.
- */
+/** An exercise's note in a session; `null` clears it. */
 export const updateExerciseNotesSchema = z.object({
   notes: notes.nullable(),
 })
@@ -170,13 +104,6 @@ export const updateExerciseNotesSchema = z.object({
 export type UpdateExerciseNotesBody = z.infer<typeof updateExerciseNotesSchema>
 
 export const finishSessionSchema = z.object({
-  /**
-   * Elapsed seconds, from the client's own clock.
-   *
-   * Optional because the server can fall back to the session's timestamps, and
-   * bounded by `seconds` (24h) because this feeds Foster's sRPE directly —
-   * a stray duration is a stray systemic load, and systemic load is the term
-   * that carries a hard run into the readiness score.
-   */
+  /** Elapsed seconds from the client clock; feeds systemic load, so bounded to 24 h. */
   duration: seconds.nullish(),
 })

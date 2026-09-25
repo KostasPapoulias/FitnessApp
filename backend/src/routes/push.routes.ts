@@ -12,8 +12,7 @@ import { verifyToken } from '../middleware/auth.middleware'
 const router = Router()
 
 // ── public routes ──
-// Both are reachable by the service worker, which has no auth token: it runs
-// with no page behind it when iOS wakes it to rotate a subscription.
+// Reachable by the service worker, which has no auth token.
 
 /**
  * @route GET /api/push/public-key

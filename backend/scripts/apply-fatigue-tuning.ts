@@ -1,17 +1,9 @@
 /**
- * Applies the fatigue-model tuning tables — muscle recovery half-lives, and
- * per-exercise damage factors, reference speeds and load factors.
+ * Applies the fatigue tuning tables (half-lives, damage factors, reference
+ * speeds, load factors, cardio tracking) in a few bulk statements, retrying on
+ * dropped connections. Safe to re-run.
  *
  *   npx tsx scripts/apply-fatigue-tuning.ts
- *
- * The full seed does the same thing, but as several hundred sequential
- * round trips, which a remote database will drop halfway through (P1017). This
- * does it in a handful of bulk statements and retries on a dropped connection,
- * so it can be re-run safely at any time after tuning the tables.
- *
- * Without these values every exercise sits at damageFactor 1.0 with no
- * reference speed, which silently reverts the model to treating a bike ride as
- * harder on the legs than a run.
  */
 import 'dotenv/config'
 import { Prisma, PrismaClient } from '@prisma/client'
@@ -28,8 +20,7 @@ import {
 
 const prisma = new PrismaClient()
 
-// The proxy in front of a hosted database drops idle-ish connections without
-// warning; every statement here is idempotent, so retrying is always safe.
+// Retries on a dropped connection; every statement is idempotent.
 async function withRetry<T>(label: string, fn: () => Promise<T>, attempts = 4): Promise<T> {
   let lastError: unknown
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -42,7 +33,7 @@ async function withRetry<T>(label: string, fn: () => Promise<T>, attempts = 4): 
       const waitMs = 500 * attempt
       console.log(`  ${label}: ${err.code}, retrying in ${waitMs}ms (${attempt}/${attempts - 1})`)
       await new Promise(r => setTimeout(r, waitMs))
-      // Force a fresh connection rather than reusing the dead one
+      // Force a fresh connection
       await prisma.$disconnect().catch(() => {})
     }
   }
@@ -88,7 +79,7 @@ async function main() {
   console.log(`  damage overrides: ${overrides} of ${damageRows.length} matched`)
 
   // ── reference speeds ──────────────────────────────────────────────────
-  // Cleared first so removing an entry from the table actually takes effect.
+  // Cleared first, so removing a table entry takes effect
   await withRetry('clear speeds', () => prisma.$executeRaw`
     UPDATE "Exercise" SET "referenceSpeedKmh" = NULL
     WHERE "referenceSpeedKmh" IS NOT NULL AND "createdByUserId" IS NULL
@@ -105,8 +96,7 @@ async function main() {
   console.log(`  reference speeds: ${speeds} of ${speedRows.length} matched`)
 
   // ── load factors ──────────────────────────────────────────────────────
-  // Cleared first, same as the speeds: an exercise dropped from the table
-  // should stop suggesting a weight, not keep the last one it was given.
+  // Cleared first, same as the speeds
   await withRetry('clear load factors', () => prisma.$executeRaw`
     UPDATE "Exercise" SET "loadFactor" = NULL
     WHERE "loadFactor" IS NOT NULL AND "createdByUserId" IS NULL
@@ -123,10 +113,7 @@ async function main() {
   console.log(`  load factors: ${loads} of ${loadRows.length} matched`)
 
   // ── cardio tracking ───────────────────────────────────────────────────
-  // Reset to 'gps' rather than to NULL: the column is NOT NULL and 'gps' is
-  // what every cardio movement did before the column existed, so a movement
-  // dropped from the table falls back to the old behaviour instead of losing
-  // its map.
+  // Reset to 'gps' (the column is NOT NULL)
   await withRetry('clear tracking', () => prisma.$executeRaw`
     UPDATE "Exercise"
     SET "cardioTracking" = 'gps', "referenceCadenceRpm" = NULL, "repUnit" = NULL

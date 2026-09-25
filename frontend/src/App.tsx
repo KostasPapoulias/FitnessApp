@@ -40,23 +40,14 @@ import { Capacitor } from '@capacitor/core'
 import PinLock from './components/security/PinLock'
 import { useAppLock } from './hooks/useAppLock'
 import { dismissBoot } from './boot'
-// Protected route wrapper
-//
-// Two gates, in order. Unauthenticated users go to /login; authenticated users
-// who have never answered the required onboarding questions go to /onboarding.
-//
-// The second gate applies to EXISTING accounts too, deliberately. Until a user
-// records a bodyweight, calisthenics load is scored against a hardcoded 70 kg —
-// grandfathering old accounts past this would keep that wrong number in their
-// history indefinitely.
+// Protected route: signed-out users go to /login; users without completed
+// onboarding (existing accounts too) go to /onboarding.
 const Protected = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, user } = useAuthStore()
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
 
-  // `user` is briefly null on a cold load while fetchMe resolves. Redirecting
-  // on that would bounce already-onboarded users through the form on every
-  // launch, so an unknown profile waits rather than guesses.
+  // `user` is briefly null on launch — wait rather than redirect
   if (user && !user.profile?.onboardingCompletedAt) {
     return <Navigate to="/onboarding" replace />
   }
@@ -69,16 +60,14 @@ export default function App() {
   const { requestPermission, scheduleInactivityReminder, ensurePushSubscription } = useNotifications()
   const { locked, checked: lockChecked, unlock } = useAppLock(isAuthenticated)
 
-  // On app load, verify token is still valid
+  // Verify the stored token on launch
   useEffect(() => {
     const token = localStorage.getItem('somatrack_token')
     if (token) fetchMe()
   }, [])
 
-  // Native only: the scheduled inactivity reminder is a Capacitor local
-  // notification. On the web this used to fire requestPermission() on load,
-  // outside any user gesture — iOS ignores that and it spends the one prompt
-  // the app gets, so permission is now asked for by the Profile toggle instead.
+  // Native only: schedule the inactivity reminder (on the web, permission is
+  // asked from the Profile toggle, inside a gesture)
   useEffect(() => {
     if (!isAuthenticated || !Capacitor.isNativePlatform()) return
 
@@ -87,45 +76,23 @@ export default function App() {
     })
   }, [isAuthenticated])
 
-  // Re-register this device's push subscription on launch. The server prunes an
-  // endpoint as soon as it 410s while the browser keeps handing the same one
-  // back, so without this the two drift apart and push dies silently.
+  // Re-register the push subscription on launch, in case the server pruned it
   useEffect(() => {
     if (!isAuthenticated || Capacitor.isNativePlatform()) return
     ensurePushSubscription()
   }, [isAuthenticated])
 
-  // Every launch question that must be answered before the app can know which
-  // screen it owes you: is the stored token still good, and is this device
-  // locked. The boot screen from index.html stays up for exactly this long.
+  // Launch checks that decide the first screen: token validity and the PIN lock.
   const settling = isBootstrapping || (isAuthenticated && !lockChecked)
 
-  // Hand the screen over once they are all answered.
-  //
-  // This is the only place the boot screen is taken down, so it covers all
-  // three destinations — Login, the PIN pad, or the app itself. Whichever one
-  // wins mounts underneath it and is revealed by the fade, rather than being
-  // the thing the user watches appear.
-  //
-  // `dismissBoot` enforces its own minimum on-screen time, so a launch that
-  // resolves in one frame still plays the animation instead of flashing it.
+  // Dismiss the boot screen once they resolve (the only place it is removed;
+  // dismissBoot enforces a minimum display time)
   useEffect(() => {
     if (!settling) dismissBoot()
   }, [settling])
 
-  // Order matters, and this is the whole fix for the launch flicker.
-  //
-  // The PIN pad goes first and does not wait for the server: `useAppLock`
-  // believes a device-local flag on the first frame, so a locked phone opens
-  // straight onto the pad instead of onto a slice of the app that a lock then
-  // drops over. Rendered before the router, so no screen — and no data on it —
-  // is ever visible behind it. It mounts under the boot screen, which is why
-  // the pad is now something the splash fades away to reveal.
-  //
-  // Then the splash, which covers the gap where the app knows there is a token
-  // but not yet whether it is still good or whether this device is locked.
-  // Rendering the router during that window is what put Login on screen for a
-  // moment before bouncing a perfectly signed-in user back into the app.
+  // Launch order: the PIN pad first (trusting the device-local flag, so nothing
+  // shows behind it), then the splash until the checks settle, then the router.
   if (locked) return <PinLock onUnlock={unlock} />
   if (settling) return <Splash />
 
@@ -140,16 +107,11 @@ export default function App() {
           isAuthenticated ? <Navigate to="/" replace /> : <Register />
         } />
 
-        {/* Password recovery. Reachable while signed in as well as signed out:
-            the link arrives by email and may well be opened on a device that
-            still has a live session, and bouncing that to Home leaves the
-            person holding a link they cannot use. */}
+        {/* Password recovery — available signed in or out (the link may open anywhere) */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Authenticated but pre-onboarding. Outside AppLayout on purpose —
-            the bottom nav would offer escape routes past a gate whose whole
-            job is to not be escapable. */}
+        {/* Onboarding, outside AppLayout so the nav offers no way around the gate */}
         <Route path="/onboarding" element={
           !isAuthenticated
             ? <Navigate to="/login" replace />
@@ -158,7 +120,7 @@ export default function App() {
               : <Onboarding />
         } />
 
-        {/* Protected routes — all inside AppLayout (has BottomNav) */}
+        {/* Protected routes, inside AppLayout */}
         <Route path="/" element={
           <Protected><AppLayout /></Protected>
         }>

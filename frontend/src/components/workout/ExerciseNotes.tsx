@@ -3,37 +3,20 @@ import { flushSync } from 'react-dom'
 import { NoteIcon } from '../icons'
 
 /**
- * The athlete's own note against one exercise, during the live workout —
- * and afterwards in the calendar's sets sheet, so a note can be added or
- * corrected once the session is history.
- *
- * Collapsed to a single line until it is wanted. The live screen is the one
- * place in the app where the athlete is mid-set and looking at a phone on a
- * bench, so a permanently open textarea would push the current-set card — the
- * only thing that screen exists for — down the page for a feature most sets
- * never use.
- *
- * Saves on blur rather than behind a Save button. A note is worth nothing
- * unsaved, and the reliable moment someone stops typing on a phone is when the
- * field loses focus; a button is one more tap to forget between sets.
- *
- * `saving` / `failed` are shown rather than swallowed, because the store keeps
- * the text locally whatever the network does — without a marker, a note that
- * never reached the server looks exactly like one that did.
+ * The athlete's note on one exercise — on the live screen, and in the
+ * calendar's sets sheet afterwards. Collapsed to one line until opened; saves
+ * on blur; shows "Saving…" / "Not synced" since the store keeps the text
+ * regardless of the network.
  */
 
 interface Props {
-  /** What is stored for this exercise right now. */
+  /** The stored note. */
   value: string
   /** Resolves false if the write failed; the text is kept locally regardless. */
   onSave: (notes: string) => Promise<boolean>
 }
 
-/**
- * Lets the live screen's own Note button open this, since the two sit at
- * opposite ends of a scrolling page and the button is the one under the
- * athlete's thumb.
- */
+/** Lets the live screen's Note button open this field. */
 export interface ExerciseNotesHandle {
   open: () => void
 }
@@ -46,28 +29,22 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
   const [status, setStatus] = useState<'idle' | 'saving' | 'failed'>('idle')
   const areaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Follow the store while the field is closed. Not while it is open: the
-  // athlete is typing, and overwriting their draft with a value that arrived
-  // from somewhere else is the bug this guard exists for.
+  // Follow the store only while closed, so an incoming value never overwrites typing
   useEffect(() => {
     if (!open) setDraft(value)
   }, [value, open])
 
   const openEditor = () => {
-    // flushSync rather than a frame delay: the textarea has to exist before
-    // this handler returns, because iOS raises the keyboard only for a focus()
-    // that happens inside the tap that caused it. Focusing a frame later left
-    // the field open, the caret in it, and no keyboard — which reads exactly
-    // like a note you cannot type into.
+    // flushSync so the textarea exists before this tap handler returns — iOS
+    // only raises the keyboard for a focus() inside the tap
     flushSync(() => setOpen(true))
 
     const el = areaRef.current
     if (!el) return
     el.focus()
-    // Caret at the end, not at the start — this is almost always an edit of
-    // an existing note rather than a rewrite of it.
+    // Caret at the end (usually an edit)
     el.setSelectionRange(el.value.length, el.value.length)
-    // The button that opens this can be a screen away from the field.
+    // The opening button can be a screen away
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }
 
@@ -100,8 +77,7 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
           <span className="text-dark-400 text-[11px] flex-shrink-0 leading-5">Saving…</span>
         )}
         {status === 'failed' && (
-          // Deliberately not an error colour on the note itself: nothing was
-          // lost, it is still on the phone and will be sent with the next edit.
+          // Not an error colour: the text is kept and sent with the next edit
           <span className="text-brand-yellow text-[11px] flex-shrink-0 leading-5">Not synced</span>
         )}
       </button>
@@ -116,17 +92,14 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         rows={3}
-        // Matches the server's `notes` scalar. Enforced here too so the limit
-        // is something the field simply stops at, rather than a 400 after the
-        // athlete has already written the paragraph.
+        // Matches the server's `notes` limit
         maxLength={2000}
         placeholder="Felt heavy, dropped to 60 on the last set…"
         className="w-full bg-transparent text-white text-[13px] leading-5 p-3
                    placeholder-dark-400 outline-none resize-none"
       />
       <div className="flex justify-end px-3 pb-2.5">
-        {/* onMouseDown, not onClick: the textarea's blur fires first and would
-            commit and unmount this button before a click ever landed. */}
+        {/* onMouseDown: the textarea's blur would unmount this before a click lands */}
         <button
           onMouseDown={e => e.preventDefault()}
           onClick={commit}

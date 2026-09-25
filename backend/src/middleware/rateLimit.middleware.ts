@@ -1,26 +1,12 @@
 import rateLimit from 'express-rate-limit'
 
 /**
- * Request throttles.
- *
- * The API had none. `POST /auth/login` accepted unlimited attempts, which makes
- * offline-speed credential stuffing and password spraying across accounts free
- * — bcrypt raises the cost per guess but does nothing about the number of them.
- *
- * Limits are keyed by IP. Behind Railway's proxy that requires `trust proxy` to
- * be set, or every request appears to come from the same address and one noisy
- * client would lock out everybody.
+ * Request throttles, keyed by IP (requires `trust proxy` behind Railway).
  */
 
 const json = (message: string) => ({ success: false, error: message })
 
-/**
- * Login and registration.
- *
- * Deliberately tight, and counts only FAILURES — a legitimate person signing in
- * repeatedly on a shared network is not the threat, and locking them out over
- * successful logins would be a self-inflicted outage.
- */
+/** Login and registration failures. Successful sign-ins are not counted. */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -31,14 +17,8 @@ export const authLimiter = rateLimit({
 })
 
 /**
- * Account creation, kept separate and slower.
- * Registration is the expensive one to abuse: each success is a permanent row.
- *
- * Counts only SUCCESSES, for that same reason — a rejected attempt creates
- * nothing. Counting failures meant someone fixing a too-short password five
- * times was told the address had created too many accounts, having created
- * none. The failure side is already covered: authLimiter is mounted on this
- * route too and counts exactly those.
+ * Account creation. Counts only successes; failures are covered by
+ * authLimiter, which is mounted on the same route.
  */
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -49,13 +29,7 @@ export const registerLimiter = rateLimit({
   message: json('Too many accounts created from this address. Try again later.'),
 })
 
-/**
- * PIN entry.
- *
- * Belt and braces alongside the per-account lockout: that counter lives on the
- * account being attacked, so this bounds attempts from one source regardless of
- * how many accounts they are spread across.
- */
+/** PIN entry, per source, on top of the per-account lockout. */
 export const pinLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   limit: 20,
@@ -65,14 +39,7 @@ export const pinLimiter = rateLimit({
   message: json('Too many PIN attempts. Wait a few minutes.'),
 })
 
-/**
- * Password reset requests.
- *
- * Counts every attempt, successful or not — unlike sign-in, a "successful"
- * request here costs an email to somebody else's inbox, so success is exactly
- * what needs bounding. Slow, because nobody legitimately asks for more than one
- * or two, and each one is a message with the recipient's name on it.
- */
+/** Password reset requests. Every attempt counts, since each one sends an email. */
 export const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 5,
@@ -81,14 +48,7 @@ export const passwordResetLimiter = rateLimit({
   message: json('Too many reset requests. Try again later.'),
 })
 
-/**
- * The full data export.
- *
- * The heaviest read in the API — every session, every set, every run's route,
- * in one response. Nobody needs it more than a couple of times in a row, and
- * a client stuck retrying it would hold database connections the live screens
- * need.
- */
+/** The full data export — the heaviest read in the API. */
 export const exportLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
@@ -97,12 +57,7 @@ export const exportLimiter = rateLimit({
   message: json('Export limit reached. Try again in a few minutes.'),
 })
 
-/**
- * Everything else authenticated.
- *
- * Generous — this is a backstop against a runaway client or a scraper, not a
- * usage limit. A normal session nowhere near approaches it.
- */
+/** Backstop for every other request; well above normal use. */
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 120,

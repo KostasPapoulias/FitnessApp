@@ -13,21 +13,13 @@ export default function CardioPlan() {
   const { selectedExercises, setCardioTarget } = useWorkoutStore()
   const activity = selectedExercises[0]
 
-  /**
-   * Whether a distance target is even expressible.
-   *
-   * A jump rope covers no ground at any effort, so "5 km" there is a target
-   * that can never be met — the progress bar sits at 0% for the whole session
-   * and the set is logged against a distance of zero. Time is the only honest
-   * axis for a counted movement.
-   */
+  /** Distance targets only make sense for movements that cover ground. */
   const distanceIsMeaningful = (activity?.exercise.cardioTracking ?? 'gps') !== 'reps'
 
   const [targetType, setTargetType] = useState<TargetType>(
     distanceIsMeaningful ? 'distance' : 'time'
   )
-  // The exercise can change under a mounted screen (back, pick another), and a
-  // stale 'distance' here would be a target nothing can satisfy.
+  // The exercise can change under a mounted screen
   useEffect(() => {
     if (!distanceIsMeaningful) setTargetType('time')
   }, [distanceIsMeaningful])
@@ -35,12 +27,7 @@ export default function CardioPlan() {
   const [timeMin, setTimeMin] = useState(30)        // minutes
   const [recent, setRecent] = useState<{ distance: number; time: number } | null>(null)
 
-  // Pre-fill from the athlete's most recent session of THIS activity.
-  //
-  // Asks for one exercise's history rather than for whole sessions. The version
-  // this replaces called `getRecentSessions(20)`, which deep-included every set
-  // of every modality for twenty sessions — measured at 122 KB and ~12 s — and
-  // then scanned it in the browser for two numbers. The same answer is 0.8 KB.
+  // Pre-fill from this activity's most recent session
   useEffect(() => {
     if (!activity) return
     let cancelled = false
@@ -49,8 +36,7 @@ export default function CardioPlan() {
       .then(history => {
         if (cancelled) return
 
-        // `entries` is newest-first and `limit: 1` asks for one session, so the
-        // first cardio set in it is the most recent one performed.
+        // Newest first, one session: the first cardio set is the latest
         const set = history.entries[0]?.sets.find(
           s => s.distanceKm != null || s.timeSec != null
         )
@@ -119,8 +105,7 @@ export default function CardioPlan() {
 
       {/* toggle */}
       <p className="text-[11px] font-bold tracking-[1.4px] text-dark-300 mb-3">TARGET</p>
-      {/* One column when distance is not on offer, rather than two with one
-          dead. `grid-cols-${n}` would not survive Tailwind's scanner. */}
+      {/* One column when distance is not offered */}
       <div className={`grid ${distanceIsMeaningful ? 'grid-cols-2' : 'grid-cols-1'}
                       gap-2 mb-6 p-1 bg-dark-800 border border-dark-600 rounded-btn`}>
         {(distanceIsMeaningful ? ['distance', 'time'] as TargetType[] : ['time'] as TargetType[]).map(t => (
@@ -133,8 +118,7 @@ export default function CardioPlan() {
       </div>
 
       {/* stepper */}
-      {/* p-6 + gap-6 + a 120px value + two 48px buttons came to 264px against
-          the 230px this card has at 320px. */}
+      {/* p-5 so it fits a 320px screen */}
       <div className="bg-dark-800 border border-dark-600 rounded-card p-5 mb-6 text-center">
         {targetType === 'distance' ? (
           <>

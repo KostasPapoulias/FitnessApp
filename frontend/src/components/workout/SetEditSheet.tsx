@@ -4,23 +4,11 @@ import { INPUT_BASE } from '../forms/Fields'
 import { workoutService } from '../../services/workout.service'
 
 /**
- * Correct a single logged set.
- *
- * The narrow fix for what actually goes wrong: a weight typed with an extra
- * zero, or reps counted wrong. Deleting the whole session to fix one number
- * throws away everything else that was right about it.
- *
- * The warning is not decoration. A recorded set is not just a row in a list —
- * fatigue, readiness, training load and every future weight suggestion are
- * computed from it, so the server re-scores the session and rebuilds the
- * athlete's fatigue on save. Saying so is the difference between "the number
- * changed" and "the app now believes something different about my recovery".
- *
- * Fields are strings, not numbers, for the reason `forms/Fields.tsx` gives:
- * `Number('')` is 0, which stamps a stray zero into a field somebody cleared.
+ * Correct one logged set. The server re-scores the session and rebuilds
+ * fatigue on save, which the sheet says. Fields hold strings (see forms/Fields.tsx).
  */
 
-/** z-60, not z-50: BottomNav is fixed at z-50 and paints over anything equal. */
+/** Above BottomNav (z-50). */
 const SHEET_Z = 'z-[60]'
 
 interface Props {
@@ -48,8 +36,7 @@ export default function SetEditSheet({ set, exerciseName, onSaved, onClose }: Pr
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Only send what was actually filled in. An empty string means "leave it",
-  // not "set it to zero".
+  // Only send filled fields; empty means "leave it"
   const num = (raw: string): number | undefined => {
     const trimmed = raw.trim()
     if (trimmed === '') return undefined

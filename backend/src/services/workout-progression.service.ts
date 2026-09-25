@@ -2,19 +2,8 @@ import prisma from '../lib/prisma'
 import { roundToPlates } from './starting-load.service'
 
 /**
- * What to put in front of the athlete when they plan an exercise.
- *
- * Until now every strength movement was offered the same 60/70/80 kg regardless
- * of which lift it was or what the athlete had ever done — so bicep curls and
- * back squats opened identically. Meanwhile `ExerciseStrengthEstimate` was being
- * written on every finished session and read back nowhere except to score that
- * same session's fatigue. The data for progression already existed and was
- * thrown away.
- *
- * The model here is double progression with an RPE-governed deload: repeat a
- * load until it is comfortably completed, then add. RPE is what makes it
- * autoregulated — the same 80 kg is a different stimulus on a bad week, and the
- * athlete already tells us which it was when they log the set.
+ * Suggested sets for an exercise with history: double progression with an
+ * RPE-governed deload — repeat a load until it is comfortable, then add.
  */
 
 /** Below this, the last session was comfortable enough to add load. */
@@ -28,14 +17,7 @@ const DELOAD_FRACTION = 0.9
 const STALE_DAYS = 14
 const STALE_FRACTION = 0.9
 
-/**
- * Smallest jump worth making, by how heavy the lift already is.
- *
- * Kept on the grid `roundToPlates` snaps to. There used to be a 1.25 kg tier
- * for 15–40 kg, which is not a load anyone can put on a bar or pick off a
- * rack — it produced 21.25 kg suggestions. Below 10 kg the grid is 1 kg, so
- * light isolation work still moves in small steps.
- */
+/** Smallest worthwhile jump for a lift of this weight, on the `roundToPlates` grid. */
 const loadIncrement = (weight: number): number => {
   if (weight >= 100) return 5
   if (weight >= 10) return 2.5
@@ -43,13 +25,8 @@ const loadIncrement = (weight: number): number => {
 }
 
 /**
- * Back a load off by `fraction`, rounded DOWN onto the plate grid.
- *
- * Down, because the point is to be lighter — rounding to nearest could land
- * a 10% deload straight back on the weight it was backing off. Taken off the
- * magnitude, so an assisted movement (negative load) gets more assistance
- * rather than less. A positive load never rounds away to nothing: a 1 kg
- * raise backed off is still a 1 kg raise, not an empty hand.
+ * Back a load off by `fraction`, rounded down onto the plate grid. Assisted
+ * (negative) loads get more assistance; a positive load never drops to 0.
  */
 const backOff = (weight: number, fraction: number): number => {
   const lighter = roundToPlates(weight - Math.abs(weight) * (1 - fraction), 'down')
@@ -92,13 +69,7 @@ interface HistoricSession {
   sets: HistoricSet[]
 }
 
-/**
- * The last N times this exercise was performed in a FINISHED session.
- *
- * Unfinished sessions are excluded: an abandoned warm-up set is not evidence of
- * what the athlete can do, and letting it drive the next suggestion would walk
- * the load down every time someone starts a session and quits.
- */
+/** The last N performances of the exercise in finished sessions only. */
 const recentSessions = async (
   userId: string,
   exerciseId: string,
@@ -133,7 +104,7 @@ const recentSessions = async (
             return { reps: set.strength.reps, weight: set.strength.weight, rpe: set.rpe }
           }
           if (set.calisthenics) {
-            // Added load only — bodyweight is not a number the athlete picks
+            // Added load only — bodyweight is not chosen by the athlete
             return { reps: set.calisthenics.reps, weight: set.calisthenics.addedWeight, rpe: set.rpe }
           }
           return null
@@ -156,8 +127,7 @@ const wasHard = (session: HistoricSession): boolean => {
   const rpe = avgRpe(session.sets)
   if (rpe != null && rpe >= HARD_RPE) return true
 
-  // Reps falling off a cliff across sets at the same load is a miss even when
-  // the RPE was never entered
+  // Reps collapsing across sets at the top weight also counts as a miss
   const heaviest = topWeight(session.sets)
   const atTopWeight = session.sets.filter(s => s.weight === heaviest)
   if (atTopWeight.length >= 2) {
@@ -172,12 +142,9 @@ const round = (n: number) => Math.round(n * 100) / 100
 const daysBetween = (a: Date, b: Date) => Math.floor((a.getTime() - b.getTime()) / 86_400_000)
 
 /**
- * Turn history into the next session's plan.
- *
- * Deliberately conservative in both directions. Adding too fast buries someone
- * under a load they cannot recover from — which the ACWR warning would then
- * scold them for — and deloading on a single bad night throws away real
- * progress, so it takes two.
+ * The next session's sets from history: add load when the last session was
+ * easy, deload after two hard sessions in a row, ease back in after a layoff,
+ * otherwise repeat.
  */
 export const suggestForExercise = async (
   userId: string,
@@ -202,7 +169,7 @@ export const suggestForExercise = async (
   // ── never performed ──
   if (history.length === 0) {
     if (e1rm && e1rm > 0 && (modality === 'Strength' || modality === 'Calisthenics')) {
-      // A working set around 70% of a max is a normal hypertrophy load
+      // ~70% of max is a normal working load
       const working = Math.max(1, roundToPlates(e1rm * 0.7))
       return {
         ...base,
@@ -215,8 +182,7 @@ export const suggestForExercise = async (
       ...base,
       basis: 'default',
       note: 'No history yet — adjust these and they’ll be remembered next time.',
-      // The fallback can come from the client, whose placeholder is not
-      // guaranteed to sit on the grid.
+      // A client fallback may be off the grid
       sets: fallback.map(set => ({ ...set, weight: roundToPlates(set.weight) })),
     }
   }
@@ -227,10 +193,7 @@ export const suggestForExercise = async (
   const rpe = avgRpe(lastSets)
   const idleDays = daysBetween(new Date(), last.date)
 
-  // Shape the next session on what was actually performed, not on a template.
-  // Snapped to the grid even when repeated as-is: a weight typed on the live
-  // screen can be anything, and "same as last time, 20.9 kg" is not a number
-  // anyone can load.
+  // Shape the next session on what was performed, snapped to the grid
   const shape = lastSets.map(set => ({
     reps: set.reps,
     weight: roundToPlates(set.weight),
@@ -263,7 +226,7 @@ export const suggestForExercise = async (
   if (rpe != null && rpe <= EASY_RPE && !wasHard(last)) {
     const bump = loadIncrement(heaviest)
 
-    // Bodyweight movements with no added load progress by reps, not kilos
+    // Bodyweight movements with no added load progress by reps
     if (heaviest === 0) {
       return {
         ...base,
@@ -277,8 +240,7 @@ export const suggestForExercise = async (
       ...base,
       basis: 'progression',
       note: `You hit this at RPE ${round(rpe)} — up ${bump} kg.`,
-      // Up, so a set that sat between grid steps still ends up heavier than
-      // last time rather than rounding back onto it.
+      // Rounded up so the result is always heavier than last time
       sets: shape.map(set => ({ ...set, weight: roundToPlates(set.weight + bump, 'up') })),
     }
   }

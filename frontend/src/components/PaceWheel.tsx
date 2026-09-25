@@ -30,10 +30,7 @@ export default function PaceWheel<T extends string | number>({
 
   const index = Math.max(0, options.indexOf(value))
 
-  // Follow the value when it changes from outside — the parent clamping it, or
-  // a second wheel rewriting what this one is allowed to show. Skipped while
-  // the user is mid-scroll, which is the one case where the DOM is ahead of
-  // React and must be left alone.
+  // Follow outside changes, except while the user is mid-scroll
   useEffect(() => {
     const element = scroller.current
     if (!element || reported.current === value) return
@@ -41,8 +38,7 @@ export default function PaceWheel<T extends string | number>({
     element.scrollTo({ top: index * ITEM_H, behavior: 'smooth' })
   }, [value, index])
 
-  // Position without animation on first paint: a wheel that visibly scrolls
-  // itself into place on open reads as a glitch rather than as an animation.
+  // Position without animation on first paint
   useEffect(() => {
     const element = scroller.current
     if (element) element.scrollTop = index * ITEM_H
@@ -55,8 +51,7 @@ export default function PaceWheel<T extends string | number>({
     if (!element) return
     if (settle.current !== null) window.clearTimeout(settle.current)
 
-    // 90ms after the last scroll event. Long enough that momentum has stopped,
-    // short enough that the value under your thumb feels live.
+    // Settle 90 ms after the last scroll event
     settle.current = window.setTimeout(() => {
       settle.current = null
       const next = options[Math.round(element.scrollTop / ITEM_H)]
@@ -70,13 +65,10 @@ export default function PaceWheel<T extends string | number>({
   useEffect(() => () => { if (settle.current !== null) window.clearTimeout(settle.current) }, [])
 
   return (
-    // `data-no-page-swipe`: this is a vertical scroller inside a sheet that
-    // dismisses on a downward drag of its own content, so without the opt-out
-    // every spin of the wheel also pulls the sheet shut.
+    // `data-no-page-swipe`: stops the wheel's scroll also dragging the sheet shut
     <div className="relative" style={{ height: HEIGHT }} role="listbox" aria-label={ariaLabel}
          data-no-page-swipe>
-      {/* The selection band, behind the numbers and ignoring taps so it can
-          never eat a scroll that was meant for the list. */}
+      {/* Selection band; ignores taps so it never eats a scroll */}
       <div
         className="absolute left-0 right-0 rounded-btn border border-brand-teal/40 bg-brand-teal/5
                    pointer-events-none"

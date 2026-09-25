@@ -1,11 +1,6 @@
-// Greek for the server messages an athlete can actually read.
-//
-// Keys are the English text exactly as the controllers send it — see
-// `localizeMessage` in ./locale for why. Developer-facing validation ("must be
-// one of: …") is left out on purpose: the client validates the same things
-// first, so those only ever reach a person when the client itself is wrong.
-//
-// Informal second person throughout, matching the app's own copy.
+// Greek translations of user-facing server messages, keyed by the exact English
+// text the controllers send (see `localizeMessage`). Developer-only validation
+// messages are not translated.
 
 export const EL_MESSAGES: Record<string, string> = {
   // Generic
@@ -69,10 +64,7 @@ export const EL_MESSAGES: Record<string, string> = {
     'Η ημερομηνία γέννησης δεν φαίνεται σωστή — έλεγξέ τη.',
 }
 
-/**
- * Messages with a number interpolated into them. Anchored at both ends, so a
- * pattern can only ever claim the one message it was written for.
- */
+/** Messages with interpolated numbers. Anchored so each pattern matches only its message. */
 export const EL_PATTERNS: [RegExp, (m: RegExpExecArray) => string][] = [
   [/^Password must be at least (\d+) characters\.$/,
     m => `Ο κωδικός πρέπει να έχει τουλάχιστον ${m[1]} χαρακτήρες.`],

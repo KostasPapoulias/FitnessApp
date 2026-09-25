@@ -6,7 +6,6 @@ import { verifyToken } from '../middleware/auth.middleware';
 import {
   authLimiter, registerLimiter, passwordResetLimiter,
 } from '../middleware/rateLimit.middleware';
-//import prisma from '../lib/prisma';
 
 const router = Router();
 
@@ -45,10 +44,7 @@ router.post('/forgot-password', passwordResetLimiter, forgotPassword);
  * @route POST /api/auth/reset-password
  * @public
  * @body token, password
- * @returns confirmation — deliberately NOT a session
- *
- * Carries authLimiter as well: the token is unguessable, but an endpoint that
- * runs bcrypt on every call should not be free to hammer.
+ * @returns confirmation only — does not sign the user in
  */
 router.post('/reset-password', passwordResetLimiter, authLimiter, resetPassword);
 

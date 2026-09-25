@@ -4,27 +4,12 @@ import { toolsForChatCompletions } from '../src/services/ai-tools.service'
 import { AI_PERSONA } from '../src/services/ai.service'
 
 /**
- * Which model should the coach run on?
- *
- * Benchmarks answer that badly. What decides it here is not general
- * intelligence but one narrow behaviour: given the app's real tool
- * declarations, does the model call `search_exercises` first and then build
- * `propose_workout` out of the ids that search actually returned?
- *
- * That last part is the whole test. A model that invents a plausible-looking
- * exercise id does not fail loudly — it produces a proposal card that looks
- * correct, and the failure only surfaces when the athlete taps it. So the
- * script feeds back three known ids and checks, literally, whether the ids
- * that come back are those three.
- *
- * Run it against a provider before switching to it, and again whenever you
- * change AI_MODEL:
+ * Compares candidate models on the coach's key behaviour: calling
+ * `search_exercises`, then building `propose_workout` only from the ids it
+ * returned. Uses the real system prompt and tool declarations; two calls per model.
  *
  *   npx tsx scripts/compare-ai-models.ts
  *   npx tsx scripts/compare-ai-models.ts nvidia/nemotron-3-super-120b-a12b openai/gpt-oss-120b
- *
- * Costs two calls per model. On a metered provider that is real money, so the
- * candidate list is short by default.
  */
 
 const DEFAULT_CANDIDATES = [
@@ -32,8 +17,7 @@ const DEFAULT_CANDIDATES = [
   'nvidia/nemotron-3.5-lightning-30b-a3b',
   'nvidia/nemotron-nano-3-30b-a3b',
   'mistralai/mistral-nemotron',
-  // gpt-oss-120b was here and is gone: NVIDIA retired it on 2026-09-03 and the
-  // endpoint answers 410 for it. The 20b is what remains of that family.
+  // gpt-oss-120b was retired by NVIDIA (410); the 20b remains
   'openai/gpt-oss-20b',
   'moonshotai/kimi-k2.6',
   'deepseek-ai/deepseek-v4-flash-0731',
@@ -43,25 +27,17 @@ const BASE_URL = process.env.AI_BASE_URL?.trim()
   || 'https://integrate.api.nvidia.com/v1'
 const API_KEY = (process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || '').trim()
 
-/**
- * The app's real system prompt, not a summary of it.
- *
- * An earlier version of this script used a three-line stand-in and every single
- * candidate "failed" at the propose step — because nothing had told them to
- * draft rather than describe. That is a broken test, not seven broken models.
- * If the comparison is going to decide which model ships, it has to send what
- * production sends.
- */
+/** The real production system prompt — a stand-in makes every model fail. */
 const SYSTEM = AI_PERSONA
 
-// Shaped like the real context block: fatigue percentages, readiness, kit.
+// Shaped like the real context block.
 const USER = `## LIVE BODY DATA
 Chest: 78% fatigued (high). Quadriceps: 12% fatigued (recovered). Hamstrings: 9% fatigued (recovered).
 Readiness: 74%. Equipment: Barbell, Dumbbell, Leg Press.
 
 Build me a leg session for today.`
 
-/** The only ids that exist. Anything else in the proposal was invented. */
+/** The only valid ids; anything else in a proposal was invented. */
 const REAL_IDS: Record<string, string> = {
   'a3f1c8e2-0000-4aaa-9111-000000000001': 'Back Squat',
   'a3f1c8e2-0000-4aaa-9111-000000000002': 'Romanian Deadlift',
@@ -190,7 +166,7 @@ const main = async () => {
     )
   }
 
-  // Usable means: looked it up, drafted something, and used only ids that exist.
+  // Usable: looked it up, drafted something, used only real ids
   const usable = rows.filter(r => r.searched && r.proposed && r.idsOk && r.jsonOk)
   console.log('')
   if (usable.length === 0) {

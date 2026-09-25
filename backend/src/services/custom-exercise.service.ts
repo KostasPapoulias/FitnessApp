@@ -1,52 +1,23 @@
 import prisma from '../lib/prisma'
 
 /**
- * Exercises the athlete invents, and the calibration behind them.
- *
- * The seeded catalogue gets its numbers from `prisma/fatigue-tuning.ts`, tuned
- * per movement by hand. A custom exercise has no entry there and never will, so
- * its figures have to be derived — and the derivation is deliberately kept away
- * from the user.
- *
- * The alternative was an "advanced" section exposing damageFactor and
- * loadFactor directly. It was rejected: those numbers feed
- * `MuscleFatigueCurrent`, readiness, and every future progression suggestion,
- * and a wrong one is invisible. Nothing in the app would look broken — the
- * athlete would simply be told to rest on the wrong days, for good, with no way
- * to trace it back to a box they filled in once. Being unable to express an
- * unusual movement perfectly is a much smaller cost.
- *
- * Validation lives here rather than in the controller because there are two
- * ways in — the Create Exercise form and the coach's `propose_exercise` draft —
- * and they must agree. A rule enforced on only one path is not a rule.
+ * Exercises the athlete creates. Their calibration (damageFactor, loadFactor)
+ * is derived here, never entered by the user — a wrong value would silently
+ * distort fatigue and suggestions. Shared by the Create Exercise form and the
+ * coach's `propose_exercise` draft, so both paths validate identically.
  */
 
-/** How much of a muscle's capacity a set of the movement uses. */
 export type MuscleRole = 'primary' | 'secondary'
 
-/**
- * `impactFactor` for each role.
- *
- * The seeded catalogue uses a continuous range, but two rungs are all a person
- * can answer honestly about their own movement — "does this mainly work X, or
- * does X just help" is a question with an answer; "is X involved at 0.65 or
- * 0.8" is not.
- */
+/** `impactFactor` per role — two rungs are all a person can judge about their own movement. */
 export const IMPACT_BY_ROLE: Record<MuscleRole, number> = {
   primary: 1.0,
   secondary: 0.5,
 }
 
 /**
- * Damage per unit of work, by modality. Mirrors `MODALITY_DAMAGE` in
- * `prisma/fatigue-tuning.ts` — duplicated rather than imported because
- * `tsconfig` roots the build at `src/`, and reaching into `prisma/` would pull
- * a seed-time file into the shipped server build.
- *
- * Custom movements always take the modality baseline. The per-exercise
- * overrides in that file exist because someone reasoned about the eccentric
- * load in a Nordic curl; there is no equivalent judgement available here, and
- * inferring one from a name would be inventing data.
+ * Damage per unit of work by modality. Mirrors `MODALITY_DAMAGE` in
+ * `prisma/fatigue-tuning.ts` (not imported: prisma/ is outside the build root).
  */
 const MODALITY_DAMAGE: Record<string, number> = {
   Strength: 1.0,
@@ -60,18 +31,8 @@ export const damageForCustom = (modalityName: string): number =>
   MODALITY_DAMAGE[modalityName] ?? 1.0
 
 /**
- * Opening working load for a set of ~10 reps, as a fraction of bodyweight, by
- * primary muscle — the same unit as `LOAD_FACTORS`, at a coarser grain.
- *
- * Every figure is at the CONSERVATIVE end of the seeded movements for that
- * muscle: the quad entry is nearer a Bulgarian split squat than a leg press,
- * the chest entry nearer a dumbbell press than a barbell bench. That skew is
- * deliberate and asymmetric — a first suggestion that is too light costs one
- * easy set, and one that is too heavy is how people get hurt on a movement the
- * app has never seen them perform.
- *
- * It also only has to survive one session. `workout-progression.service` takes
- * over the moment there is history, so this is an opening bid, not a verdict.
+ * Opening working load (fraction of bodyweight, ~10 reps) by primary muscle.
+ * Deliberately conservative; progression takes over after the first session.
  */
 const LOAD_FACTOR_BY_PRIMARY_MUSCLE: Record<string, number> = {
   Chest: 0.30,
@@ -91,19 +52,12 @@ const LOAD_FACTOR_BY_PRIMARY_MUSCLE: Record<string, number> = {
   Obliques: 0.10,
 }
 
-/** Modalities that carry external load worth suggesting a number for. */
+/** Modalities with external load worth suggesting. */
 const LOADED_MODALITIES = new Set(['Strength', 'Calisthenics'])
 
 /**
- * Derive a starting load factor, or null when there is nothing honest to say.
- *
- * Null rather than 0, for the reason `loadFactorFor` gives: 0 reads as "this
- * movement is unloaded", which is a claim, while null is the absence of one and
- * lets `starting-load.service` fall back instead of offering an empty bar.
- *
- * Where a movement has several primaries the LOWEST factor wins. A press that
- * also loads the shoulders is limited by the shoulders, not the chest, and the
- * limiting muscle decides what can actually be lifted.
+ * Starting load factor from the primary muscles (the lowest wins — the weakest
+ * primary limits the lift), or null when nothing sensible can be said.
  */
 export const loadFactorForCustom = (
   modalityName: string,
@@ -129,14 +83,7 @@ const MAX_MUSCLES = 8
 const MAX_CATEGORIES = 6
 const MAX_EQUIPMENT = 8
 
-/**
- * Per-athlete ceiling on custom exercises.
- *
- * Generous enough that nobody legitimately building out their own movements
- * will meet it, and low enough that a looping client cannot fill the shared
- * Exercise table — every row here is read by every catalogue query the athlete
- * makes, so runaway creation degrades their own app first.
- */
+/** Per-athlete cap on custom exercises. */
 export const MAX_CUSTOM_PER_USER = 200
 
 export class CustomExerciseError extends Error {
@@ -146,24 +93,10 @@ export class CustomExerciseError extends Error {
   }
 }
 
-/**
- * A reference to a row in one of the small lookup tables, as either its uuid or
- * its name.
- *
- * Both are accepted because the two callers know different things. The form
- * holds ids, having rendered the catalogue. The coach holds names — it is
- * writing prose about a movement, and giving it a tool call just to turn
- * "Hamstrings" into a uuid would spend a model round trip to learn something
- * the server can look up for free.
- */
+/** A lookup-table reference: uuid (from the form) or name (from the coach). */
 export type LookupRef = string
 
-/**
- * The three ways a cardio movement's work can be measured. A custom one gets
- * no reference cadence — there is no way to guess one — so a 'reps' movement
- * is scored on its duration, exactly as it would have been anyway. The value
- * still earns its place by deciding what the run screen offers.
- */
+/** How a custom cardio movement is measured; it gets no reference cadence. */
 const CARDIO_TRACKING_VALUES = ['gps', 'machine', 'reps']
 
 export interface CustomExerciseInput {
@@ -176,15 +109,7 @@ export interface CustomExerciseInput {
   categories?: unknown
   /** Equipment ids or names. */
   equipment?: unknown
-  /**
-   * 'gps' | 'machine' | 'reps'. Cardio only; ignored for every other modality.
-   *
-   * This one IS asked, unlike damageFactor and loadFactor above, because it is
-   * not a calibration number — it is a statement about the movement that the
-   * athlete plainly knows and can see the effect of. Getting it wrong shows up
-   * immediately as a map that should not be there, not as silently wrong
-   * fatigue three months later.
-   */
+  /** 'gps' | 'machine' | 'reps' — cardio only. Asked because its effect is immediately visible. */
   cardioTracking?: unknown
 }
 
@@ -201,7 +126,7 @@ export interface PreparedCustomExercise {
   cardioTracking: string
 }
 
-/** Match a ref against a lookup row by exact id or case-insensitive name. */
+/** Match a ref by exact id or case-insensitive name. */
 const matchRef = <T extends { id: string; name: string }>(rows: T[], ref: LookupRef): T | undefined => {
   const needle = ref.trim().toLowerCase()
   return rows.find(row => row.id === ref || row.name.toLowerCase() === needle)
@@ -209,12 +134,7 @@ const matchRef = <T extends { id: string; name: string }>(rows: T[], ref: Lookup
 
 /**
  * Validate a proposed custom exercise and resolve every reference, without
- * writing anything.
- *
- * Separate from the create so the coach can validate a draft at the moment it
- * is proposed AND again when the athlete taps the card — the two can be half an
- * hour apart, and a name that was free when the card was drawn may not be by
- * the time it is accepted.
+ * writing. Run at proposal time and again on accept.
  */
 export const prepareCustomExercise = async (
   userId: string,
@@ -248,9 +168,7 @@ export const prepareCustomExercise = async (
     )
   }
 
-  // Deduplicated by reference, keeping the strongest role. The same muscle sent
-  // twice as primary and secondary would otherwise create two links and count
-  // the movement's load against it one and a half times.
+  // Deduplicate by reference, keeping the strongest role
   const roleByRef = new Map<LookupRef, MuscleRole>()
   for (const entry of input.muscles) {
     const ref = (entry as { muscle?: unknown })?.muscle
@@ -267,9 +185,7 @@ export const prepareCustomExercise = async (
   }
 
   if (![...roleByRef.values()].includes('primary')) {
-    // Not pedantry: loadFactorForCustom derives the opening weight from the
-    // primaries, and a movement that is all secondaries has nothing to derive
-    // from and would barely fatigue anything either.
+    // Load factor derives from the primaries
     throw new CustomExerciseError(
       'Mark at least one muscle as primary — the one the exercise is really for.', 'invalid'
     )
@@ -288,12 +204,7 @@ export const prepareCustomExercise = async (
   const categoryRefs = toRefs(input.categories, 'Categories', MAX_CATEGORIES)
   const equipmentRefs = toRefs(input.equipment, 'Equipment', MAX_EQUIPMENT)
 
-  // The lookup tables are tiny — fifteen muscles, five modalities — so they are
-  // fetched whole and matched in memory. Resolving by name in SQL would need a
-  // case-insensitive `in` per table and buys nothing at this size.
-  //
-  // All six trips at once: sequentially this is about two seconds of pure
-  // network latency on a form submit, against a remote database.
+  // Small lookup tables, fetched whole and matched in memory; all reads batched
   const [modalities, muscles, categories, equipment, duplicate, customCount] = await Promise.all([
     prisma.modality.findMany({ select: { id: true, name: true } }),
     prisma.muscle.findMany({ select: { id: true, name: true } }),
@@ -303,9 +214,7 @@ export const prepareCustomExercise = async (
     equipmentRefs.length
       ? prisma.equipment.findMany({ select: { id: true, name: true } })
       : Promise.resolve([]),
-    // Against the catalogue AND their own customs. Two exercises with the same
-    // name are indistinguishable in the picker, and the athlete has no way to
-    // tell which one their history is attached to.
+    // Names must be unique across the catalogue and the user's own exercises
     prisma.exercise.findFirst({
       where: {
         name: { equals: name, mode: 'insensitive' },
@@ -370,9 +279,7 @@ export const prepareCustomExercise = async (
     .filter(link => link.role === 'primary')
     .map(link => link.muscleName)
 
-  // 'gps' for anything unanswered, which is what every cardio movement did
-  // before the field existed — an omission must not take the map away.
-  // Non-cardio modalities carry the same default and never read it.
+  // Defaults to 'gps'; ignored for non-cardio modalities
   const requested = typeof input.cardioTracking === 'string' ? input.cardioTracking : null
   const cardioTracking =
     modality.name.toLowerCase() === 'cardio' && requested && CARDIO_TRACKING_VALUES.includes(requested)
@@ -393,18 +300,12 @@ export const prepareCustomExercise = async (
   }
 }
 
-/**
- * Write a prepared exercise.
- *
- * Returns the same shape `getExercises` produces, so a client can drop it
- * straight into a list it already holds rather than refetching the catalogue.
- */
+/** Write a prepared exercise; returns the same shape as a `getExercises` row. */
 export const createCustomExercise = async (
   userId: string,
   prepared: PreparedCustomExercise
 ) => {
-  // Nested writes, so the exercise and its links land in one statement — a
-  // half-linked exercise would sit in the catalogue fatiguing nothing.
+  // Nested writes: the exercise and its links in one statement
   const created = await prisma.exercise.create({
     data: {
       name: prepared.name,
@@ -413,10 +314,7 @@ export const createCustomExercise = async (
       createdByUserId: userId,
       damageFactor: prepared.damageFactor,
       loadFactor: prepared.loadFactor,
-      // Distance-based scoring needs a per-movement reference speed that cannot
-      // be guessed, so a custom cardio movement is scored on duration. Same for
-      // the cadence — which is why only the capability is asked for, not the
-      // calibration behind it.
+      // No reference speed or cadence can be guessed, so cardio scores on duration
       referenceSpeedKmh: null,
       referenceCadenceRpm: null,
       repUnit: null,
@@ -451,7 +349,7 @@ export const createCustomExercise = async (
     categories: created.categoryLinks.map(cl => cl.category.name),
     equipment: created.equipmentLinks.map(el => el.equipment.name),
     isCustom: true,
-    // A brand-new movement has no history, so nothing can be fatigued by it yet.
+    // No history yet
     fatigueWarning: false,
     maxMuscleFatigue: 0,
     injuryCaution: false,

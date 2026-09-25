@@ -27,9 +27,9 @@ import { AlertTriangleIcon, ListIcon, MicIcon, MicOffIcon, NoteIcon, WifiOffIcon
 
 export default function ActiveWorkout() {
   const navigate = useNavigate()
-  // Lets the Note button at the bottom of the screen open the field at the top.
+  // Lets the bottom Note button open the note field at the top
   const notesRef = useRef<ExerciseNotesHandle>(null)
-  // What the quick chips are centred on — see where they are built.
+  // Anchor for the quick chips (see where they are built)
   const chipAnchor = useRef<{ key: string; weight: number; reps: number } | null>(null)
   const {
     selectedExercises, sessionId, sessionStartTime,
@@ -38,8 +38,7 @@ export default function ActiveWorkout() {
     startError, logError, clearErrors, queuedSetCount,
   } = useWorkoutStore()
 
-  // The finish request, fatigue refresh and reminder reschedule all live on the
-  // Finish screen now — see handleFinish below.
+  // The finish request itself lives on the Finish screen
   const { notifyRestComplete } = useNotifications()
 
   const [isStarting, setIsStarting] = useState(false)
@@ -53,14 +52,11 @@ export default function ActiveWorkout() {
 
   const { voice, haptic, audio } = useSessionPrefsStore()
 
-  // "End workout" is the one command that throws away the rest of the session,
-  // so it is armed by the first utterance and only acted on by the second.
-  // Everything else is a tap away from being undone; this isn't.
+  // "End workout" by voice needs saying twice: the first arms it, the second acts
   const [endArmed, setEndArmed] = useState(false)
   const endArmedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // The mounted modality view's own command handler, if it registered one.
-  // `useCallback` with no deps so registering never re-runs a view's effect.
+  // The mounted modality view's voice handler, if any
   const modalityVoice = useRef<ModalityVoiceHandler | null>(null)
   const registerVoice = useCallback((handler: ModalityVoiceHandler | null) => {
     modalityVoice.current = handler
@@ -70,9 +66,7 @@ export default function ActiveWorkout() {
   const currentSetPlan = currentExercise?.sets[currentSetIndex]
 
   // ── start session on mount ──
-  // Reads fresh store state rather than the render closure, and startSession()
-  // itself de-dupes concurrent calls, so a StrictMode double-mount or a
-  // remount can't create a second session.
+  // Reads fresh store state, and startSession() de-dupes, so a StrictMode remount can't start two
   const beginSession = () => {
     const s = useWorkoutStore.getState()
     if (s.sessionId || s.selectedExercises.length === 0) return
@@ -98,8 +92,7 @@ export default function ActiveWorkout() {
     completedSets.some(cs =>
       cs.exerciseId === selectedExercises[exIdx]?.exercise.id && cs.setIndex === setIdx)
 
-  // Last set of the last exercise we'll actually work through (skipped ones
-  // don't count) — after it there is nothing to rest for.
+  // The last set of the last non-skipped exercise — nothing to rest for after it
   const isFinalSet = (exIdx: number, setIdx: number) => {
     const ex = selectedExercises[exIdx]
     if (!ex || setIdx + 1 < ex.sets.length) return false
@@ -109,22 +102,18 @@ export default function ActiveWorkout() {
   }
 
   // ── set / rest flow ──
-  // Log a set to the backend, then show the rest timer (strength / calisthenics).
-  // Only move on when the set actually persisted — advancing on a failed write
-  // is what silently dropped sets while the UI reported success.
-  /** Confirmation that a set actually persisted, on whichever channels are on. */
+  /** Confirms a set that actually persisted, on the enabled channels. */
   const confirmLogged = (payload: LogPayload) => {
     if (haptic) void hapticSetLogged()
     if (audio) void announce(cues.setLogged(currentSetIndex + 1, payload.reps, payload.weight))
   }
 
   const logAndRest = async (payload: LogPayload) => {
-    // Decide before awaiting: the indices can move while the request is out
+    // Decide before awaiting — the indices can move meanwhile
     const final = isFinalSet(currentExerciseIndex, currentSetIndex)
     if (!(await completeSet(payload))) return
     confirmLogged(payload)
-    // "Set Done" on the very last set ends the workout instead of starting a
-    // rest the user will never use
+    // The last set ends the workout instead of starting a rest
     if (final) handleFinish()
     else {
       setRestPaused(false)
@@ -132,17 +121,14 @@ export default function ActiveWorkout() {
       if (audio) void announce(cues.restStarting(payload.restSeconds))
     }
   }
-  // Log a set, then move straight to the next set/exercise, no rest (mobility)
+  // Log a set and move on without rest (mobility)
   const logAndAdvance = async (payload: LogPayload) => {
     if (await completeSet(payload)) { confirmLogged(payload); advance() }
   }
 
   /**
-   * Log the current set.
-   *
-   * `overrides` carries spoken values ("log eight at sixty"). They are written
-   * to the store first so the set card and the log agree — a voice-logged set
-   * that differs from what the screen showed is indistinguishable from a bug.
+   * Log the current set. Spoken values ("log eight at sixty") are written to
+   * the store first, so the card and the log agree.
    */
   const handleSetDone = (overrides?: { reps?: number; weight?: number; rpe?: number }) => {
     if (overrides && Object.keys(overrides).length > 0) {
@@ -157,7 +143,7 @@ export default function ActiveWorkout() {
     })
   }
 
-  /** What comes after the set at (exIdx, setIdx), for the spoken cue. */
+  /** What comes after this set, for the spoken cue. */
   const describeNext = (exIdx: number, setIdx: number): string | null => {
     const ex = selectedExercises[exIdx]
     if (!ex) return null
@@ -192,18 +178,15 @@ export default function ActiveWorkout() {
   }
 
   const buildSnapshot = () => {
-    // read fresh — a modality view may have just logged a set before finishing
+    // Read fresh — a modality view may have just logged a set
     const { selectedExercises, completedSets } = useWorkoutStore.getState()
     return summariseSession(selectedExercises, completedSets, elapsed)
   }
 
-  // Ending the workout does NOT call the API here. We capture the summary and
-  // leave immediately; the Finish screen owns the request and waits for it.
-  // Awaiting on this page would keep the End button on screen during a slow
-  // response, letting the user fire a second finish.
+  // Finishing only captures the summary and navigates; the Finish screen owns
+  // the request, so there is no End button left to press twice
   const handleFinish = () => {
-    // Ref, not state: two taps in the same tick would both read a `false`
-    // state value and both get through.
+    // Ref guard against two taps in one tick
     if (finishingRef.current) return
     finishingRef.current = true
     setIsFinishing(true)
@@ -213,24 +196,17 @@ export default function ActiveWorkout() {
     })
   }
 
-  // ── voice (requirement 6.1) ──
-  // One session for the whole workout, routed by which screen is up: the rest
-  // timer answers to "skip"/"pause", the set card to values and "set done".
+  // ── voice ──
+  // One session for the workout: the rest timer answers "skip"/"pause", the set card values and "set done".
   const handleVoiceCommand = useCallback((command: VoiceCommand) => {
     const resting = showRest
 
-    // Calisthenics holds, runs and metcons log fields the strength set card has
-    // no idea about — seconds under tension, distance, rounds. Routing a spoken
-    // "set done" through the strength path there would write a hold as zero
-    // seconds, so value and log commands stay off outside the strength flow.
+    // Value and log commands only on the strength card (other modalities log different fields)
     const modality = selectedExercises[currentExerciseIndex]?.exercise.modality
     const strengthFlow = modality !== 'Calisthenics' && modality !== 'Mobility'
       && modality !== 'Cardio' && modality !== 'WOD'
 
-    // "End workout" is handled here and nowhere else, before anything is
-    // offered to the modality view: it is the one command that throws the rest
-    // of the session away, and its two-phase arming has to behave identically
-    // on every screen. A view that could intercept it could also break it.
+    // "End workout" is handled here first, identically on every screen
     if (command.kind === 'endWorkout') {
       if (endArmed) {
         if (endArmedTimer.current) clearTimeout(endArmedTimer.current)
@@ -245,19 +221,13 @@ export default function ActiveWorkout() {
       return
     }
 
-    // Everything else goes to the live modality view first, if one is mounted
-    // and claims it. "Pause" is the run clock on a run and the hold on a
-    // stretch; only the screen showing it can know which — and while the rest
-    // timer is up, the strength path below owns the word instead.
+    // Everything else goes to the mounted modality view first (except during rest)
     if (!resting && modalityVoice.current?.(command)) return
 
-    // `endWorkout` is not in this switch: it returned above, and TypeScript has
-    // narrowed it out of the union by here.
+    // `endWorkout` returned above, so TypeScript has narrowed it out
     switch (command.kind) {
       case 'mark':
-        // A lap or a round. Meaningless on a strength set card, and it is not
-        // worth guessing at an intent — the modality views that count
-        // something claim this one before it reaches here.
+        // Laps and rounds are claimed by the modality views
         return
 
       case 'skipRest':
@@ -273,16 +243,13 @@ export default function ActiveWorkout() {
         return
 
       case 'advance':
-        // During rest this is the same intent as "skip"; on the set card it
-        // moves on without logging, which is what "next exercise" means.
+        // During rest: skip; on the set card: move on without logging
         advance()
         return
 
       case 'setValues': {
         if (!strengthFlow) return
-        // Adjusting the next set mid-rest is exactly what the rest screen's
-        // steppers are for, so route there rather than editing the set that
-        // has already been logged.
+        // During rest, adjust the upcoming set rather than the logged one
         const { reps, weight, rpe } = command
         const patch = {
           ...(reps !== undefined && { reps }),
@@ -300,7 +267,7 @@ export default function ActiveWorkout() {
       }
 
       case 'logSet': {
-        if (resting || !strengthFlow) return   // nothing to log; the set is already in
+        if (resting || !strengthFlow) return   // nothing to log
         const { reps, weight, rpe } = command
         void handleSetDone({
           ...(reps !== undefined && { reps }),
@@ -310,16 +277,12 @@ export default function ActiveWorkout() {
         return
       }
     }
-  // `elapsed` is here because "end workout" reaches buildSnapshot through
-  // handleFinish, and a memoised callback would otherwise report the session
-  // length as it stood when the callback was last built. Rebuilding once a
-  // second costs nothing — useVoiceCommands holds handlers in a ref precisely
-  // so a new function identity never restarts the microphone.
+  // `elapsed` is a dep so a voice "end workout" snapshots the current duration
+  // (handlers sit in a ref, so a new identity never restarts the mic)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showRest, endArmed, audio, elapsed, currentExerciseIndex, currentSetIndex, selectedExercises])
 
-  /** Where the next unlogged set lives, so spoken adjustments during rest land
-   *  on the set the athlete is about to do rather than the one just finished. */
+  /** The next unlogged set, so spoken adjustments during rest land on it. */
   const nextSetLocation = (): [number | null, number | null] => {
     const ex = selectedExercises[currentExerciseIndex]
     if (!ex) return [null, null]
@@ -332,8 +295,7 @@ export default function ActiveWorkout() {
   const [showVoiceHelp, setShowVoiceHelp] = useState(false)
 
   const { state: voiceState, lastHeard, lastMiss } = useVoiceCommands(
-    // Only while a session is genuinely live. Holding the microphone through
-    // the loading, error and saving screens would keep it hot for no reason.
+    // Only while the session is live
     voice && Boolean(sessionId) && !isFinishing && !startError,
     { onCommand: handleVoiceCommand }
   )
@@ -342,8 +304,7 @@ export default function ActiveWorkout() {
     if (endArmedTimer.current) clearTimeout(endArmedTimer.current)
   }, [])
 
-  // Shown on every screen a voice session can reach, because the first "end
-  // workout" is only useful if the athlete can see that it registered.
+  // Shown on every screen voice can reach, so the first "end workout" is visibly armed
   const endArmedBanner = endArmed ? (
     <div className="fixed top-3 left-4 right-4 z-[60] flex items-center gap-3 px-4 py-3.5
                     rounded-card border border-brand-yellow/50 bg-[#2a2410] shadow-lg">
@@ -375,12 +336,9 @@ export default function ActiveWorkout() {
         onPausedChange={setRestPaused}
         onDone={() => {
           notifyRestComplete(`Set ${currentSetIndex + 2}`)
-          // Requirement 4.2 — the buzz the Smart Features card has always
-          // promised. Fired here rather than in RestTimer so it happens once,
-          // at the moment the timer actually completes.
+          // Rest-complete haptic, fired once here
           if (haptic) void hapticRestComplete()
-          // Requirement 6.2 — and say what's coming, so the phone can stay in
-          // a pocket between sets.
+          // Say what's next, so the phone can stay in a pocket
           if (audio) {
             const next = describeNext(currentExerciseIndex, currentSetIndex)
             void speakAlert(cues.restComplete(next ?? ''))
@@ -394,13 +352,9 @@ export default function ActiveWorkout() {
   }
 
   // ── SAVING (finish in flight) ──
-  // Rendered before the "no exercises" branch: finishSession clears the
-  // selection, so without this the screen flashes an empty state on the way out.
+  // Before the "no exercises" branch: finishing clears the selection
   if (isFinishing) {
-    // `pending` stays true and nothing ever settles: handleFinish navigates in
-    // the same tick, so this is a single frame of hand-off to the Finish screen,
-    // which owns the request and plays the flight. It renders the same card so
-    // the two screens read as one continuous moment rather than a swap.
+    // One frame of hand-off to the Finish screen, which renders the same card
     return (
       <SaveToCalendar
         pending
@@ -432,10 +386,7 @@ export default function ActiveWorkout() {
   }
 
   // ── LOADING ──
-  // The same card the finish screen uses, so opening a session and closing one
-  // look like two ends of one thing. `spin` rather than the solid dot: there is
-  // no session yet to stand for, and a rotating arc is the only motion left
-  // once bobbing and scaling are out.
+  // The same card as the Finish screen, with a spinning arc
   if (isStarting || (!sessionId && selectedExercises.length > 0)) {
     return (
       <SessionStatus
@@ -461,13 +412,8 @@ export default function ActiveWorkout() {
     )
   }
 
-  // Toast shown when a set failed to persist, so a dropped set is never silent.
-  //
-  // Two states now, and they must not look the same. A red toast means the set
-  // is GONE and the athlete has to act. The amber one means it is saved on this
-  // phone and will send itself — no action needed, but not hidden either,
-  // because a set that reads as saved while living only in IndexedDB is exactly
-  // the kind of quiet difference that becomes "the app lost my workout".
+  // Set-failure toast: red means the set was lost (act now); amber means it is
+  // queued on the phone and will send itself
   const errorToast = logError ? (
     <div className="fixed bottom-[calc(var(--bottom-nav-h)+0.75rem)] left-4 right-4 z-50 flex items-start gap-3 px-4 py-3.5
                     rounded-card border border-brand-red/50 bg-[#2a1a1a] shadow-lg">
@@ -500,7 +446,7 @@ export default function ActiveWorkout() {
       case 'Mobility':     return <MobilityView {...modalityProps} />
       case 'Cardio':       return <CardioView {...modalityProps} />
       case 'WOD':          return <WodView {...modalityProps} />
-      // 'Strength' and anything else fall through to the strength UI below
+      // 'Strength' and anything else use the strength UI below
       default:             return null
     }
   })()
@@ -512,16 +458,10 @@ export default function ActiveWorkout() {
   const muscle = ex.muscles.map(m => m.name).join(' · ')
   const totalSets = currentExercise.sets.length
 
-  // Quick chips — one step down, the plan, and two up, low to high.
-  //
-  // They were listed as [plan, +1, +2, −1], so the row read 20, 22.5, 25, 17.5:
-  // up, up, then a drop. And they were rebuilt around the CURRENT value, so
-  // tapping one re-centred the row under the finger and every chip changed
-  // number at once. Now they are anchored to the value the set started with
-  // and only re-centre when the value leaves them (a stepper, a typed number,
-  // a scrub) or the set changes. The ref is written during render, but only
-  // ever to a value derived from this render's props, so a StrictMode double
-  // render writes the same thing twice.
+  // Quick chips: one step down, the value, two up, in ascending order. Anchored
+  // to the set's starting value, re-centring only when the value leaves them or
+  // the set changes. (The ref is written during render with render-derived
+  // values, so StrictMode's double render is harmless.)
   const chipKey = `${currentExerciseIndex}:${currentSetIndex}`
   const anchor = chipAnchor.current
   const chipsFor = (base: { weight: number; reps: number }) => ({
@@ -547,7 +487,6 @@ export default function ActiveWorkout() {
   }
   const { weight: weightChips, reps: repChips } = chipsFor(chipAnchor.current!)
 
-  // Up next
   let upNext: { title: string; detail: string }
   if (currentSetIndex + 1 < totalSets) {
     const n = currentExercise.sets[currentSetIndex + 1]
@@ -600,16 +539,11 @@ export default function ActiveWorkout() {
         </button>
       </div>
 
-      {/* Under the name, above the set progress: the note is about the exercise
-          as a whole, not the set in front of you, and putting it below the
-          current-set card would put it off-screen on a short phone. */}
-      {/* Last time's note directly above today's field, so the two read as
-          one thread about the movement. */}
+      {/* Last time's note, then today's — about the exercise, so above the set card */}
       <PreviousNote key={`prev-${ex.id}`} exerciseId={ex.id} />
       <ExerciseNotes
         ref={notesRef}
-        // Remounts when the exercise changes, so a draft can never be carried
-        // from one movement onto the next.
+        // Remounts per exercise, so a draft never carries over
         key={currentExercise.workoutExerciseId ?? ex.id}
         value={currentExercise.notes ?? ''}
         onSave={notes => setExerciseNotes(currentExerciseIndex, notes)}
@@ -748,10 +682,7 @@ export default function ActiveWorkout() {
 
         {/* Voice strip + Set Done */}
         <div className="px-4 pt-3 pb-4">
-          {/* The strip itself says the microphone is live and opens the full
-              command list on tap, so the tip that used to sit under it was
-              covering the set you were mid-way through logging to explain
-              something already on screen. */}
+          {/* The strip shows mic state and opens the command list */}
           <VoiceStrip
             state={voiceState}
             lastHeard={lastHeard}
@@ -777,8 +708,7 @@ export default function ActiveWorkout() {
 
       {/* Note + End */}
       <div className="grid grid-cols-2 gap-2.5 mt-3.5">
-        {/* Opens the note field above rather than being its own editor: this
-            button had no handler at all and did nothing when pressed. */}
+        {/* Opens the note field above */}
         <button
           onClick={() => notesRef.current?.open()}
           className="py-3.5 rounded-btn border border-dark-600 bg-dark-800
@@ -804,21 +734,9 @@ export default function ActiveWorkout() {
 }
 
 /**
- * Live state of the microphone, in the strip that used to be a static hint.
- *
- * It has to do three jobs at once, which is why it is not just a label:
- *
- *  - **Report.** The dot only pulses when the engine is genuinely running, and
- *    a blocked microphone says so rather than leaving cheerful copy sitting
- *    there doing nothing.
- *  - **Teach.** While idle it cycles through the vocabulary a phrase at a time,
- *    so someone who uses the app for a month meets all of it without ever
- *    opening a help screen. One static example would only ever teach one.
- *  - **Recover.** A phrase aimed at the app that didn't parse is answered, not
- *    swallowed. Silence after a real attempt is what convinces people the
- *    feature is broken.
- *
- * The whole strip is a button — the full list is one tap away, always.
+ * The live voice strip: reports the mic state, rotates example phrases while
+ * idle, and answers a missed command with one that works. Tapping it opens
+ * the full command list.
  */
 function VoiceStrip({
   state, lastHeard, lastMiss, enabled, onOpenHelp,
@@ -833,8 +751,7 @@ function VoiceStrip({
   const listening = state === 'listening'
   const busy = Boolean(lastHeard || lastMiss)
 
-  // Rotate slowly, and only while there is nothing more important to show. Any
-  // faster reads as an animation to watch rather than a hint to glance at.
+  // Rotate slowly, only while idle
   useEffect(() => {
     if (!listening || busy) return
     const id = setInterval(
@@ -845,8 +762,7 @@ function VoiceStrip({
   }, [listening, busy])
 
   if (!enabled) return null
-  // Nothing useful to say about a device that never had the capability — the
-  // Start screen has already explained it there.
+  // Unsupported devices were already told on the Start screen
   if (state === 'unsupported') return null
 
   const blocked = state === 'denied'
@@ -880,8 +796,7 @@ function VoiceStrip({
         : <MicIcon className="w-4 h-4" />}
       <span className="flex-1 min-w-0">
         <span className="block text-[13.5px] truncate" style={{ color }}>{message}</span>
-        {/* The recovery line. Only after a miss, and it names a phrase that
-            definitely works rather than telling them to try again. */}
+        {/* After a miss: suggest a phrase that works */}
         {lastMiss && (
           <span className="block text-[11.5px] text-dark-400 mt-0.5">
             Try “set done” · tap for all commands
@@ -898,5 +813,5 @@ function VoiceStrip({
   )
 }
 
-/** Kept local to avoid re-exporting the recogniser's union through this file. */
+/** Local copy, to avoid re-exporting the recogniser's union. */
 type VoiceStateLike = 'idle' | 'listening' | 'unsupported' | 'denied' | 'failed'

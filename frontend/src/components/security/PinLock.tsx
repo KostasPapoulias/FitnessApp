@@ -4,14 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore'
 import { useT } from '../../i18n'
 import { LockIcon } from '../icons'
 
-/**
- * Full-screen PIN gate.
- *
- * Shown over the app when a PIN is set and the session is locked. The PIN is
- * checked by the server, never compared in the client — a correct value sitting
- * in the bundle or in device storage would be readable by anything that can
- * read either.
- */
+/** Full-screen PIN gate. The PIN is verified by the server, never in the client. */
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫']
 
@@ -23,8 +16,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
   const [shake, setShake] = useState(false)
   const { t } = useT()
 
-  // A PIN is 4–8 digits, so there is no submit button — verify as soon as the
-  // shortest valid length is reached, then again on each further digit.
+  // No submit button: verify from the 4th digit on, and again on each further digit
   useEffect(() => {
     if (pin.length < 4 || busy) return
 
@@ -50,10 +42,8 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [pin]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The length cap is checked inside the updater, not against `pin`: the
-  // keyboard listener below outlives renders, and a fast typist can land two
-  // keys before React re-renders, so a closure over `pin` would let a ninth
-  // digit through.
+  // The length cap lives in the updater: the keyboard listener can land keys
+  // faster than React re-renders
   const press = (key: string) => {
     setError(null)
     if (key === '⌫') return setPin(p => p.slice(0, -1))
@@ -61,23 +51,20 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     setPin(p => (p.length >= 8 ? p : p + key))
   }
 
-  // Which pad key to light up while its keyboard twin is held, so typing on a
-  // desktop still shows the same feedback a tap does.
+  // The pad key to highlight while its keyboard key is held
   const [litKey, setLitKey] = useState<string | null>(null)
 
-  // Desktop: type the PIN on the keyboard. Listens on window rather than a
-  // focused input — there is no input here, and focusing one would raise the
-  // soft keyboard on a phone over the pad it already has.
+  // Desktop keyboard entry, listened for on window (an input would raise the phone keyboard)
   useEffect(() => {
     if (busy) return
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // Leave browser and OS shortcuts alone (Ctrl+R, Cmd+1 switching tabs…)
+      // Leave browser and OS shortcuts alone
       if (e.ctrlKey || e.metaKey || e.altKey) return
 
       let key: string | null = null
       if (/^[0-9]$/.test(e.key)) {
-        // Holding a digit would otherwise auto-repeat a whole PIN of it
+        // Ignore auto-repeat from a held digit
         if (e.repeat) { e.preventDefault(); return }
         key = e.key
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -101,14 +88,12 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
-      // The keyup may land while busy, with no listener to hear it
+      // The keyup may land while busy, with no listener
       setLitKey(null)
     }
   }, [busy])
 
-  // Scrolls rather than clipping the keypad: in landscape, or with large text,
-  // the pad is taller than the viewport. `safe center` keeps the top reachable
-  // when it does overflow.
+  // Scrolls instead of clipping when the pad is taller than the viewport
   return (
     <div className="fixed inset-0 z-50 bg-dark-900 text-white flex flex-col
                     items-center [justify-content:safe_center] overflow-y-auto px-8
@@ -146,8 +131,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
         ))}
       </div>
 
-      {/* Forgetting the PIN must not mean losing the account — signing out and
-          back in with the password is the way through. */}
+      {/* Forgotten PIN: sign out and back in with the password */}
       <button
         onClick={logout}
         className="mt-9 text-dark-300 text-[13px] underline underline-offset-4"

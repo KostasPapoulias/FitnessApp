@@ -2,55 +2,25 @@ import prisma from '../lib/prisma'
 import { log } from '../lib/logger'
 
 /**
- * Spend guard for every AI call in the app.
- *
- * Two independent limits, because they stop different things:
- *
- *   - a DAILY BUDGET in dollars, which stops sustained use running up a bill
- *   - a PER-MINUTE RATE LIMIT, which stops a runaway loop or a held-down send
- *     button burning the whole day's budget in seconds
- *
- * A budget alone is not enough: without the rate limit, the first thing a bug
- * does is spend the entire allowance before anyone notices.
+ * Spend guard for every AI call: a daily dollar budget (in the database) plus
+ * a per-minute rate limit (in memory) that stops runaway loops.
  */
 
 /**
- * Prices per million tokens, keyed by model.
- *
- * A single hardcoded price is a trap: the price constants said Flash Lite while
- * the configured model defaulted to Flash, so an unset env var meant costs
- * accrued at a fraction of the real rate and the cap would not trip until well
- * past the budget — the exact failure this module exists to prevent.
- *
- * Verify against the provider's current pricing when changing model; an unknown
- * model deliberately bills at the most expensive known rate, so drift
- * over-reports (send fewer messages) rather than under-reports (spend money).
+ * Prices per million tokens, keyed by model. Unknown models on metered
+ * endpoints bill at FALLBACK_PRICE so the cap trips early rather than late.
  */
 const MODEL_PRICES: Record<string, { input: number; output: number }> = {
-  // Empty, and correct that way: the app runs on free endpoints — NVIDIA's
-  // hosted catalogue, a local Ollama — where `isUnmetered` returns zero before
-  // this table is ever read. The Gemini and OpenAI rows that were here went
-  // with those providers; a rate card nobody bills against only goes stale.
-  // Add a row, or set AI_PRICE_INPUT_PER_M / AI_PRICE_OUTPUT_PER_M, when
-  // pointing the coach at something metered.
+  // Empty: the app runs on unmetered endpoints. Add a row, or set
+  // AI_PRICE_INPUT_PER_M / AI_PRICE_OUTPUT_PER_M, for a metered provider.
 }
 
-/**
- * What an unpriced model on a metered endpoint is billed at, per million
- * tokens. Deliberately above any current frontier rate: an unknown model must
- * over-report so the cap trips early and the athlete sends fewer messages,
- * never under-report and quietly spend real money.
- */
+/** Price for an unpriced model on a metered endpoint — deliberately high. */
 const FALLBACK_PRICE = { input: 5, output: 15 }
 
 /**
- * Providers whose hosted allowance is not billed per token.
- *
- * NVIDIA's build.nvidia.com and a local Ollama both cost nothing per call, so
- * pricing them against a paid rate card would trip the daily budget after a
- * few dozen messages for spend that never happened. `AI_PRICE_*` still
- * overrides this, and the per-minute rate limit still applies either way — the
- * runaway-loop guard is not a money guard and must not be switched off with one.
+ * Hosts that do not bill per token (NVIDIA's hosted catalogue, local Ollama).
+ * The rate limit still applies to them.
  */
 const UNMETERED_HOSTS = ['integrate.api.nvidia.com', 'localhost', '127.0.0.1']
 
@@ -62,7 +32,7 @@ const isUnmetered = (): boolean => {
 }
 
 const priceFor = (modelName?: string) => {
-  // Explicit env overrides win, so a price change never needs a deploy
+  // Env overrides win
   const envInput = Number(process.env.AI_PRICE_INPUT_PER_M)
   const envOutput = Number(process.env.AI_PRICE_OUTPUT_PER_M)
   if (envInput > 0 && envOutput > 0) return { input: envInput, output: envOutput }
@@ -73,16 +43,13 @@ const priceFor = (modelName?: string) => {
   const known = MODEL_PRICES[key]
   if (known) return known
 
-  // Unknown model: the priciest entry, or the fallback when the table is
-  // empty. `reduce` without an initial value throws on an empty array, which
-  // would turn "nobody priced this model" into a 500 on every chat message.
+  // Unknown model: the priciest known entry, or the fallback when the table is empty
   return Object.values(MODEL_PRICES).reduce((worst, price) =>
     price.output > worst.output ? price : worst, FALLBACK_PRICE
   )
 }
 
-// ~57 chat messages/day at current prices and context size. Low enough to cap
-// the damage, high enough that real conversation never reaches it.
+// Defaults: $0.02/day and 10 calls/minute per user.
 const DAILY_BUDGET_USD = Number(process.env.AI_DAILY_BUDGET_USD) || 0.02
 const RATE_LIMIT_PER_MIN = Number(process.env.AI_RATE_LIMIT_PER_MIN) || 10
 
@@ -95,10 +62,7 @@ export class AiBudgetError extends Error {
 
 const utcDay = (date = new Date()) => date.toISOString().slice(0, 10)
 
-// In-process sliding window. Good enough for the rate limit specifically —
-// worst case with N server instances is N× the intended rate, which the daily
-// budget still backstops. The budget itself is in the database precisely
-// because it must NOT be per-instance.
+// Per-instance sliding window; the daily budget (in the database) is the shared backstop.
 const recentCalls = new Map<string, number[]>()
 
 const checkRateLimit = (userId: string) => {
@@ -117,7 +81,7 @@ const checkRateLimit = (userId: string) => {
   calls.push(now)
   recentCalls.set(userId, calls)
 
-  // Unbounded growth otherwise: one entry per user who ever chatted, forever
+  // Prune idle users
   if (recentCalls.size > 1000) {
     for (const [key, times] of recentCalls) {
       if (times.every(t => t <= windowStart)) recentCalls.delete(key)
@@ -125,21 +89,15 @@ const checkRateLimit = (userId: string) => {
   }
 }
 
-/**
- * Call BEFORE spending anything. Throws AiBudgetError when the user is out of
- * budget for the day or calling too fast.
- */
+/** Call before any AI request. Throws AiBudgetError when over budget or calling too fast. */
 export const assertWithinBudget = async (userId: string) => {
-  // Budget BEFORE rate limit. Checking the rate first meant a user already out
-  // of budget was told "too many requests, retry in 60s" — advice that will not
-  // work for hours — because each rejected attempt still counted toward the
-  // window and tripped it before the real reason was ever reached.
+  // Budget first, so an exhausted user gets the right message rather than "retry in 60s"
   const usage = await prisma.aiUsageDaily.findUnique({
     where: { userId_day: { userId, day: utcDay() } }
   })
 
   if (usage && usage.costUsd >= DAILY_BUDGET_USD) {
-    // Seconds until the next UTC midnight, so the client can say when it lifts
+    // Seconds until the next UTC midnight
     const now = new Date()
     const midnight = Date.UTC(
       now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1
@@ -154,18 +112,8 @@ export const assertWithinBudget = async (userId: string) => {
 }
 
 /**
- * Call AFTER a successful response, with the provider's own token counts.
- *
- * Estimating token counts from string length drifts badly once context blocks
- * and history are involved, and the drift is always in the direction of
- * under-billing — so the numbers come from the provider's usage block or not
- * at all.
- *
- * Both field namings are accepted. `prompt_tokens`/`completion_tokens` is the
- * chat-completions shape every provider returns; the Gemini-native
- * `promptTokenCount` spelling is kept so this keeps totalling correctly for
- * rows written before the provider migration, and for any caller still on the
- * old SDK.
+ * Call after a successful response with the provider's own token counts.
+ * Accepts both the chat-completions and the older Gemini field names.
  */
 export interface AiUsageCounts {
   prompt_tokens?: number
@@ -202,13 +150,12 @@ export const recordUsage = async (
       }
     })
   } catch (error: any) {
-    // Never fail a reply the user has already been charged for because the
-    // ledger write failed. The rate limit still holds the line.
+    // Never fail a reply because the ledger write failed
     log.error('recordUsage failed', error)
   }
 }
 
-/** Today's spend, for the UI and for debugging. */
+/** Today's spend. */
 export const getUsageToday = async (userId: string) => {
   const usage = await prisma.aiUsageDaily.findUnique({
     where: { userId_day: { userId, day: utcDay() } }

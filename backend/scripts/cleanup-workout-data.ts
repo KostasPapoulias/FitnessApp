@@ -1,15 +1,8 @@
 /**
- * Repairs workout data corrupted by three now-fixed bugs:
+ * Repairs workout data from three fixed bugs: ghost sessions with no sets,
+ * duplicate sets, and mobility sets stored as STRENGTH.
  *
- *   1. Ghost sessions   — StrictMode double-mount started two sessions per
- *                         workout; the loser kept its exercises but got no sets.
- *   2. Duplicate sets   — re-logging a set appended a second row with the same
- *                         setNumber, double-counting volume and fatigue.
- *   3. Mis-typed sets   — mobility work was written as setType STRENGTH with the
- *                         hold seconds in `reps`, before completeSet became
- *                         modality-aware.
- *
- * DRY RUN by default. Pass --apply to actually write.
+ * Dry run by default; pass --apply to write.
  *   npx tsx scripts/cleanup-workout-data.ts
  *   npx tsx scripts/cleanup-workout-data.ts --apply
  */
@@ -19,7 +12,7 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 const APPLY = process.argv.includes('--apply')
 
-// Ghost sessions are always older than this; anything newer may be a live workout
+// Only sessions older than this, so a live workout is never touched
 const MIN_AGE_MINUTES = 60
 
 async function findGhostSessions() {
@@ -32,7 +25,7 @@ async function findGhostSessions() {
     },
     orderBy: { dateTime: 'asc' },
   })
-  // Only sessions that never recorded a single set, and never applied fatigue
+  // Sessions with no sets that never applied fatigue
   return candidates.filter(
     s => s.workoutExercises.every(we => we.sets.length === 0) && s.fatigueLogs.length === 0
   )
@@ -50,8 +43,7 @@ async function findDuplicateSets() {
       where: { workoutExerciseId: g.workoutExerciseId, setNumber: g.setNumber },
       include: { strength: true, calisthenics: true, cardio: true, wod: true, mobility: true },
     })
-    // Keep the most informative row: real work beats a zero/empty row. Ties fall
-    // back to id order so the choice is deterministic.
+    // Keep the most informative row; ties break by id
     const score = (r: typeof rows[number]) => {
       const v =
         (r.strength ? r.strength.reps * Math.max(1, r.strength.weight) : 0) +
@@ -71,8 +63,7 @@ async function findDuplicateSets() {
 }
 
 async function findMistypedMobilitySets() {
-  // setType STRENGTH on an exercise whose modality is Mobility → hold seconds
-  // were stored in strength.reps
+  // Mobility exercises logged as STRENGTH, with hold seconds in reps
   const rows = await prisma.workoutSet.findMany({
     where: {
       setType: 'STRENGTH',

@@ -1,14 +1,13 @@
 import { Component, ReactNode } from 'react'
 import { reportClientError } from '../lib/clientErrors'
 
-// Catches a failed lazy chunk before the page boundary does, so one missing
-// download cannot replace a live workout screen.
+// Catches a failed lazy-chunk load locally, so one failed download cannot replace a live screen.
 
 interface Props {
   children: ReactNode
   /** Rendered in place of the child. Gets a retry that remounts it. */
   fallback: (retry: () => void) => ReactNode
-  /** Names the chunk in the report, so "which one failed" is not a guess. */
+  /** Names the chunk in the error report. */
   label: string
 }
 
@@ -24,15 +23,13 @@ export default class ChunkBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error): void {
-    // Reported, not swallowed: a chunk that cannot be fetched is usually a
-    // deploy problem, and it is invisible from the server side.
+    // Reported: an unfetchable chunk is usually a deploy problem
     reportClientError({ error, boundary: `chunk:${this.props.label}` })
   }
 
   render(): ReactNode {
     if (this.state.failed) {
-      // Remounting the child re-runs the import, which is the whole point —
-      // React.lazy retries a rejected loader on the next mount.
+      // Remounting re-runs the import (React.lazy retries a rejected loader)
       return this.props.fallback(() => this.setState({ failed: false }))
     }
     return this.props.children

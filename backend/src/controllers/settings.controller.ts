@@ -5,32 +5,11 @@ import { AuthRequest } from '../server'
 import { log } from '../lib/logger'
 import { LOCALES, isLocale } from '../lib/locale'
 
-/**
- * The Settings row had no endpoint at all.
- *
- * Every column here was readable — `getProfile` returns the whole row — and
- * none of them were writable outside `security.controller`, which only ever
- * touches `pinHash`. So the app shipped an "AI Data Consent" switch wired to
- * nothing but React state, and a fully-built imperial input path in Onboarding
- * and Edit Profile that no user could ever reach, because `preferredUnit`
- * could not be changed from its default.
- *
- * Writes are whitelisted field by field rather than spread from the body: the
- * row sits on User and a permissive update would let a client set columns the
- * settings screen has no business touching.
- */
+/** User settings: read with defaults, and a whitelisted field-by-field update. */
 
 /**
- * The Settings columns a client may see. Every endpoint that returns the row —
- * here, `/auth/me` and `/profile` — selects through this.
- *
- * An allowlist, not an omit. The row also holds the PIN's bcrypt hash and its
- * lockout counters, and all three endpoints used to return it whole: the hash
- * went to the phone, and `useAuthStore` persists the user to localStorage, so
- * it sat on the device. A 4–8 digit PIN is at most 10^8 guesses, and offline
- * nothing rate-limits them — the server-side lockout only protects a PIN the
- * attacker has to ask about. Listing what is safe means a column added later is
- * private until someone decides otherwise.
+ * The Settings columns a client may see. An allowlist, so the PIN hash and
+ * lockout counters (and any future column) never leave the server.
  */
 export const CLIENT_SETTINGS_SELECT = {
   preferredUnit: true,
@@ -44,12 +23,7 @@ export const CLIENT_SETTINGS_SELECT = {
 const UNITS = ['metric', 'imperial'] as const
 const THEMES = ['dark', 'light'] as const
 
-/**
- * Bounds on the inactivity nudge. Below a day the rule fires against a rest
- * day, which is the notification users hate most; above a month it has stopped
- * being a nudge. `notification-rules.service` reads this straight from the row,
- * so an unbounded value would be honoured literally.
- */
+/** Bounds on the inactivity nudge threshold, in days. */
 const INACTIVITY_MIN_DAYS = 1
 const INACTIVITY_MAX_DAYS = 30
 
@@ -63,13 +37,8 @@ export interface SettingsPatch {
 }
 
 /**
- * Validates a patch and returns either the Prisma data object or the first
- * problem found. Shared by GET's upsert-default path and PUT.
- *
- * Absent keys mean "leave alone" — the settings screen saves one toggle at a
- * time and a partial save must stay partial. `null` is rejected rather than
- * treated as absent: it almost always means a client sent a cleared field by
- * accident, and silently ignoring it hides the bug.
+ * Validates a patch into Prisma data, or returns the first error. Absent keys
+ * are left alone; `null` is rejected as a likely client bug.
  */
 const buildPatch = (
   body: SettingsPatch
@@ -128,10 +97,7 @@ const buildPatch = (
 // GET /api/settings
 export const getSettings = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Upsert rather than findUnique. Registration creates the row, but accounts
-    // that predate a column — or any row lost to a partial delete — would
-    // otherwise read as 404 and leave the settings screen permanently empty
-    // with no way to write itself out of that state.
+    // Upsert so an account with no row still gets defaults
     const settings = await prisma.settings.upsert({
       where: { userId: req.userId! },
       update: {},

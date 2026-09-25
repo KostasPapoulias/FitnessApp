@@ -5,25 +5,18 @@ import { log } from './logger'
 export interface PushPayload {
   title: string
   body: string
-  /**
-   * Notifications sharing a tag REPLACE each other rather than stacking. A
-   * once-a-minute reminder with no tag buries Notification Center in an hour.
-   */
+  /** Notifications sharing a tag replace each other instead of stacking. */
   tag?: string
   /** Path opened when the notification is tapped */
   url?: string
-  /**
-   * Notification ledger id. The service worker posts it back on display and on
-   * tap, which is the only delivery receipt web push offers — the push service
-   * accepting a payload says nothing about whether a phone ever showed it.
-   */
+  /** Notification id, posted back by the service worker as a delivery receipt. */
   nid?: string
 }
 
 export interface PushResult {
   sent: number
   failed: number
-  /** Subscriptions the browser/OS has revoked, deleted here */
+  /** Revoked subscriptions, deleted here */
   removed: number
 }
 
@@ -35,17 +28,13 @@ type StoredSubscription = {
 }
 
 /**
- * Deliver one payload to a set of stored subscriptions.
- *
- * iOS revokes push permission outright if a push is delivered and the service
- * worker shows nothing, so every payload sent from here must be one the worker
- * will actually display.
+ * Deliver one payload to a set of stored subscriptions. iOS revokes push
+ * permission if a push shows nothing, so every payload must be displayable.
  */
 export const sendToSubscriptions = async (
   subscriptions: StoredSubscription[],
   payload: PushPayload,
-  // Short by default: a reminder that arrives an hour late is noise, not a
-  // reminder. APNs drops it instead of queueing once the TTL passes.
+  // Short TTL: a late reminder is noise, so the push service drops it instead
   { ttlSeconds = 300 }: { ttlSeconds?: number } = {}
 ): Promise<PushResult> => {
   if (!isPushConfigured || subscriptions.length === 0) {
@@ -66,9 +55,7 @@ export const sendToSubscriptions = async (
         result.sent++
 
       } catch (error: any) {
-        // 404/410 mean the subscription is gone for good — the browser rotated
-        // it, or the user removed the home screen icon. Anything else (network,
-        // 5xx from the push service) is worth retrying on the next cycle.
+        // 404/410: the subscription is gone for good. Anything else may be retried.
         if (error.statusCode === 404 || error.statusCode === 410) {
           await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {})
           result.removed++

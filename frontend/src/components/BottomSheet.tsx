@@ -2,56 +2,35 @@ import { ReactNode, useEffect, useRef, useState } from 'react'
 import ModalPortal from './ModalPortal'
 
 /**
- * An iOS-style sheet that rises from the bottom edge.
- *
- * Dismissed by dragging the grabber down, by dragging the content down when it
- * is already scrolled to the top, by tapping the scrim, or with Escape.
- *
- * Mount it conditionally — `{thing && <BottomSheet …>}`. It plays its own exit
- * animation and calls `onClose` when that finishes, so the parent must not
- * unmount it itself; clearing the state in `onClose` is the whole contract.
- *
- * `z-[60]` over BottomNav's `z-50`, per the rule in CLAUDE.md, and through
- * `ModalPortal` so that z-index is compared against the nav at all — see there.
- * The scrim covers the nav deliberately; a sheet is modal and leaving the nav
- * lit and tappable underneath is wrong regardless of the clipping.
+ * A sheet rising from the bottom edge. Dismissed by dragging the grabber (or
+ * the content when scrolled to the top), tapping the scrim, or Escape.
+ * Mount conditionally; it plays its exit animation then calls `onClose`.
+ * Rendered via ModalPortal at z-[60], above BottomNav.
  */
 
 /** Must match the `duration-*` classes below. */
 const ANIM_MS = 280
-/** Drag far enough and let go and it closes, however slowly you did it. */
+/** Drag past this and release to close. */
 const DISMISS_PX = 110
-/** …or flick it, however short the throw. */
+/** …or flick faster than this. */
 const DISMISS_VELOCITY = 0.55 // px per ms
 
 interface Props {
   title: ReactNode
-  /** Small line under the title — a count, a date, a total. */
+  /** Small line under the title. */
   subtitle?: ReactNode
   onClose: () => void
-  /**
-   * A pinned action row below the scroll area — a Save, a Done.
-   *
-   * Outside the scroller on purpose: a sheet whose only commit button is the
-   * last thing in a long form makes the athlete scroll to find out whether
-   * there is one, and the taller the form the worse it reads. The safe-area
-   * padding moves here when it is present, so the scroller does not also pad
-   * for a home indicator this now covers.
-   */
+  /** A pinned action row below the scroll area (e.g. Save), always visible. */
   footer?: ReactNode
   children: ReactNode
 }
 
 export default function BottomSheet({ title, subtitle, onClose, footer, children }: Props) {
-  // `entered` drives the rise; `leaving` drives the fall. Starting at false and
-  // flipping on the next frame is what gives the browser a "from" to animate
-  // out of — set in the same paint and it simply appears.
+  // `entered` flips on the next frame, giving the rise a starting point
   const [entered, setEntered] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [dragY, setDragY] = useState(0)
-  // Mirrors `drag.current` for rendering. The ref alone cannot switch the
-  // transition off, because setting it does not re-render — the sheet would
-  // then ease toward the finger for the first frame of every drag.
+  // Render mirror of drag state, to switch the transition off while dragging
   const [dragging, setDragging] = useState(false)
 
   const sheet = useRef<HTMLDivElement>(null)
@@ -63,7 +42,7 @@ export default function BottomSheet({ title, subtitle, onClose, footer, children
     startY: number
     startedAt: number
     from: 'grabber' | 'content'
-    /** Null until the direction is known. Only a 'y' gesture moves the sheet. */
+    /** Null until the direction is known; only 'y' moves the sheet. */
     axis: 'x' | 'y' | null
   } | null>(null)
   const liveY = useRef(0)
@@ -83,9 +62,7 @@ export default function BottomSheet({ title, subtitle, onClose, footer, children
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
-    // The page behind must not scroll under the sheet. Restored on unmount
-    // rather than set to '' blindly, so a sheet opened over another sheet does
-    // not hand the scroll back early.
+    // Lock page scroll; restore the previous value on unmount (sheets can stack)
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
@@ -96,20 +73,16 @@ export default function BottomSheet({ title, subtitle, onClose, footer, children
 
   const beginDrag = (e: React.PointerEvent<HTMLElement>, from: 'grabber' | 'content') => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
-    // Dragging the body only makes sense at the top of its scroll; anywhere
-    // else the gesture is the list scrolling and the sheet must not move.
+    // Content drags only when scrolled to the top
     if (from === 'content' && (scroller.current?.scrollTop ?? 0) > 0) return
-    // A row inside the sheet that swipes sideways owns its own gesture. Same
-    // attribute AppLayout checks, for the same reason: without it, swiping a
-    // set row also drags the sheet towards dismissal.
+    // Rows that swipe sideways own their gesture
     if (e.target instanceof Element && e.target.closest('[data-no-page-swipe]')) return
     drag.current = {
       startX: e.clientX,
       startY: e.clientY,
       startedAt: performance.now(),
       from,
-      // The grabber and the header are the sheet's own handle: nothing else
-      // there wants a horizontal gesture, so skip the axis test for them.
+      // The grabber and header are the sheet's own handle
       axis: from === 'grabber' ? 'y' : null,
     }
     setDragging(true)
@@ -130,12 +103,11 @@ export default function BottomSheet({ title, subtitle, onClose, footer, children
     if (drag.current.axis === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
       drag.current.axis = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x'
-      // Sideways inside the content is somebody else's gesture.
+      // Sideways inside the content belongs to something else
       if (drag.current.axis === 'x') { abandonDrag(); return }
     }
 
-    // Upward is the sheet already at its stop. Resist rather than follow, so
-    // it reads as a limit instead of a broken drag.
+    // Resist upward drags
     const next = dy < 0 ? dy * 0.18 : dy
     if (drag.current.from === 'content' && dy <= 0) {
       abandonDrag()
@@ -172,9 +144,7 @@ export default function BottomSheet({ title, subtitle, onClose, footer, children
 
   return (
     <ModalPortal>
-    {/* `data-no-page-swipe`: React events still bubble to AppLayout through the
-        React tree, so without this a sideways drag across the scrim would slide
-        the whole app to another tab behind an open sheet. */}
+    {/* `data-no-page-swipe`: stops a drag on the scrim swiping the app to another tab */}
     <div className="fixed inset-0 z-[60] flex items-end" data-no-page-swipe>
       <div
         onClick={close}
@@ -191,12 +161,11 @@ export default function BottomSheet({ title, subtitle, onClose, footer, children
                    max-h-[88dvh] flex flex-col overflow-hidden"
         style={{
           transform: `translateY(${translate})`,
-          // No transition while the finger is down, or the sheet lags behind it.
+          // No transition while dragging
           transition: dragging ? 'none' : `transform ${ANIM_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`,
         }}
       >
-        {/* Grabber. Generous hit area around a small bar — the bar is the
-            affordance, the padding is the target. */}
+        {/* Grabber, with a generous hit area */}
         <div
           onPointerDown={e => beginDrag(e, 'grabber')}
           onPointerMove={onDragMove}

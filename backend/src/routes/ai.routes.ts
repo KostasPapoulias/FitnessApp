@@ -61,9 +61,8 @@ router.get('/usage', getUsage);
 /**
  * @route POST /api/ai/proposals/:id/accept
  * @protected
- * @returns The plan (and schedule) created from a drafted card. This is the
- *          only place an AI suggestion becomes real data, and it needs a
- *          request carrying the athlete's own token.
+ * @returns the plan (and schedule) created from a drafted card — the only path
+ *          by which an AI suggestion becomes real data
  */
 router.post('/proposals/:id/accept', acceptProposal);
 /**

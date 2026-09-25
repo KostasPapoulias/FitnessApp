@@ -1,13 +1,8 @@
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics'
 
 /**
- * Vibration, on whatever the device actually offers.
- *
- * @capacitor/haptics has a web implementation over `navigator.vibrate`, so the
- * plugin call is the single path for native and browser alike. The explicit
- * fallback below is for the case its web layer refuses rather than vibrates —
- * and every call is best-effort: a phone with the taptic engine disabled, or
- * iOS Safari (which implements none of this), must not throw into a workout.
+ * Vibration through @capacitor/haptics (which covers the web too), with a
+ * `navigator.vibrate` fallback. Every call is best-effort and never throws.
  */
 
 const vibrate = (pattern: number | number[]) => {
@@ -16,12 +11,11 @@ const vibrate = (pattern: number | number[]) => {
       navigator.vibrate(pattern)
     }
   } catch {
-    // A device that won't vibrate is not an error worth surfacing mid-set.
+    // A device that won't vibrate is not an error
   }
 }
 
-/** Rest is over. Deliberately the loudest pattern in the app — it has to carry
- *  from a phone face-down on a bench across the room. */
+/** Rest is over — the strongest pattern, to be felt from across the room. */
 export const hapticRestComplete = async () => {
   try {
     await Haptics.notification({ type: NotificationType.Success })
@@ -57,15 +51,7 @@ export const hapticCountdownTick = async () => {
   }
 }
 
-/**
- * A milestone inside a continuous effort — a kilometre split, a completed
- * round, a marked lap.
- *
- * Deliberately not `hapticSetLogged`. Both say "that counted", but a split
- * arrives while you are still running and a logged set arrives while you are
- * standing still, so they are felt in completely different states. A heavier,
- * two-part buzz reads through footfall in a way a single medium tap does not.
- */
+/** A split, round or lap during continuous effort — heavier, to be felt while moving. */
 export const hapticMilestone = async () => {
   try {
     await Haptics.impact({ style: ImpactStyle.Heavy })
@@ -74,12 +60,7 @@ export const hapticMilestone = async () => {
   }
 }
 
-/**
- * Switch sides / change position mid-hold.
- *
- * The one pattern the athlete has to act on with their eyes shut, so it is
- * distinct from every other: two long pulses, nothing else in the app uses it.
- */
+/** Switch sides mid-hold: two long pulses, unique in the app. */
 export const hapticSwitchSide = async () => {
   try {
     await Haptics.notification({ type: NotificationType.Warning })
@@ -88,20 +69,12 @@ export const hapticSwitchSide = async () => {
   }
 }
 
-/**
- * A value scrubber, held. iOS only delivers `selectionChanged` between a
- * `selectionStart` and a `selectionEnd` — outside that pair the tick is
- * silently dropped — so the three travel together.
- */
+/** Start a scrub selection; iOS drops `selectionChanged` outside a start/end pair. */
 export const hapticSelectionStart = async () => {
   try { await Haptics.selectionStart() } catch { /* best-effort, see above */ }
 }
 
-/**
- * One notch on the scrubber. The lightest thing the device offers — it fires
- * once per step while a finger slides, so anything heavier becomes a buzz
- * rather than a click.
- */
+/** One notch on the scrubber — the lightest tick available. */
 export const hapticSelectionTick = async () => {
   try {
     await Haptics.selectionChanged()

@@ -1,12 +1,7 @@
-// English — the source dictionary. Its keys ARE the MessageKey type, so adding
-// a string here without adding it to el.ts fails the typecheck.
-//
-// Keys are grouped by screen, with `common.*` for text more than one screen
-// shows. `{name}` placeholders are filled by t(); keys ending `_one` / `_other`
-// are plural pairs, read with tn().
-//
-// Not translated here: exercise and muscle names, which come from the server
-// and get their Greek from the catalogue.
+// English — the source dictionary; its keys define MessageKey, so el.ts must
+// match. Grouped by screen, `common.*` for shared text. `{name}` placeholders
+// are filled by t(); `_one`/`_other` pairs are plurals, read with tn().
+// Exercise and muscle names come from the server, not from here.
 
 export const en = {
   //  Shared

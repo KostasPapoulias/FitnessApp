@@ -1,12 +1,6 @@
 /**
- * Readiness scoring.
- *
- * `getUserReadiness` is not tested here — it is a database read, and the pure
- * functions underneath it are where every decision actually lives. Those are
- * the single source of truth for "how ready is this athlete": both
- * GET /api/fatigue/current and the AI system prompt read from them, and the
- * reason they do is that both used to roll their own average and drifted apart.
- * A test that pins the shared arithmetic is what stops that happening again.
+ * Tests for the pure readiness arithmetic shared by GET /api/fatigue/current
+ * and the AI prompt. Loads Prisma at import time; no query is issued.
  */
 
 import { test, describe } from 'node:test'
@@ -39,8 +33,7 @@ describe('aggregateMuscleFatigue', () => {
   })
 
   test('a hard leg day does not average away to nothing', () => {
-    // The bug this exists to prevent: a flat mean across 15 muscles turned
-    // quads/hams/glutes at 80 into an overall 16, and the app said "ready".
+    // A flat mean across 15 muscles would turn three muscles at 80 into 16
     const legDay = wholeBody([80, 80, 80])
     const flatMean = legDay.reduce((a, b) => a + b, 0) / legDay.length
 
@@ -65,8 +58,7 @@ describe('aggregateMuscleFatigue', () => {
   })
 
   test('training more muscles never improves the score', () => {
-    // The invariant behind "fatigueLevels must cover the ENTIRE muscle set":
-    // adding load somewhere can only push the aggregate up.
+    // Adding load anywhere can only push the aggregate up
     const before = aggregateMuscleFatigue(wholeBody([80, 80, 80]))
     const after = aggregateMuscleFatigue(wholeBody([80, 80, 80, 40, 40]))
     assert.ok(after >= before)
@@ -81,8 +73,7 @@ describe('computeReadinessScore', () => {
   })
 
   test('a bad night still costs an athlete who has trained nothing', () => {
-    // Returning a flat 100 here would make the sleep modifier silently
-    // inapplicable to exactly the people who train least.
+    // Otherwise sleep would never apply to athletes who train least
     assert.equal(computeReadinessScore([], intermediate, 0, -12), 88)
   })
 
@@ -95,9 +86,7 @@ describe('computeReadinessScore', () => {
   })
 
   test('a long run leaves muscles fresh but readiness reduced', () => {
-    // Systemic fatigue is the only channel that can carry this. Without the
-    // term, an hour of running left every muscle reading fresh and the
-    // readiness score essentially untouched.
+    // Only systemic fatigue can carry a run's cost
     const afterRun = computeReadinessScore(new Array(15).fill(0), intermediate, 60, 0)
     assert.ok(afterRun < 100)
   })
@@ -124,8 +113,7 @@ describe('computeReadinessScore', () => {
   })
 
   test('rounds once at the end', () => {
-    // Rounding per muscle first skews the average, which is why the raw
-    // effective levels are passed in and only the final score is rounded.
+    // Rounding per muscle first would skew the average
     const score = computeReadinessScore(wholeBody([33.3, 66.6, 11.1]), intermediate, 7.77, 0)
     assert.equal(score, Math.round(score))
   })
@@ -167,8 +155,7 @@ describe('bandReadiness', () => {
   })
 
   test('the traffic light agrees with the number printed next to it', () => {
-    // Banding is computed from the final, sleep-included score. Banding from
-    // the pre-sleep score would let the light say "ready" beside a 62.
+    // Banded from the final, sleep-included score
     const levels = new Array(15).fill(30)
     const withBadSleep = computeReadinessScore(levels, model, 20, -20)
     assert.equal(bandReadiness(withBadSleep, model), withBadSleep >= 70 ? 'ready' : 'caution')

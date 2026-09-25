@@ -1,11 +1,8 @@
 import api from './api'
 
 /**
- * The shape `GET /api/profile/export` returns — see the backend's
- * `data-export.service.ts`, which is the source of truth. Only what the report
- * reads is typed closely; the rest travels through untouched into the JSON the
- * report embeds, so a field added on the server reaches the file without a
- * client change.
+ * Shape of `GET /api/profile/export` (source of truth: the backend's
+ * data-export.service.ts). Only what the report reads is typed closely.
  */
 
 export interface ExportSet {
@@ -101,7 +98,7 @@ export interface DataExport {
 }
 
 export const exportService = {
-  /** The whole account. Can be several MB for a long history with GPS runs. */
+  /** The whole account; can be several MB with GPS runs. */
   getAll: async (): Promise<DataExport> => {
     const res = await api.get('/profile/export', { timeout: 120_000 })
     return res.data.data

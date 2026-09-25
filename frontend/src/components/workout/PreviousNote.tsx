@@ -3,21 +3,8 @@ import { progressService } from '../../services/progress.service'
 import { NoteIcon } from '../icons'
 
 /**
- * The last note the athlete wrote against this exercise, shown on the live
- * screen before they write today's.
- *
- * This is the moment a note pays off. "Left shoulder pinched at the bottom,
- * go narrower" is written once and is worth nothing unless it is in front of
- * the athlete the next time the bar is in their hands — and until now it was
- * only readable by going to look for it in the calendar.
- *
- * Reads `lastNote` rather than the newest entry's note: most sessions have no
- * note, so the last session's is usually empty while the one that matters sits
- * a few sessions back. The session in progress is never the source — the
- * server only counts finished sessions.
- *
- * Silent when the read fails. It is a reminder, not a record: an offline gym
- * should cost the athlete this line, not put an error above the set card.
+ * The last note written on this exercise (from any finished session), shown
+ * on the live screen before today's. Silent if the read fails.
  */
 
 const fmtWhen = (iso: string) => {

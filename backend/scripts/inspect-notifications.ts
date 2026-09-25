@@ -1,10 +1,7 @@
 /**
- * Read-only dump of everything behind "why did I not get a notification":
- * who opted in, which devices are registered, and what the ledger says happened
- * to each notification — sent, displayed on the phone, or never delivered.
+ * Read-only dump of notification opt-ins, registered devices and the ledger.
  *
- * Run with: npx tsx scripts/inspect-notifications.ts
- * Writes nothing. Points at whatever DATABASE_URL is in .env.
+ *   npx tsx scripts/inspect-notifications.ts
  */
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'

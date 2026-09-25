@@ -5,10 +5,7 @@ import { isPushConfigured } from '../lib/webpush'
 import { sendNotification } from '../services/notification-sender.service'
 import { log } from '../lib/logger'
 
-// GET /api/push/public-key
-// Unauthenticated on purpose: a VAPID public key is public by definition, and
-// the service worker has to fetch it to re-subscribe after iOS rotates a
-// subscription — at which point no page is running to supply a token.
+// GET /api/push/public-key — public so the service worker can re-subscribe without a token
 export const getPublicKey = async (_req: Request, res: Response) => {
   if (!isPushConfigured) {
     res.status(503).json({ success: false, error: 'Push notifications are not configured on the server' })
@@ -51,20 +48,11 @@ export const unsubscribe = async (req: AuthRequest, res: Response) => {
   res.json({ success: true })
 }
 
-// POST /api/push/rotate
-//
-// iOS replaces a push subscription periodically (after OS updates, long idle
-// spells, reinstalls). The service worker gets `pushsubscriptionchange` and
-// re-subscribes, but it runs with no page and therefore no auth token — so this
-// route is unauthenticated and identifies the owner by the OLD endpoint, which
-// is a high-entropy URL only that device ever held.
-//
-// It only ever moves an existing row: an unknown endpoint gets a 404, so this
-// cannot be used to register a subscription against someone else's account.
+// POST /api/push/rotate — unauthenticated; the service worker re-subscribes
+// after iOS rotates a subscription. The owner is identified by the old
+// endpoint, and only existing rows can be moved.
 export const rotateSubscription = async (req: Request, res: Response) => {
-  // Express 4 does not catch rejected promises from a handler: a throw in here
-  // leaves the request hanging AND can leave the account with no subscription
-  // at all, which is silent — nothing sends, and the UI still reads "On".
+  // Express 4 does not catch async rejections
   try {
     const { oldEndpoint, endpoint, keys } = req.body
 
@@ -79,12 +67,10 @@ export const rotateSubscription = async (req: Request, res: Response) => {
       return
     }
 
-    // iOS can report a "change" whose new endpoint is the one already on file.
-    // Clearing the duplicate first would then delete the very row being rotated
-    // and leave the update with nothing to write — the device drops off the
-    // account with no trace, since no send was involved to record a failure.
+    // iOS can report a "change" to the same endpoint; skip the cleanup then, or
+    // it would delete the row being rotated
     if (endpoint !== oldEndpoint) {
-      // The new endpoint can already be on file if a previous rotation half-landed
+      // Clear a leftover row from a half-finished earlier rotation
       await prisma.pushSubscription.deleteMany({
         where: { endpoint, id: { not: existing.id } }
       })
@@ -103,29 +89,22 @@ export const rotateSubscription = async (req: Request, res: Response) => {
   }
 }
 
-// POST /api/push/test
-// Sends a real push, through the push service, to the caller's own devices.
-// This is the only way to verify the path that actually matters — app closed,
-// screen locked — since an in-page notification proves nothing about delivery
-// when nothing of the app is running.
+// POST /api/push/test — a real push to the caller's own devices
 export const sendTestPush = async (req: AuthRequest, res: Response) => {
   if (!isPushConfigured) {
     res.status(503).json({ success: false, error: 'Push notifications are not configured on the server' })
     return
   }
 
-  // Express 4 does not catch rejected promises from handlers: without this the
-  // request hangs until the client times out, leaving the button on "Sending…"
+  // Express 4 does not catch async rejections
   try {
-    // Goes through the ledger like any other notification, so the test also
-    // exercises the delivery-receipt path — the point is to learn whether the
-    // phone rendered it, not merely whether Apple accepted it.
+    // Through the ledger, so the delivery receipt is exercised too
     const result = await sendNotification({
       userId: req.userId!,
       type: 'test',
       title: '🔔 SomaTrack test',
       body: 'Push delivery works. Lock the phone and close the app — the next one should still arrive.',
-      // The tap is the consent; a test that silently no-ops teaches nothing
+      // The tap is the consent
       bypassPreferences: true,
     })
 

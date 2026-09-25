@@ -1,14 +1,12 @@
 import { ComponentType, lazy } from 'react'
 
-// React.lazy with one retry. A dropped chunk fetch throws during render, and
-// without this the nearest boundary replaces the whole screen.
+// React.lazy with one retry, so a dropped chunk fetch does not replace the screen.
 export const lazyRetry = <P extends object>(
   load: () => Promise<{ default: ComponentType<P> }>
 ) =>
   lazy(() =>
     load().catch(async error => {
-      // Long enough for a flaky connection to come back, short enough that
-      // nobody standing there with a running clock notices the difference.
+      // Brief pause for a flaky connection
       await new Promise(resolve => setTimeout(resolve, 900))
       return load().catch(() => { throw error })
     })

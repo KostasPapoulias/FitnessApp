@@ -1,5 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// SomaTrack database schema (PostgreSQL). Migrations are hand-written; see CLAUDE.md.
 
 generator client {
   provider = "prisma-client-js"
@@ -15,12 +14,7 @@ model User {
   email                 String                  @unique
   password              String
   createdAt             DateTime                @default(now())
-  /**
-   * Bumped to invalidate every token this user holds. Tokens carry the value
-   * they were signed with, so incrementing it makes all of them stale at once
-   * — the only way to revoke a stateless JWT before it expires. Changing a
-   * password bumps it too, so a stolen token dies with the password.
-   */
+  /** Bumped to revoke every token the user holds (see token-version.service). */
   tokenVersion          Int                     @default(0)
   profile               UserProfile?
   settings              Settings?
@@ -46,75 +40,56 @@ model User {
   favoriteExercises     FavoriteExercise[]
 }
 
-// Notification opt-in. EVERY flag defaults false, and there is no backfill:
-// existing users — including anyone who already has a PushSubscription — get
-// nothing until they choose it. A subscription is permission to DELIVER, not
-// permission to send.
-/**
- * A live "forgot password" link.
- *
- * Only the HASH of the token is stored, exactly like a password. The plaintext
- * exists once, in the email — anyone with read access to this table would
- * otherwise be able to take over every account with a pending reset, and a
- * reset link is a bearer credential for the account.
- *
- * Rows are kept after use rather than deleted: `usedAt` is what makes a link
- * single-use, and a deleted row is indistinguishable from one that never
- * existed, which would let a spent link read as merely expired.
- */
+/** A "forgot password" link. Only the token's hash is stored; rows are kept after use so a spent link stays detectable. */
 model PasswordResetToken {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /** SHA-256 of the token in the emailed link. Never the token itself. */
+  /** SHA-256 of the emailed token. */
   tokenHash String   @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
-  /** Requesting IP, so a burst of requests for one account is traceable. */
+  /** Requesting IP. */
   requestIp String?
 
   @@index([userId, createdAt])
   @@index([expiresAt])
 }
 
+// Notification opt-in. Every flag defaults false: a push subscription is
+// permission to deliver, not permission to send.
 model NotificationPreference {
   userId           String    @id
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /** Master switch. Off ⇒ nothing sends, whatever else is set. */
+  /** Master switch. */
   pushEnabled      Boolean   @default(false)
-  /** Rule-driven notifications: readiness, overreaching, inactivity. Never
-   *  auto-suspends — the overreaching warning matters most exactly when the
-   *  athlete has stopped paying attention. */
+  /** Rule-driven notifications (readiness, overreaching, inactivity). Never auto-suspends. */
   essentialEnabled Boolean   @default(false)
   /** AI-planned coaching nudges. Suspends itself when ignored. */
   coachEnabled     Boolean   @default(false)
 
-  /** IANA zone from the browser. Without it no reminder can be timed to a
-   *  local hour, which is why every timed rule depends on this field. */
+  /** IANA zone, needed to time anything to a local hour. */
   timezone         String    @default("UTC")
-  /** Local hours. Wraps midnight when start > end, which is the normal case. */
+  /** Local hours; wraps midnight when start > end. */
   quietStartHour   Int       @default(22)
   quietEndHour     Int       @default(8)
-  /** Hard ceiling the scheduler enforces. The planner proposes; this disposes. */
+  /** Max notifications per rolling 24 h. */
   dailyCap         Int       @default(3)
 
-  /** Consecutive coach notifications shown but never opened. Only counts ones
-   *  confirmed DISPLAYED — a push lost to a flat battery is not disinterest. */
+  /** Consecutive coach notifications displayed but never opened. */
   ignoredStreak    Int       @default(0)
   coachSuspendedAt DateTime?
 
-  /** Last authenticated request from this user. Notifications are suppressed
-   *  while they are already in the app — a nudge to train that arrives while
-   *  you are mid-set is noise. */
+  /** Last authenticated request; notifications are suppressed while the user is active. */
   lastSeenAt       DateTime?
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
 
-// Per-type opt-in, also default-off. Absence of a row means "not enabled".
+// Per-type opt-in; no row means "follow the tier".
 model NotificationTypePref {
   userId  String
   type    String
@@ -124,19 +99,14 @@ model NotificationTypePref {
   @@id([userId, type])
 }
 
-// Per-day AI spend, so one user cannot run the bill up without limit. Written
-// from the provider's own token counts after each call rather than an estimate,
-// because prompt size varies with how much history and context a turn carries.
+// Per-user, per-day AI usage and cost, from the provider's own token counts.
 model AiUsageDaily {
   userId       String
-  /** UTC calendar day, YYYY-MM-DD. Deliberately a string: the budget resets on
-   *  a day boundary and never needs date arithmetic. */
+  /** UTC day, YYYY-MM-DD. */
   day          String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   calls        Int      @default(0)
-  /** Calls made by the notification planner specifically. Capped separately so
-   *  the planner cannot eat the budget the user needs for chatting, and a
-   *  re-plan loop cannot run all day. */
+  /** Notification-planner calls, capped separately from chat. */
   plannerCalls Int      @default(0)
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
@@ -160,11 +130,7 @@ model UserProfile {
   userId      String   @id
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
-  /**
-   * Superseded by `birthDate` — an age written once is wrong a year later, and
-   * nothing was re-asking. Kept because existing rows still carry it; read it
-   * only as a fallback when birthDate is null.
-   */
+  /** Superseded by birthDate; read only as a fallback. */
   age         Int?
   weight      Float?
   height      Float?
@@ -174,30 +140,21 @@ model UserProfile {
   goal        String?
 
   birthDate           DateTime?
-  /** Sessions per week the athlete actually trains, as self-reported. */
+  /** Self-reported sessions per week. */
   trainingDaysPerWeek Int?
-  /** Years of consistent training. Fractional so "six months" is expressible. */
+  /** Years of training (fractional). */
   experienceYears     Float?
 
-  /**
-   * The onboarding gate. Null means the required questions are unanswered and
-   * the app redirects to /onboarding — bodyweight in particular is not
-   * optional, since fatigue scoring silently assumed 70 kg without it.
-   */
+  /** The onboarding gate: null redirects the app to /onboarding. */
   onboardingCompletedAt DateTime?
-  /**
-   * Equipment + injuries are offered after the gate lifts. Null only stops the
-   * Home prompt card from being dismissed for good; it never blocks anything.
-   */
+  /** Set when the optional equipment/injury stage is answered; controls the Home prompt only. */
   optionalStageDoneAt   DateTime?
 
   equipment   UserEquipment[]
   injuries    UserInjury[]
 }
 
-// What the athlete can actually train with. Absence of rows means "unanswered",
-// NOT "owns nothing" — an empty set would filter the catalogue down to nothing,
-// so callers must treat an empty list as no filter at all.
+// Equipment the athlete has. No rows means "unanswered", never "owns nothing".
 model UserEquipment {
   userId      String
   equipmentId String
@@ -208,18 +165,16 @@ model UserEquipment {
   @@id([userId, equipmentId])
 }
 
-// A body area to train around. Deliberately does NOT feed the fatigue model:
-// a muscle showing red with no workout behind it is not explainable in the UI.
-// It filters and warns on exercises, nothing more.
+// A body area to train around. Filters and flags exercises; never feeds fatigue.
 model UserInjury {
   id         String    @id @default(uuid())
   userId     String
   profile    UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
-  /** Null when the limitation does not map onto a catalogued muscle. */
+  /** Null when the limitation does not map to a catalogued muscle. */
   muscleId   String?
   muscle     Muscle?   @relation(fields: [muscleId], references: [id])
   label      String
-  /** 'avoid' hides matching exercises; 'caution' shows them with a warning. */
+  /** 'avoid' hides matching exercises; 'caution' flags them. */
   severity   String    @default("caution")
   activeFrom DateTime  @default(now())
   resolvedAt DateTime?
@@ -236,24 +191,14 @@ model Settings {
   theme                   String   @default("dark")
   aiConsentEnabled        Boolean  @default(true)
 
-  /**
-   * 'en' | 'el'. Stored on the account rather than only on the device because
-   * the server writes to the athlete when no request is in flight — push
-   * notifications and the AI coach — and has nothing else to read it from.
-   * Request-scoped text (errors, the sleep note) follows Accept-Language
-   * instead, which also covers the signed-out screens.
-   */
+  /** 'en' | 'el'. Used for messages sent with no request in flight (push, AI coach). */
   language                String   @default("en")
 
-  /**
-   * Optional screen lock. Bcrypt-hashed like a password — a PIN is short
-   * enough to brute force offline if it were ever stored reversibly.
-   * Null means the user has not set one.
-   */
+  /** Optional screen-lock PIN, bcrypt-hashed. Null when not set. */
   pinHash                 String?
-  /** Consecutive wrong entries. A 4-digit PIN is 10,000 guesses without this. */
+  /** Consecutive wrong PIN entries. */
   pinFailedAttempts       Int      @default(0)
-  /** Set after too many failures; entry is refused until it passes. */
+  /** PIN entry refused until this passes. */
   pinLockedUntil          DateTime?
 }
 
@@ -281,8 +226,7 @@ enum BiometricType {
 model Muscle {
   id               String                  @id @default(uuid())
   name             String                  @unique
-  // Hours for this muscle's fatigue to halve. Small muscles clear far faster
-  // than large ones — calves are usable the next day, lower back is not.
+  // Hours for this muscle's fatigue to halve.
   recoveryHalfLifeHours Float              @default(15)
   musclePaths      MusclePath[]
   exerciseLinks    MuscleExercise[]
@@ -318,41 +262,21 @@ model Exercise {
   modalityId       String
   modality         Modality             @relation(fields: [modalityId], references: [id])
   description      String?              @db.Text
-  // Mechanical damage per unit of work, relative to a normal barbell lift.
-  // Eccentric, weight-bearing and landing-heavy movements tear muscle far more
-  // than concentric ones: running ≫ cycling, RDLs ≫ leg press. impactFactor
-  // says WHICH muscles a movement uses; this says how hard it is on them.
+  // Mechanical damage per unit of work, relative to a normal barbell lift
+  // (eccentric and impact-heavy movements are higher).
   damageFactor     Float                @default(1.0)
-  // Typical speed for a distance-based activity, used to convert distance
-  // covered into comparable work across modalities (15 km cycled is not 15 km
-  // run). Null when distance is meaningless for the movement — jump rope,
-  // or anything logged on a clock alone — which falls back to duration.
+  // Typical speed, to convert distance into comparable work. Null when distance
+  // is meaningless for the movement.
   referenceSpeedKmh Float?
-  // What measures this movement's work, and therefore what shape the cardio
-  // screen takes: 'gps' draws a map and follows the athlete, 'machine' has a
-  // pace but nothing to measure it (erg, treadmill, pool), 'reps' has no
-  // distance at all and is counted instead.
-  //
-  // Deliberately NOT derived from referenceSpeedKmh. That is a calibration
-  // constant — retuning a number must never silently change what the UI
-  // offers. Defaults to 'gps' so a custom cardio exercise behaves exactly as
-  // it did before this column existed.
+  // What measures the movement and shapes the cardio screen: 'gps' (map),
+  // 'machine' (pace, no route) or 'reps' (counted). Independent of referenceSpeedKmh.
   cardioTracking   String               @default("gps")
-  // Typical continuous cadence for a 'reps' movement, in counts per minute.
-  // The counting equivalent of referenceSpeedKmh, and used the same way: it is
-  // what turns 900 skips into "work minutes" comparable with a 5 km run.
+  // Typical cadence (counts/min) for a 'reps' movement, to convert counts into work.
   referenceCadenceRpm Float?
-  // What the count is called — 'skips', 'floors', 'reps'. Null for anything
-  // that is not counted. Only ever used for wording.
+  // What the count is called ('skips', 'floors'); wording only.
   repUnit          String?
-  // Working load for a set of ~10, as a FRACTION OF BODYWEIGHT, for a trained
-  // adult male reference athlete. This is what makes a first-time suggestion
-  // sane: without it every strength movement opened at the same 60 kg, so a
-  // lateral raise and a back squat were offered identically.
-  //
-  // Per-movement rather than per-muscle on purpose — a leg press and a leg
-  // extension load the same muscle and differ by nearly a factor of ten.
-  // Null for anything not loaded with external weight.
+  // Working load for ~10 reps as a fraction of bodyweight (trained adult male
+  // reference), used for first-time weight suggestions. Null when unloaded.
   loadFactor       Float?
   createdByUserId  String?
   createdByUser    User?                @relation("CustomExercises", fields: [createdByUserId], references: [id])
@@ -367,14 +291,7 @@ model Exercise {
   @@unique([name])
 }
 
-// A starred exercise. Carries no data of its own beyond the pairing and when it
-// was made — the star is a shortcut into the catalogue, not training history,
-// so nothing here feeds the fatigue model.
-//
-// The pair IS the primary key rather than a uuid with a unique index on top:
-// starring is idempotent by nature, and a composite PK makes a double-tap
-// physically unable to write a second row instead of relying on the client to
-// not send one.
+// A starred exercise. The composite key makes starring idempotent.
 model FavoriteExercise {
   userId     String
   exerciseId String
@@ -383,8 +300,6 @@ model FavoriteExercise {
   createdAt  DateTime @default(now())
 
   @@id([userId, exerciseId])
-  // Every read is "this athlete's stars", either to list them or to mark up a
-  // catalogue page. None of them start from the exercise.
   @@index([userId])
 }
 
@@ -442,16 +357,11 @@ model WorkoutSession {
   duration         Int?
   avgRpe           Float?
   totalVolume      Float?
-  // Session training load in arbitrary units (Foster's sRPE: minutes × RPE,
-  // weighted by how cardiovascularly costly the modality mix is). This is the
-  // whole-body cost of the session — totalVolume only covers mechanical kg.
+  // Whole-body training load (Foster's sRPE, weighted by modality mix).
   systemicLoad     Float?
   weatherCondition String?
   notes            String?
-  // Which saved plan this session came from, when it came from one. Kept so
-  // "do it again" can compare like against like, and so a template's
-  // performance history is its own sessions rather than everything the athlete
-  // happened to train that day.
+  // The saved plan this session came from, if any.
   templateId       String?
   template         WorkoutTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
   workoutExercises WorkoutExercise[]
@@ -492,8 +402,7 @@ model WorkoutSet {
   runTrack           RunTrack?
 
   @@index([workoutExerciseId])
-  // One row per set of an exercise — re-logging corrects the set in place
-  // rather than appending a duplicate that double-counts volume and fatigue.
+  // One row per set: re-logging corrects the set in place.
   @@unique([workoutExerciseId, setNumber])
 }
 
@@ -517,8 +426,7 @@ model SetCalisthenics {
   set         WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   reps        Int
   addedWeight Float      @default(0)
-  // Seconds under tension for isometric holds (plank, L-sit, front lever…),
-  // which have no meaningful rep count. Null for normal rep-based sets.
+  // Seconds under tension for isometric holds; null for rep-based sets.
   time        Int?
 }
 
@@ -527,45 +435,31 @@ model SetCardio {
   set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   distance Float?
   time     Int?
-  /// Counted work for a movement with no distance — skips, floors, jacks.
-  /// Nullable because it is the third of three ways a cardio set can be
-  /// measured, not a required one: an untracked ten minutes on a rope is still
-  /// a legitimate set, it is just scored on the clock alone.
+  /// Counted work for movements with no distance (skips, floors). Optional.
   reps     Int?
 }
 
-/// Everything a GPS session recorded beyond its distance and its clock.
-///
-/// Split out from SetCardio rather than added to it because of `route`, which
-/// is a few tens of kilobytes for a long run. The calendar lists every set of
-/// every session, and SetCardio is loaded with all of them — dragging a route
-/// along for each would make the month view pay for maps it never draws. One
-/// row per cardio set, fetched only when a run is actually opened.
+/// A recorded run's detail. Separate from SetCardio so the route is only loaded when a run is opened.
 model RunTrack {
   setId          String     @id
   set            WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
-  /// When the clock was started, which is not when the set was written — an
-  /// effort rating can sit on screen for minutes after a run ends.
+  /// When the clock started.
   startedAt      DateTime
-  /// Metres, unrounded. SetCardio.distance is kilometres rounded to two
-  /// decimals for display; pace derived from that is off by seconds.
+  /// Metres, unrounded.
   distanceM      Float
   durationSec    Int
-  /// Seconds per kilometre. Stored rather than derived so the number in history
-  /// is the one the athlete saw when they finished.
+  /// Seconds per kilometre, as shown at finish.
   avgPaceSec     Int
   elevationGainM Int        @default(0)
-  /// 'gps' | 'manual' — a manual session has splits but no route.
+  /// 'gps' | 'manual' (splits but no route).
   source         String     @default("gps")
-  /// [[[lng, lat], …], …] — one array per stretch of continuous recording.
-  /// Segmented at write time so nothing downstream can draw a straight line
-  /// across a gap the app was not running for.
+  /// [[[lng, lat], …], …] — one array per continuous recording segment.
   route          Json?
-  /// [[west, south], [east, north]], for framing the map without parsing route.
+  /// [[west, south], [east, north]], for framing the map.
   bounds         Json?
   /// Kilometre splits: [{ index, meters, seconds, endMeters, auto }]
   splits         Json?
-  /// Laps the athlete marked by hand, same shape.
+  /// Manual laps, same shape.
   laps           Json?
   createdAt      DateTime   @default(now())
 }
@@ -575,18 +469,10 @@ model SetWOD {
   set      WorkoutSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   distance Float?
   time     Int?
-  // Reps of THIS movement per round, and rounds completed by the athlete.
-  // Both were discarded before, so a 3-round and a 15-round metcon of the same
-  // duration scored identically.
+  // Reps of this movement per round, and rounds completed.
   reps     Int?
   rounds   Float?
-  // External load on THIS movement, in kg. Null/0 is bodyweight, which is the
-  // common case. Without it a 43 kg thruster and an air squat reached the
-  // fatigue model as the same movement — on the modality that costs the most
-  // systemically of anything in the app.
-  //
-  // Unsigned, unlike SetCalisthenics.addedWeight: nothing in a metcon is
-  // band-assisted, so there is no negative half of the axis to model.
+  // External load in kg (null/0 = bodyweight). Never negative.
   weight   Float?
 }
 
@@ -608,8 +494,7 @@ model MuscleFatigueCurrent {
   @@id([userId, muscleId])
 }
 
-// Whole-body fatigue, distinct from any single muscle. A long run leaves every
-// muscle rating fine while the athlete is wrecked; readiness reads this too.
+// Whole-body fatigue, separate from any muscle; readiness reads it too.
 model SystemicFatigue {
   userId           String    @id
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -618,9 +503,7 @@ model SystemicFatigue {
   recoveryTargetAt DateTime?
 }
 
-// Rolling best estimated 1RM per user + exercise. Fatigue scoring needs load
-// RELATIVE to what the athlete can lift — 100 kg is a warm-up for one person
-// and a limit single for another.
+// Best estimated 1RM per user and exercise, for relative-load scoring.
 model ExerciseStrengthEstimate {
   userId     String
   exerciseId String
@@ -695,13 +578,8 @@ model AIChat {
   @@index([threadId, dateTime])
 }
 
-// One row is a notification's entire life: planned → sent → displayed → clicked.
-//
-// Everything reads off this table — the daily cap, per-type cooldowns, dedupe,
-// ghost-subscription detection, the coach's engagement streak, and the history
-// screen. It is also the only honest record of what actually reached the phone:
-// a push service accepting a payload says nothing about delivery, so `sentAt`
-// and `displayedAt` mean genuinely different things.
+// A notification's whole life (planned → sent → displayed → clicked). The daily
+// cap, cooldowns, dedupe, ghost detection and engagement all read this table.
 model Notification {
   id        String   @id @default(uuid())
   userId    String
@@ -713,22 +591,22 @@ model Notification {
   status    String   @default("planned")
   /** essential | coach */
   tier      String   @default("essential")
-  /** rule | ai — whether a rule or the planner produced the wording */
+  /** rule | ai */
   source    String   @default("rule")
 
-  /** Blocks the same nudge repeating. Typically type + local day. */
+  /** Blocks repeats; typically type + local day. */
   dedupeKey String?
-  /** When the scheduler should send it. Null ⇒ send on the next tick. */
+  /** When to send; null means the next tick. */
   plannedFor DateTime?
 
   createdAt DateTime @default(now())
-  /** Handed to the push service and accepted. NOT proof of delivery. */
+  /** Accepted by the push service — not proof of delivery. */
   sentAt      DateTime?
-  /** The service worker confirmed it rendered. This is the delivery receipt. */
+  /** Rendered on the device (the delivery receipt). */
   displayedAt DateTime?
   clickedAt   DateTime?
   dismissedAt DateTime?
-  /** Why a send failed, when it did */
+  /** Why a send failed. */
   failReason  String?
 
   @@unique([userId, dedupeKey])
@@ -736,29 +614,17 @@ model Notification {
 }
 // ── saved plans ───────────────────────────────────────────────────────────
 
-/**
- * A workout the athlete intends to do, as opposed to one they did.
- *
- * The distinction the rest of the schema was missing. A WorkoutSession is a
- * record of the past and everything downstream — fatigue, training load, the
- * progression suggestions — is derived from it, so it must stay a factual log.
- * A template is an intention: editable, repeatable, and carrying no training
- * load of its own until a session is actually run from it.
- */
+/** A saved workout plan — an intention, carrying no training load until performed. */
 model WorkoutTemplate {
   id          String   @id @default(uuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   notes       String?
-  /** user | ai — an AI-drafted plan stays labelled as one for its whole life. */
+  /** user | ai */
   source      String   @default("user")
 
-  /**
-   * Archived rather than deleted. A template that produced sessions is part of
-   * the explanation for how the athlete got here; deleting it would strand
-   * those sessions' templateId and quietly rewrite that history.
-   */
+  /** Archived rather than deleted, so sessions keep their templateId. */
   archivedAt      DateTime?
   lastPerformedAt DateTime?
   timesPerformed  Int      @default(0)
@@ -787,11 +653,7 @@ model TemplateExercise {
   @@index([exerciseId])
 }
 
-/**
- * One planned set. Deliberately flat rather than mirroring the five-table
- * SetType split of WorkoutSet: a plan is a target, and the modality-specific
- * columns a target needs are few enough that a join per modality buys nothing.
- */
+/** One planned set; flat, unlike the per-modality tables of WorkoutSet. */
 model TemplateSet {
   id                 String           @id @default(uuid())
   templateExerciseId String
@@ -809,14 +671,7 @@ model TemplateSet {
   @@unique([templateExerciseId, setNumber])
 }
 
-/**
- * A template placed on a date — the "standby" state.
- *
- * The reminder is not stored here as a time to fire. It creates a row in
- * Notification, which is the one table that already knows about quiet hours,
- * daily caps, dedupe and delivery receipts. Two schedulers writing to a phone
- * is how a user ends up with duplicate nudges at 6am.
- */
+/** A template on a date (standby). Its reminder is a planned Notification row. */
 model ScheduledWorkout {
   id           String          @id @default(uuid())
   userId       String
@@ -826,13 +681,13 @@ model ScheduledWorkout {
 
   scheduledFor DateTime
   reminderAt   DateTime?
-  /** The Notification row backing the reminder, so cancelling can withdraw it. */
+  /** The reminder's Notification row, so cancelling can withdraw it. */
   notificationId String?
 
   /** standby | started | completed | skipped | cancelled */
   status       String          @default("standby")
 
-  /** Set once this becomes a real session. One session per scheduled slot. */
+  /** The session fulfilling this slot. */
   sessionId    String?         @unique
   session      WorkoutSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   completedAt  DateTime?
@@ -844,36 +699,24 @@ model ScheduledWorkout {
 }
 
 /**
- * Something the AI has drafted and the athlete has not yet accepted.
- *
- * The model never writes to the app's own tables. It writes here, and a row
- * here does nothing until a request carrying the user's own session confirms
- * it. That is what keeps a hallucinated 300kg squat or an invented meal out of
- * the training log: the only path from model output to real data runs through
- * a tap, and the payload that gets applied is the one that was shown.
+ * An AI-drafted change awaiting the athlete's tap. Nothing is applied until a
+ * request with the user's own token accepts it, and the stored payload is what
+ * gets applied.
  */
 model AiProposal {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   threadId  String?
-  /**
-   * The assistant message this was drafted alongside, so reopening a thread
-   * shows the card attached to the reply that produced it rather than floating
-   * at the end of the conversation.
-   */
+  /** The assistant message the card belongs to. */
   messageId String?
-  /** create_template | schedule_workout — what applying this row would do. */
+  /** create_template | schedule_workout | create_exercise */
   kind      String
-  /** The validated, ID-resolved draft. Applied verbatim on confirm. */
+  /** The validated draft, applied verbatim on accept. */
   payload   Json
   /** pending | applied | rejected | expired */
   status    String   @default("pending")
-  /**
-   * Stale drafts must not be applicable. A card scrolled past on Monday and
-   * tapped on Thursday would schedule a workout reasoned about a body state
-   * three days gone.
-   */
+  /** Drafts expire, so a stale card cannot be applied. */
   expiresAt DateTime
   appliedAt DateTime?
   createdAt DateTime @default(now())

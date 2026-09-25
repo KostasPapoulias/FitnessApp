@@ -1,15 +1,7 @@
 /**
- * The plate grid suggested weights are snapped to.
- *
- * Pinned because the failure is silent and visible only to the athlete: the
- * progression service once rounded to the hundredth and offered 20.93 kg,
- * which nothing flagged — every number was a valid number, just not one a gym
- * has. The direction tests matter as much as the grid ones: a deload that
- * rounds back up to the weight it was backing off is a deload that does not
- * happen.
- *
- * Imports a module that pulls in Prisma at load time — see CLAUDE.md; no query
- * is ever issued.
+ * Tests for the plate grid suggested weights snap to, including rounding
+ * direction (a deload must never round back up). Loads Prisma at import time;
+ * no query is issued.
  */
 
 import { test, describe } from 'node:test'

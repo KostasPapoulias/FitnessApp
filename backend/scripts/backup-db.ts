@@ -1,20 +1,9 @@
 /**
- * Snapshots every table to a timestamped JSON file.
+ * Snapshots every table to timestamped JSON (a data snapshot, not a pg_dump).
+ * Tables are read one at a time to avoid tripping the connection proxy.
  *
  *   npx tsx scripts/backup-db.ts                  → backups/<timestamp>/
  *   npx tsx scripts/backup-db.ts ./somewhere-else
- *
- * This is a DATA snapshot, not a pg_dump: no schema, no constraints, no
- * sequences. What it is for is the thing a seed can actually do to you —
- * renaming or replacing rows — and for that it is better than a pg_dump,
- * because it needs no PostgreSQL client installed and the output is readable.
- * For a genuine point-in-time restore use Railway's own backups or pg_dump;
- * both are described in EXERCISE-FINAL.md.
- *
- * Tables are read one at a time rather than in a Promise.all. The dev database
- * is remote and a fan-out of forty-odd concurrent reads is how the connection
- * proxy decides you are a runaway process (P1017) — the same reason seed.ts
- * batches its writes.
  */
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
@@ -23,14 +12,7 @@ import * as path from 'path'
 
 const prisma = new PrismaClient()
 
-/**
- * Every model in schema.prisma, as its Prisma client accessor.
- *
- * Listed rather than reflected: `Prisma.dmmf` would keep this in step
- * automatically, but silently — a model added to the schema and forgotten here
- * shows up as a missing file in the output, which is noticeable, whereas a
- * reflection bug shows up as a backup that was quietly incomplete.
- */
+/** Every model's client accessor. Listed explicitly, so a missing one is noticeable. */
 const MODELS = [
   'user', 'passwordResetToken', 'notificationPreference', 'notificationTypePref',
   'aiUsageDaily', 'pushSubscription', 'userProfile', 'userEquipment', 'userInjury',

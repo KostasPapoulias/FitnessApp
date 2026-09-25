@@ -7,14 +7,7 @@ import { lazyRetry } from '../lib/lazyRetry'
 import { fmtTime } from '../pages/Workout/helpers'
 import { FlagIcon } from './icons'
 
-/**
- * One recorded run, opened from the calendar.
- *
- * A finished run is mostly a picture — where it went and how the pace held —
- * so this is a full-screen sheet rather than a row that expands. The route is
- * fetched here and nowhere else: the day view lists every set of the day and
- * would otherwise carry a route for each one it never draws.
- */
+/** One recorded run, opened from the calendar; the route is fetched only here. */
 
 const RouteMap = lazyRetry(() => import('./RouteMap'))
 
@@ -25,14 +18,7 @@ interface Props {
   onClose: () => void
 }
 
-/**
- * The map's box, given an explicit height rather than h-full.
- *
- * A percentage height only resolves if every ancestor up the chain has a
- * definite one, and when it collapses MapLibre substitutes its own 300px
- * default and renders a full canvas into a clipped strip — with no error to
- * say so. Sized here, that cannot happen.
- */
+/** Explicit map height — a collapsed percentage height makes MapLibre render into a clipped strip. */
 const MAP_BOX = 'w-full h-[46vh] min-h-[240px] max-h-[420px]'
 
 const MapPlaceholder = ({ label }: { label: string }) => (
@@ -59,18 +45,13 @@ export default function RunDetail({ setId, title, onClose }: Props) {
     return () => { cancelled = true }
   }, [setId])
 
-  // Kilometres and hand-marked laps are separate lists on separate origins —
-  // merged only for display, in the order they happened.
+  // Kilometre splits and manual laps, merged for display in time order
   const rows: Split[] = run
     ? [...(run.splits ?? []), ...(run.laps ?? [])].sort((a, b) => a.endMeters - b.endMeters)
     : []
 
-  // Bars are scaled against the slowest split rather than against zero: every
-  // kilometre of a run is within a minute or so of the others, and a bar from
-  // zero makes a 4:30 and a 5:30 look identical.
-  // The trailing partial is excluded from the scale: it is measured over a
-  // couple of hundred metres, so its pace swings far wider than any full
-  // kilometre's and would flatten every other bar against it.
+  // Bars scale from the slowest split, not zero, so small pace differences show;
+  // the trailing partial split is excluded from the scale
   const paces = rows.filter(r => !r.partial).map(splitPace).filter(p => p > 0)
   const slowest = paces.length ? Math.max(...paces) : 0
   const fastest = paces.length ? Math.min(...paces) : 0
@@ -84,15 +65,11 @@ export default function RunDetail({ setId, title, onClose }: Props) {
   ] : []
 
   return (
-    // z-[70]: this is opened from inside the exercise sheet, which is z-[60]
-    // like every other modal. At z-50 the route would have rendered behind the
-    // sheet that launched it.
+    // z-[70]: opened from the exercise sheet, which is z-[60]
     <div className="fixed inset-0 z-[70] bg-dark-900 text-white overflow-y-auto"
          style={{ overscrollBehavior: 'contain' }}
          data-no-page-swipe>
-      {/* header */}
-      {/* This sheet is `fixed`, so it sits outside AppLayout and gets none of
-          its safe-area padding — the back button landed under the clock. */}
+      {/* Header, with its own safe-area padding (this sheet is outside AppLayout) */}
       <div className="sticky top-0 z-10 bg-dark-900/95 backdrop-blur border-b border-dark-700
                       px-4 pb-3 pt-[calc(0.75rem+var(--page-top))] flex items-center gap-3">
         <button
@@ -109,9 +86,7 @@ export default function RunDetail({ setId, title, onClose }: Props) {
         </div>
       </div>
 
-      {/* The bottom nav is `fixed` at the same z-index and paints after this
-          sheet, so it covers whatever the scroll ends on — which was always the
-          last split. Scroll has to run out above the nav, not behind it. */}
+      {/* Bottom padding so the last row scrolls clear of the nav */}
       <div className="px-4 pb-[calc(var(--bottom-nav-h)+1.5rem)]">
         {loading && (
           <p className="text-center text-dark-400 text-sm py-16">Loading the run…</p>
@@ -121,8 +96,7 @@ export default function RunDetail({ setId, title, onClose }: Props) {
           <p className="text-center text-brand-red text-sm py-16">{error}</p>
         )}
 
-        {/* A cardio set logged before routes were recorded, or a treadmill
-            session that never had one. Both are real sets, not errors. */}
+        {/* No route recorded (older set or treadmill) — a valid set */}
         {!loading && !error && !run && (
           <p className="text-center text-dark-400 text-[13px] py-16 leading-relaxed">
             No route was recorded for this session.
@@ -180,9 +154,7 @@ export default function RunDetail({ setId, title, onClose }: Props) {
                 <div className="flex flex-col gap-1.5">
                   {rows.map(split => {
                     const pace = splitPace(split)
-                    // Fastest fills the bar, slowest keeps a visible stub.
-                    // Clamped because a partial split's pace can sit outside
-                    // the range the scale was built from.
+                    // Fastest fills the bar; clamped, as a partial split may fall outside the scale
                     const fill = spread > 0
                       ? Math.max(6, Math.min(100, 18 + 82 * (1 - (pace - fastest) / spread)))
                       : 100

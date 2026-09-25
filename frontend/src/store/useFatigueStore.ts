@@ -9,10 +9,9 @@ interface FatigueStore {
   fitnessLevel: FitnessLevel
   // Whole-body fatigue — what a long run or a metcon actually loads
   systemicFatigue: number
-  // Sleep's contribution to readinessScore. Null only before the first fetch —
-  // "not logged" is expressed by `applied: false`, not by absence.
+  // Sleep's share of readinessScore; null only before the first fetch
   sleep: SleepReadiness | null
-  // Weeks-long trend; fetched separately since it scans session history
+  // Weeks-long load trend, fetched separately
   trainingLoad: TrainingLoad | null
   isLoading: boolean
   selectedMuscle: MuscleFatigue | null
@@ -53,8 +52,7 @@ export const useFatigueStore = create<FatigueStore>((set, get) => ({
     }
   },
 
-  // Kept off fetchFatigue's path: this one scans months of session history and
-  // the readiness call runs on every screen that shows the muscle map.
+  // Separate from fetchFatigue: it scans months of history
   fetchTrainingLoad: async () => {
     try {
       set({ trainingLoad: await fatigueService.getTrainingLoad() })

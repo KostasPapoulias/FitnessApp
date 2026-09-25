@@ -7,39 +7,18 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* The viewport is `viewport-fit=cover`, so the status bar and the home
-   indicator overlay the page. Everything that touches an edge pads itself out
-   of their way through these — one source of truth, and they resolve to 0px on
-   hardware without insets.
-
-   `--bottom-nav-h` is published by BottomNav once it has measured itself; the
-   value here is only what fixed overlays use on the first paint. */
+/* Screen-edge insets (viewport-fit=cover); 0px on hardware without insets.
+   --bottom-nav-h is measured and published by BottomNav; 78px is the first paint. */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --bottom-nav-h: 78px;
 
-  /* Padding the full inset clears the notch but wastes the band of screen
-     beside the camera, which on a 59px inset is a visible empty stripe above
-     every header. These two ride a little into the inset instead — still clear
-     of the clock and the home indicator, just not deferentially so.
-     `max()` keeps them at 0 on hardware that has no inset to eat into. */
+  /* Deliberately under-padded: the full inset leaves an empty stripe beside the camera */
   --page-top: max(0px, calc(var(--safe-top) - 14px));
   --nav-bottom: max(0px, calc(var(--safe-bottom) - 6px));
 
-  /* Bottom padding for a page that floats an action tray over its own content.
-     The tray is pinned `1rem` above the nav and measures 65px at its tallest (the
-     continue tray on the exercise list), so this is that plus breathing room —
-     the exact distance the last row has to stand clear of, and nothing more.
-
-     It is measured from `<main>`'s content box, which already stops at the top
-     of the nav on a phone and at the window edge on desktop. That is why
-     `<main>` pads by `--bottom-nav-h` on BOTH: the moment the two differ, one
-     number cannot serve both and every page with a tray needs two.
-
-     Pages whose tray only appears once something is selected apply this only
-     while it is showing. Padding for a tray that is not there is exactly the
-     dead strip at the bottom of the page this replaced. */
+  /* Bottom padding for a page with a floating action tray; apply only while the tray shows */
   --tray-clear: 6rem;
 }
 
@@ -47,16 +26,9 @@
 html, body {
   overscroll-behavior: none;
   overscroll-behavior-x: none;
-  /* NOT `pan-y`, which is what this was and which broke every sideways
-     scroller in the app. `touch-action` does not inherit, but the browser
-     intersects the value of the touched element with all of its ancestors, so
-     `pan-y` here disallowed horizontal panning DOCUMENT-WIDE and no descendant
-     could opt back in — the activity heatmap physically could not be scrolled
-     by touch, and the gesture fell through to AppLayout's page swipe instead.
-     `manipulation` keeps the thing this rule was actually for (no double-tap
-     zoom, no tap delay); the rubber band is already handled by
-     `overscroll-behavior-x` above. Components that own a horizontal drag
-     declare `pan-y` on their own surface — see SwipeActions. */
+  /* Not `pan-y`: touch-action intersects with ancestors, so it would block
+     every horizontal scroller. Horizontal drags set `pan-y` on their own
+     surface (see SwipeActions). */
   touch-action: manipulation;
   -webkit-overflow-scrolling: touch;
   user-select: none;
@@ -69,20 +41,7 @@ input, textarea {
   -webkit-user-select: text;
 }
 
-/*
-  The canvas colour, set on `html` rather than only on `body`.
-
-  `body`'s background propagates to the canvas ONLY while `html` has none of its
-  own — which was the case, so in a browser tab this was already #111111 and
-  looked finished. It is not the same everywhere: an installed PWA paints the
-  area outside the document with the window's own background, and on iOS that
-  is black. That is the shape of the reported strip — pure #000, which is not a
-  colour this app paints anywhere (grep: there is no black in the palette), and
-  visible only where there is no browser chrome at the bottom to cover it.
-
-  Declaring it here means the ground under the document is the app's ground on
-  every surface: tab, standalone, and the desktop installed icon.
-*/
+/* The canvas colour on `html` too, or an installed PWA shows a black strip outside the document */
 html {
   background-color: #111111;
 }
@@ -96,47 +55,22 @@ body {
   padding: 0;
   /* Prevent overscroll bounce on iOS */
   overscroll-behavior: none;
- /* overflow: hidden;*/
 }
 
 #root {
   width: 100%;
   min-height: 100dvh;
   position: relative;
-  /*
-    `clip`, NOT `hidden`, and the difference is not cosmetic.
-
-    Per CSS overflow, a non-`visible` value on one axis computes the other axis
-    to `auto`. So `overflow-x: hidden` here silently made `#root` a scroll
-    container on the Y axis too — a second one, wrapping the single scroller
-    `<main>` is designed to be, which is the shape AppLayout's own comment
-    describes fighting.
-
-    `clip` clips without establishing a scroll container, so the horizontal
-    guard this rule exists for is kept and the accidental vertical scroller
-    goes. Screens that render outside AppLayout (Login, Register, Onboarding,
-    PinLock) still get the clipping; the ones inside it were already bounded by
-    AppLayout's own `overflow-hidden`.
-  */
+  /* `clip`, not `hidden`: hidden would also make #root a vertical scroll
+     container around <main>, which must be the only scroller */
   overflow-x: clip;
 }
 
-/* ── saving a workout: the session card tossed into the calendar ──────────
-   See components/workout/SaveToCalendar.tsx. The travel vector is measured at
-   runtime — the Calendar nav item is in the bottom bar on a phone and the left
-   sidebar on desktop — and handed in as --st-dx / --st-dy, so one pair of
-   keyframes serves both. --st-lift is subtracted from the y term to bow the
-   path upward, which is what makes it read as a toss rather than a slide. */
-/* The waiting card does not move — no float, no breath, no scale. All three
-   read as a stalled spinner, and a surface that drifts under the eye while
-   you are reading it is worse than one that sits still. The only motion is
-   the segment below, lapping the border.
+/* ── saving a workout: the session card tossed into the calendar ──
+   See SaveToCalendar.tsx. The travel vector to the Calendar nav item is
+   measured at runtime (--st-dx / --st-dy); --st-lift bows the path upward. */
 
-   A lap, specifically, and not a bar sweeping the bottom edge: a bar that
-   runs left to right and jumps back to restart looks like progress that keeps
-   failing, and there is no progress to report on one round trip. A lap has no
-   beginning to snap back to. `pathLength` is normalised to 100 in the markup,
-   so the dash is a percentage of the perimeter and one lap is always -100. */
+/* While saving, a segment laps the card's border (pathLength is 100, so one lap is -100) */
 @keyframes st-trace {
   to { stroke-dashoffset: -100; }
 }
@@ -146,9 +80,7 @@ body {
   animation: st-trace 2.1s linear infinite;
 }
 
-/* Rotation is the one motion left once bobbing and scaling are ruled out.
-   `fill-box` so the origin is the circle's own centre and not the corner of
-   the nearest SVG viewport. */
+/* `fill-box` so the spin origin is the circle's own centre */
 @keyframes st-spin {
   to { transform: rotate(360deg); }
 }
@@ -158,18 +90,8 @@ body {
   animation: st-spin 950ms linear infinite;
 }
 
-/*
-  Horizontal travel is linear and the height term is a parabola — 4t(1-t),
-  evaluated at each stop — which is what a thrown object does.
-
-  The stops carry the whole shape, and the timing function MUST stay `linear`.
-  CSS applies `animation-timing-function` to every keyframe segment separately,
-  not once across the animation, so an eased curve here is not one ease over
-  the flight: it is one ease per pair of stops. The card crawls, darts, crawls,
-  darts — bunched at every stop and fastest between them. It looks like a
-  dropped frame rather than a throw, and it is invisible until you draw the
-  path out and look at the spacing.
-*/
+/* Linear travel with a parabolic lift, 4t(1-t), baked into the stops. The
+   timing function must stay `linear`: easing applies per keyframe segment. */
 @keyframes st-toss {
   0% {
     transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
@@ -215,8 +137,7 @@ body {
   animation: st-toss var(--st-duration, 560ms) linear forwards;
 }
 
-/* The impact ring on the nav item. One shot, not a loop — it marks the arrival
-   and then it is gone. */
+/* The one-shot impact ring on the nav item */
 @keyframes st-land {
   0%   { transform: scale(0.35); opacity: 0; }
   30%  { transform: scale(1.05); opacity: 0.95; }
@@ -224,16 +145,14 @@ body {
 }
 .st-land { animation: st-land 380ms cubic-bezier(0.2, 0.6, 0.3, 1) forwards; }
 
-/* Motion here is decorative — every state is reported in text either way. */
+/* Decorative only; every state is also shown in text */
 @media (prefers-reduced-motion: reduce) {
   .st-trace, .st-spin, .st-toss, .st-land { animation: none; }
-  /* Left mid-dash the trace is a teal stub on one edge, which reads as damage
-     rather than a border. Closed up, it is simply the card's own outline. */
+  /* A full outline rather than a stub frozen mid-lap */
   .st-trace { stroke-dasharray: none; opacity: 0.5; }
 }
 
-/* Hide scrollbar on scrollable containers (e.g. the activity heatmap)
-   while still allowing touch/wheel scrolling. */
+/* Hide the scrollbar but keep touch/wheel scrolling */
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;

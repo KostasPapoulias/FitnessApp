@@ -1,16 +1,6 @@
-// Training history: "what have I been doing", and "when did I last squat".
-//
-// The calendar could already answer "what did I do on the 14th". These are
-// different questions and neither was answerable — one needs a list ordered by
-// time with no month boundary, the other needs a list ordered by time filtered
-// to one movement.
-//
-// Both are deliberately LEAN reads. They replaced `GET /api/workout/sessions`,
-// which deep-included every set with all five modality relations for up to
-// fifty sessions and had no cursor — measured at 122 KB and ~12 s for twenty,
-// which is what made paging it impossible. A list row needs the exercise names
-// and a couple of totals, and nothing else; the sets are fetched when a session
-// is opened. That endpoint has since been deleted.
+// Training history: a cursor-paged list of finished sessions, and one
+// exercise's own history. Both are lean reads; a session's sets are fetched
+// only when it is opened.
 
 import prisma from '../lib/prisma'
 import { estimateE1rm, HOLD_SECONDS_PER_REP } from './fatigue-model.service'
@@ -21,37 +11,29 @@ export const MAX_HISTORY_PAGE = 50
 export interface HistoryRow {
   id: string
   dateTime: string
-  /** Minutes. Never null here — unfinished sessions are excluded. */
+  /** Seconds. Never null — unfinished sessions are excluded. */
   duration: number
   totalVolume: number
   avgRpe: number | null
   systemicLoad: number
-  /** The plan it came from, when it came from one. */
   templateName: string | null
   exercises: { name: string; modality: string; sets: number }[]
   setCount: number
-  /** Kilometres, summed across every cardio set. 0 for a session with none. */
+  /** Total cardio distance in km. */
   distanceKm: number
-  /** Modalities present, so a row can be labelled without reading the sets. */
+  /** Modalities present in the session. */
   modalities: string[]
 }
 
 export interface HistoryPage {
   sessions: HistoryRow[]
-  /**
-   * Pass as `cursor` for the next page. Null means this was the last one —
-   * distinct from an empty page, which the client would otherwise have to
-   * distinguish by guessing.
-   */
+  /** Pass as `cursor` for the next page; null on the last page. */
   nextCursor: string | null
 }
 
 /**
- * A page of finished sessions, newest first.
- *
- * Cursor-paged rather than offset-paged: a new session finishing between two
- * requests shifts every offset by one and duplicates a row across the seam.
- * The cursor is the last row's id, which is stable regardless.
+ * A page of finished sessions, newest first. Cursor-paged (by id) so rows do
+ * not shift when a new session finishes between requests.
  */
 export const getHistoryPage = async (
   userId: string,
@@ -64,9 +46,7 @@ export const getHistoryPage = async (
 
   const where: any = { userId, duration: { not: null } }
   if (options.modality) {
-    // Sessions CONTAINING the modality, not sessions made only of it — a lifting
-    // session that finished with a treadmill walk is still a lifting session,
-    // and filtering to pure sessions would hide most real training.
+    // Sessions containing the modality, not made only of it
     where.workoutExercises = {
       some: { exercise: { modality: { name: { equals: options.modality, mode: 'insensitive' } } } },
     }
@@ -87,19 +67,14 @@ export const getHistoryPage = async (
         select: {
           exercise: { select: { name: true, modality: { select: { name: true } } } },
           _count: { select: { sets: true } },
-          // Only the cardio leg of each set. A distance total should not cost a
-          // join against all five modality tables.
+          // Only the cardio distance of each set
           sets: { select: { cardio: { select: { distance: true } } } },
         },
       },
     },
-    // id breaks ties. Two sessions can share a dateTime — a manually dated
-    // entry, or two finishes inside the same second — and an unstable sort
-    // makes a cursor skip or repeat rows.
+    // id breaks ties so the cursor never skips or repeats rows
     orderBy: [{ dateTime: 'desc' }, { id: 'desc' }],
-    // One extra row, purely to find out whether another page exists. Asking for
-    // `take` and then issuing a count would be a second round trip to say the
-    // same thing.
+    // One extra row reveals whether another page exists
     take: take + 1,
     ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
   })
@@ -144,9 +119,9 @@ export interface ExerciseHistorySet {
   setNumber: number
   rpe: number | null
   reps: number | null
-  /** kg. Total load for calisthenics, i.e. bodyweight plus anything added. */
+  /** kg. For calisthenics, total load (bodyweight plus added). */
   weight: number | null
-  /** Seconds, for holds and clock-based work. */
+  /** Seconds, for holds and timed work. */
   timeSec: number | null
   distanceKm: number | null
   rounds: number | null
@@ -156,12 +131,11 @@ export interface ExerciseHistoryEntry {
   sessionId: string
   dateTime: string
   sets: ExerciseHistorySet[]
-  /** Best e1RM implied by this entry's sets, or null where the modality has none. */
+  /** Best e1RM implied by this entry's sets, if the modality has one. */
   e1rm: number | null
-  /** Heaviest single set, for the one-line summary. */
   topWeight: number | null
   totalVolume: number
-  /** What the athlete wrote against the exercise that day, if anything. */
+  /** The athlete's note on the exercise that day. */
   notes: string | null
 }
 
@@ -169,33 +143,15 @@ export interface ExerciseHistory {
   exerciseId: string
   entries: ExerciseHistoryEntry[]
   lastPerformedAt: string | null
-  /** All-time best e1RM as the app records it, not just within `entries`. */
+  /** All-time best e1RM, not just within `entries`. */
   bestE1rm: number | null
-  /** Total finished sessions containing this exercise, which may exceed `entries`. */
+  /** Total finished sessions containing the exercise (may exceed `entries`). */
   sessionCount: number
-  /**
-   * The most recent note written against this exercise, from any session.
-   *
-   * Separate from `entries[0].notes` because notes are rare: the last session
-   * usually has none, and "last time" on the live screen asks for limit=1. A
-   * note from three sessions ago about a sore shoulder is still the one worth
-   * showing before the next set.
-   */
+  /** The most recent note on this exercise from any session — often not the last one. */
   lastNote: { text: string; dateTime: string } | null
 }
 
-/**
- * One exercise's own history, newest first.
- *
- * This is what ExerciseDetail was missing — it renders a description and
- * nothing else, so the screen you open immediately before performing a movement
- * could not tell you what you did last time. That is the moment the data is
- * worth the most.
- *
- * `sessionCount` is counted separately from `entries.length` on purpose: the
- * list is capped, and letting the count be the length of a truncated page
- * would tell an athlete with fifty squat sessions that they had ten.
- */
+/** One exercise's history, newest first, plus its note and e1RM summary. */
 export const getExerciseHistory = async (
   userId: string,
   exerciseId: string,
@@ -233,8 +189,7 @@ export const getExerciseHistory = async (
       orderBy: { session: { dateTime: 'desc' } },
       take,
     }),
-    // In the same batch rather than derived from `workoutExercises`: that list
-    // is capped at `take`, and the note worth surfacing may sit past it.
+    // Separate query: the note may sit past the `take` cap
     prisma.workoutExercise.findFirst({
       where: { exerciseId, notes: { not: null }, session: { userId, duration: { not: null } } },
       select: { notes: true, session: { select: { dateTime: true } } },
@@ -266,8 +221,7 @@ export const getExerciseHistory = async (
         totalVolume += set.strength.reps * set.strength.weight
         bestE1rm = Math.max(bestE1rm, estimateE1rm(set.strength.weight, set.strength.reps, set.rpe))
       } else if (set.calisthenics) {
-        // Reported as total load, matching how the fatigue model scores it — a
-        // weighted pull-up logged as "+10kg" is not a 10kg lift.
+        // Total load, matching how the fatigue model scores it
         const load = bodyWeight + set.calisthenics.addedWeight
         const repEquivalent = set.calisthenics.reps > 0
           ? set.calisthenics.reps

@@ -2,22 +2,13 @@ import { Exercise } from '../../types'
 
 // ── weight steppers ───────────────────────────────────────────────────────
 /**
- * The next loadable weight from `kg`, one step up or down.
- *
- * Mirrors the backend's `roundToPlates` grid — 1 kg steps under 10 kg, 2.5 kg
- * from there — so a +/− tap lands on the same numbers a suggestion does. A
- * flat ±2.5 did not: from a 7 kg dumbbell it offered 9.5, and from an
- * off-grid 20.9 it walked 23.4, 25.9… forever. Stepping from off the grid
- * snaps to the nearest grid value in that direction rather than keeping the
- * odd fraction.
- *
- * Signed, for calisthenics assistance: stepping down through zero goes into
- * negative load on the same grid. Callers that must not go below zero clamp.
+ * The next loadable weight from `kg`, one step up or down, on the backend's
+ * `roundToPlates` grid (1 kg below 10 kg, 2.5 kg above). Off-grid values snap
+ * to the grid. Signed, for assisted calisthenics; callers clamp at zero.
  */
 export function nextLoad(kg: number, dir: 1 | -1): number {
-  // Probe a hair past `kg` so a value already on the grid moves a full step,
-  // and so the step size is the one on the side being moved into — down from
-  // 10 is 9, not 7.5.
+  // Probe just past `kg`, so on-grid values move a full step and the step
+  // size is the one on the side being entered (down from 10 is 9)
   const probe = kg + dir * 1e-6
   const step = Math.abs(probe) < 10 ? 1 : 2.5
   const n = dir > 0 ? Math.ceil(probe / step) : Math.floor(probe / step)
@@ -25,7 +16,7 @@ export function nextLoad(kg: number, dir: 1 | -1): number {
 }
 
 // ── RPE → colour / tint / word ────────────────────────────────────────────
-// Mirrors the SomaTrack design tokens: green → yellow → orange → red.
+// Design-token colours: green → yellow → orange → red.
 export function rpeColor(n: number): string {
   if (n <= 4) return '#4ADE80' // brand-green
   if (n <= 6) return '#FACC15' // brand-yellow
@@ -57,15 +48,10 @@ export function rpeLabel(n: number, mode: RpeMode): string {
   return `${n} — ${rpeWord(n)}`
 }
 
-// Cycle 1..10 wrapping
+// Cycle 1..10, wrapping.
 export function cycleRpe(n: number, delta = 1): number {
   return ((n - 1 + delta + 10) % 10) + 1
 }
-
-// The emoji this file used to map modalities to now lives in
-// `components/icons.tsx` as ModalityIcon. It stays there rather than here
-// because this is a .ts file and an icon is JSX — which is also why the
-// session summary below carries the modality and lets the screen draw it.
 
 // ── Finish-screen summary ─────────────────────────────────────────────────
 export interface FinishSnapshot {
@@ -75,11 +61,7 @@ export interface FinishSnapshot {
   elapsed: number
 }
 
-/**
- * What the Finish screen shows, captured before `finishSession()` clears the
- * store. Shared by the live workout and quick log so the two cannot drift into
- * summarising the same session differently.
- */
+/** The Finish screen summary, captured before finishSession() clears the store. */
 export function summariseSession(
   selectedExercises: { exercise: Exercise; sets: { reps: number; weight: number }[] }[],
   completedSets: { exerciseId: string; setIndex: number }[],
@@ -115,8 +97,7 @@ export function summariseSession(
   }
 }
 
-// mm:ss — rounds first, so derived values (e.g. pace = 1000 / speed) don't
-// leak their fractional seconds into the string.
+// mm:ss, rounding first so fractional seconds never leak in.
 export function fmtTime(seconds: number): string {
   const total = Math.max(0, Math.round(seconds))
   const m = Math.floor(total / 60)

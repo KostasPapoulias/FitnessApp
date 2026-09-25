@@ -18,16 +18,12 @@ const DEFAULT_MOVES = [
 export default function WodView({ onFinish, registerVoice }: ModalityViewProps) {
   const { wodConfig, selectedExercises, completeSet } = useWorkoutStore()
 
-  // Planned movements, each keeping its index in the store so the metcon can be
-  // logged against every movement rather than only the first one.
+  // Planned movements with their store index, so every movement is logged
   const liveMoves = selectedExercises
     .map((se, exIdx) => ({
       exIdx,
       reps: se.sets[0]?.reps ?? 10,
-      // The bar a metcon is done at. Planned in WodPlan and carried through to
-      // the log — without it a 43 kg thruster and an air squat are the same
-      // input to the fatigue model, and metcons are the most systemically
-      // expensive thing in the app.
+      // The movement's load, planned in WodPlan
       weight: se.sets[0]?.weight ?? 0,
       name: se.exercise.name,
       skipped: Boolean(se.skipped),
@@ -48,19 +44,10 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
   const [done, setDone] = useState<boolean[]>(() => moves.map(() => false))
   const [finishSec, setFinishSec] = useState<number | null>(null)
 
-  // A metcon is done head-down against a clock nobody can watch, so the round
-  // count and the cap are the two things that have to be audible.
+  // Audible round count and cap cues — the athlete can't watch the screen
   const cue = useLiveCues()
 
-  /**
-   * True when the screen is running on `DEFAULT_MOVES` — a demo list with no
-   * `WorkoutExercise` behind any row, so `endSession` logs nothing at all.
-   *
-   * Reachable by skipping every selected movement. It used to be invisible: the
-   * clock, the rounds and the score all worked, the session finished, and the
-   * result was zero sets and zero fatigue. Saying so is the minimum; a metcon
-   * that silently records nothing reads as the app losing the workout.
-   */
+  /** True when only the demo movements remain, so nothing will be logged — the screen says so. */
   const nothingToLog = liveMoves.length === 0
 
   const box = useRef({ running, format, sec, started })
@@ -73,8 +60,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
       const b = box.current
       if (!b.started || !b.running) return
       if (b.format === 'amrap' || b.format === 'emom') {
-        // Counted off the value the clock is about to show, so "one" is not
-        // spoken while the display still reads 2.
+        // Count off the value about to show
         cueRef.current.countdown(CAP - (b.sec + 1))
       }
       if (b.format === 'amrap' && b.sec + 1 >= CAP) {
@@ -87,7 +73,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
     return () => clearInterval(id)
   }, [CAP])
 
-  // The cap cue fires from inside the interval, which cannot see `rounds`.
+  // For the cap cue, which fires inside the interval
   const roundsRef = useRef(0)
 
   const reset = (f: WodFormat = format) => {
@@ -118,17 +104,10 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
   const partialReps = done.reduce((a, d, i) => a + (d ? (moves[i]?.reps ?? 0) : 0), 0)
   const finished = !running && finishSec != null
 
-  // Log the metcon against EVERY movement in it.
-  //
-  // This used to write a single set, and always at the store's current exercise
-  // index — which a metcon never advances. So a three-movement WOD only ever
-  // fatigued the first movement's muscles, and the score (rounds and reps) was
-  // thrown away entirely. Each movement now carries the shared clock plus its
-  // own reps-per-round; the backend scores the metcon once and splits it by rep
-  // contribution, so it isn't counted once per movement.
+  // Log the metcon against every movement: the shared clock plus each
+  // movement's reps per round. The backend scores it once and splits it.
   const endSession = async (rpe: number) => {
-    // Ref guard: the summary-set request keeps this button on screen, so a
-    // second tap would log the metcon twice and finish twice.
+    // Ref guard against a double tap logging it twice
     if (endingRef.current) return
     endingRef.current = true
     setEnding(true)
@@ -142,8 +121,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
       await completeSet(
         {
           time: elapsed, rpe, restSeconds: 0, reps: move.reps,
-          // The bar this movement was done at. Zero for the bodyweight ones,
-          // which is the honest value rather than an absent field.
+          // The movement's load (0 for bodyweight)
           weight: move.weight,
           rounds: scoredRounds,
         },
@@ -157,15 +135,12 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
     onFinish()
   }
 
-  // A metcon is done with hands on a bar and eyes on nothing, so counting a
-  // round out loud is the command that matters most here. Registered above the
-  // early returns because it is a hook and those are conditional.
+  // Voice control ("round done"). Above the early returns — it is a hook.
   useModalityVoice(registerVoice, command => {
     switch (command.kind) {
       case 'pauseRest':  setRunning(false); return true
       case 'resumeRest': setRunning(true); return true
-      // "round done" and "next" are the same intent mid-metcon: that round
-      // counted, start the next one. A finished board has nothing to count.
+      // "round done" and "next" both mean: count the round
       case 'mark':
       case 'skipRest':
       case 'advance':
@@ -208,7 +183,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
     )
   }
 
-  // clock block
+  // Clock display
   let clock = '', clockLabel = '', clockSub = '', clockColor = '#FFFFFF', clockBg = '#1A1A1A', clockBorder = '#2A2A2A'
   let roundsValue = String(rounds), roundsLabel = 'Rounds done', scoreValue = '', scoreLabel = ''
   if (format === 'amrap') {
@@ -248,16 +223,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
         <div className="text-[13px] text-dark-300 font-bold">{moves.length} movements</div>
       </div>
 
-      {/*
-        Format tabs, and they only switch before the clock has moved.
-
-        Each one used to call `reset(id)` unconditionally — `setSec(0)`,
-        `setRounds(0)`, `setDone(...)`. So a mis-tap eight minutes into an AMRAP
-        silently threw the whole metcon away, with no confirmation and nothing
-        to undo it. The format is chosen in WodPlan, which is the right place
-        for it: before anything has been scored. Here it is a label once there
-        is a score to lose.
-      */}
+      {/* Format tabs — switchable only before the clock starts, so a mis-tap can't erase a score */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {FORMATS.map(([id, label]) => {
           const on = format === id
@@ -330,8 +296,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
                 <span className="text-[15px] font-extrabold min-w-[40px]">{m.reps}</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[14.5px] font-semibold truncate">{m.name}</div>
-                  {/* Only when there is a bar. A "0 kg" on an air squat is noise
-                      on the one screen with the least room to spare. */}
+                  {/* Load shown only when there is one */}
                   {m.weight > 0 && (
                     <div className="text-[11px] font-bold text-brand-orange mt-0.5">{m.weight} kg</div>
                   )}

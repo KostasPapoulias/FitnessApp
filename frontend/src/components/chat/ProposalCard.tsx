@@ -7,13 +7,9 @@ import { useT } from '../../i18n'
 import { CalendarIcon, DumbbellIcon, PencilIcon } from '../icons'
 
 /**
- * A workout the coach has drafted, waiting on the athlete.
- *
- * Nothing exists server-side until Add is tapped. The card is deliberately
- * explicit about that — it lists the actual exercises and the date rather than
- * summarising, because this is the only point at which a mistake in the plan is
- * cheap to catch. Once it becomes a session it is training history, and every
- * fatigue and load number downstream is computed from it.
+ * A coach-drafted plan, schedule or exercise awaiting the athlete's tap.
+ * Nothing exists server-side until Add is tapped, so the card lists exactly
+ * what will be saved.
  */
 
 const fmtWhen = (iso: string, intl: string) =>
@@ -24,7 +20,7 @@ const fmtWhen = (iso: string, intl: string) =>
 
 interface Props {
   proposal: AiProposal
-  /** Lets the chat drop the card once it has been dealt with. */
+  /** Lets the chat drop the card once handled. */
   onResolved: (id: string) => void
 }
 
@@ -33,17 +29,14 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
   const loadTemplate = useWorkoutStore(s => s.loadTemplate)
   const { t, intl } = useT()
 
-  // A drafted exercise and a drafted plan are the same card with different
-  // nouns: what it is called, what accepting it means, and where "open" goes.
+  // Exercise and plan drafts share this card with different wording
   const isExercise = proposal.kind === 'create_exercise'
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [accepted, setAccepted] = useState<{ id: string } | null>(null)
 
-  // Reopened from history rather than just drafted. `applied` has no id to
-  // open: the proposal row records that it was applied, not what it created,
-  // so the card points at the plans list instead of one plan.
+  // Reopened after being applied; the row does not record what it created, so "open" goes to the list
   const wasApplied = proposal.status === 'applied'
   const hasExpired = proposal.status === 'expired'
   const resolved = wasApplied || hasExpired || accepted !== null
@@ -53,15 +46,12 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
     setError(null)
     try {
       const result = await aiService.acceptProposal(proposal.id)
-      // The two kinds return different objects — a template for a plan, an
-      // exercise for a movement. Reading `result.template.id` for both left the
-      // accepted state holding undefined, and "open" then went nowhere.
+      // Each kind returns a different object
       setAccepted({
         id: result.kind === 'create_exercise' ? result.exercise.id : result.template.id,
       })
     } catch (err: any) {
-      // 409 means expired or already used — the server phrases those for a
-      // human, so show its reason rather than a generic failure.
+      // 409: expired or already used — show the server's reason
       setError(err?.response?.data?.error ?? t('proposal.failed'))
     } finally {
       setBusy(false)
@@ -74,8 +64,7 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
       await aiService.rejectProposal(proposal.id)
       onResolved(proposal.id)
     } catch {
-      // A card that could not be dismissed is a nuisance, not a failure worth
-      // reporting — it will expire on its own within the half hour.
+      // A failed dismiss is harmless; the draft expires anyway
       onResolved(proposal.id)
     }
   }
@@ -139,9 +128,7 @@ export default function ProposalCard({ proposal, onResolved }: Props) {
         <div className="px-4 pb-2 text-[12px] text-brand-red font-semibold">{error}</div>
       )}
 
-      {/* An expired draft keeps its contents and loses its buttons: what was
-          suggested is still worth reading, and applying it is not — it was
-          reasoned about a body state that has moved on. */}
+      {/* Expired: contents stay readable, buttons go */}
       {hasExpired && (
         <p className="px-4 pb-3 text-[12px] text-dark-400">{t('proposal.expiredNote')}</p>
       )}

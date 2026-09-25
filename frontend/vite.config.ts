@@ -3,40 +3,21 @@ import react from '@vitejs/plugin-react'
 
 const RAILWAY = 'https://fitnessapp-production-29e7.up.railway.app'
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Where the dev proxy sends /api. Railway unless API_PROXY_TARGET says
-  // otherwise — set it to http://localhost:3001 in .env.local to develop
-  // against the local backend.
-  //
-  // Hardwired to Railway, a backend change could not be tried in the app at
-  // all before it was deployed: the local server ran the new code and nothing
-  // talked to it, while the page kept getting the old answers from production.
-  // Pointing the PROXY at localhost (rather than VITE_API_URL) keeps the phone
-  // case working — the proxy runs on this machine, so its localhost is the
-  // right one even when the page was opened from a phone over the LAN.
-  //
-  // No VITE_ prefix on purpose: it is read here, in Node, and never needs to
-  // reach the bundle.
+  // Dev proxy target for /api: Railway unless API_PROXY_TARGET is set (e.g.
+  // http://localhost:3001 in .env.local). Proxying keeps the LAN/phone case
+  // working, since the proxy's localhost is this machine. Node-only, so no VITE_ prefix.
   const apiTarget = loadEnv(mode, process.cwd(), '').API_PROXY_TARGET || RAILWAY
 
   return {
   plugins: [react()],
-  // server: {
-  //   port: 5173,
-  //   strictPort: false,
-  // },
   server: {
   port: 5173,
   strictPort: false,
-  // Bind on every interface, not just localhost — a phone cannot reach a
-  // server listening only on 127.0.0.1, and "it works on my laptop" is what
-  // that failure looks like.
+  // Every interface, so a phone on the LAN can reach it
   host: true,
-  // Vite 5.4.12+ rejects requests whose Host header it does not recognise, so
-  // an HTTPS tunnel — which is the only way a phone gets geolocation, a wake
-  // lock or a service worker, all of which need a secure context — is refused
-  // with a blank "Blocked request" page until its domain is listed here.
+  // HTTPS tunnels (needed for geolocation, wake lock and the service worker on
+  // a phone) must be allowlisted, or Vite blocks the Host header
   allowedHosts: ['.trycloudflare.com', '.loca.lt', '.ngrok-free.app', '.ngrok.io'],
   proxy: {
     '/api': {
@@ -44,9 +25,7 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       secure: true,
     },
-    // Exercise animations live on the backend; the thumbnails are in this
-    // app's own public/ and need no proxy. Mirrors the Netlify rewrite in
-    // netlify.toml so the same relative URL works in dev and in production.
+    // Exercise animations live on the backend; mirrors the rewrite in netlify.toml
     '/exercise-media': {
       target: apiTarget,
       changeOrigin: true,
@@ -54,9 +33,7 @@ export default defineConfig(({ mode }) => {
     },
   },
 },
-  // MapLibre parses vector tiles in a worker and creates it as a module worker.
-  // Vite's default 'iife' output cannot carry that worker's own imports, so it
-  // is emitted as ESM to match.
+  // MapLibre's tile worker is a module worker, so emit workers as ESM
   worker: {
     format: 'es',
   },

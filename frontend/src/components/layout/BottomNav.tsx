@@ -12,13 +12,8 @@ export default function BottomNav() {
   const { t } = useT()
   const navRef = useRef<HTMLElement>(null)
 
-  // Publish the nav's real height so fixed overlays (chat input) can sit
-  // exactly on top of it. Measured rather than hardcoded: the raised centre
-  // button and the safe-area inset both change it per device.
-  //
-  // Layout effect, not a passive one: `<main>` pads its bottom by this on every
-  // form factor now, so a value published after the first paint is a visible
-  // jump — desktop laying out against the 78px fallback and then snapping to 0.
+  // Publish the nav's measured height as --bottom-nav-h, before first paint,
+  // so fixed overlays and <main>'s padding line up with it
   useLayoutEffect(() => {
     const root = document.documentElement
     if (!isPhone) {
@@ -28,8 +23,7 @@ export default function BottomNav() {
     const el = navRef.current
     if (!el) return
 
-    // Border box, not contentRect — the nav's own padding counts, and the
-    // raised centre button is already folded into its layout height.
+    // Border box: includes padding and the raised centre button
     const publish = () =>
       root.style.setProperty('--bottom-nav-h', `${Math.round(el.getBoundingClientRect().height)}px`)
 
@@ -41,10 +35,9 @@ export default function BottomNav() {
 
   const isActive = (path: string) => location.pathname === path
 
-  // Center button state
+  // Centre button: resume the live session, or start one
   const centerButton = () => {
-    // A quick-log session has no live screen. Sending it to /workout/active
-    // would open the set card and rest timer on a session meant to have neither.
+    // Quick-log sessions have no live screen
     if (activeSession) {
       return quickLog
         ? { label: t('nav.logLive'), path: '/workout/log', bg: 'bg-brand-red' }
@@ -167,7 +160,7 @@ function DesktopNavBtn({ icon, label, active, onClick, navKey }: {
   label: string
   active: boolean
   onClick: () => void
-  /** See NavBtn — same handle, same reason for sitting on the icon. */
+  /** See NavBtn. */
   navKey?: string
 }) {
   return (
@@ -185,17 +178,15 @@ function DesktopNavBtn({ icon, label, active, onClick, navKey }: {
   )
 }
 
-// Reusable nav button
+// Nav button.
 function NavBtn({ icon, label, active, onClick, navKey }: {
   icon: React.ReactNode
   label: string
   active: boolean
   onClick: () => void
   /**
-   * Stable handle for animations that need to fly something to this tab.
-   * Put on the ICON, not the button: the button's box includes the label, so
-   * aiming at its centre lands between the glyph and the word.
-   * See components/workout/SaveToCalendar.tsx.
+   * Target for animations that fly to this tab. On the icon, not the button,
+   * so they land on the glyph (see SaveToCalendar).
    */
   navKey?: string
 }) {

@@ -2,18 +2,11 @@ import prisma from '../lib/prisma'
 import { NOTIFICATION_TYPES } from './notification-preference.service'
 
 /**
- * Saved plans: creating them, putting them on a date, and turning one into a
- * real session.
- *
- * The boundary this file defends is the one between intention and record. A
- * WorkoutTemplate is editable and repeatable and means nothing physiologically.
- * A WorkoutSession is the log that muscle fatigue, training load and every
- * progression suggestion are computed from. Work flows one way — a template
- * seeds a session, a finished session updates the template's counters — and
- * nothing here ever edits a set that was actually performed.
+ * Saved plans: create, edit, archive, schedule, and bind to real sessions.
+ * Templates are intentions; nothing here ever edits a performed set.
  */
 
-/** Ceilings on anything that gets written, whoever proposed it. */
+/** Limits on anything written, whoever proposed it (user or AI). */
 export const LIMITS = {
   nameLength: 80,
   notesLength: 500,
@@ -72,14 +65,8 @@ const trim = (value: unknown, max: number): string | null => {
 }
 
 /**
- * Turn an untrusted draft into something safe to persist.
- *
- * Every exercise id is checked against the catalogue rather than trusted,
- * because the single most likely thing a language model gets wrong is an
- * identifier: it will happily invent a plausible uuid, and an unchecked insert
- * would fail on a foreign key at best and attach to an unrelated movement at
- * worst. Numbers are clamped rather than rejected so one silly weight does not
- * throw away an otherwise good plan.
+ * Validate an untrusted draft: exercise ids are checked against the catalogue
+ * (models invent ids), numbers are clamped rather than rejected.
  */
 export const validateTemplateInput = async (
   input: TemplateInput
@@ -111,8 +98,7 @@ export const validateTemplateInput = async (
 
   const exercises: TemplateExerciseInput[] = rawExercises.map(exercise => {
     const rawSets = Array.isArray(exercise.sets) ? exercise.sets : []
-    // An exercise with no sets is a plan that says nothing. One default set is
-    // more useful than a validation failure the athlete has to go and fix.
+    // An exercise with no sets gets one default set
     const sets = (rawSets.length > 0 ? rawSets : [{ reps: 10, rpe: 7, restSeconds: 90 }])
       .slice(0, LIMITS.setsPerExercise)
       .map(set => ({
@@ -158,19 +144,8 @@ const TEMPLATE_INCLUDE = {
 }
 
 /**
- * Flatten an exercise into the shape the catalogue endpoint serves.
- *
- * The planner and the live views read exercises from either source and cannot
- * tell them apart, so the two must agree. This file used to hand back Prisma's
- * raw row, where `modality` is the related RECORD rather than its name and the
- * muscle/category/equipment links are still link rows. Both differences were
- * crashes, not cosmetic: React refuses to render an object as a child, so
- * opening a saved plan blanked the whole app, and `exercise.muscles` being
- * absent took the live session down one screen later.
- *
- * Fatigue flags are deliberately not reproduced here. They describe the
- * athlete at this moment rather than the plan, they cost a lookup per request,
- * and no screen in the planner shows them.
+ * Flatten an exercise to the catalogue endpoint's shape, so screens cannot
+ * tell a template's exercise from a catalogue one. Fatigue flags are omitted.
  */
 const serializeExercise = (exercise: {
   id: string
@@ -190,9 +165,7 @@ const serializeExercise = (exercise: {
   name: exercise.name,
   description: exercise.description,
   modality: exercise.modality.name,
-  // Carried through templates too: an exercise reached from a saved plan must
-  // answer "how is this measured?" the same way one reached from the catalogue
-  // does, or the run screen changes shape depending on the route in.
+  // Measurement fields carried through so the cardio screen behaves the same either way
   referenceSpeedKmh: exercise.referenceSpeedKmh,
   cardioTracking: exercise.cardioTracking,
   referenceCadenceRpm: exercise.referenceCadenceRpm,
@@ -209,8 +182,7 @@ const serializeExercise = (exercise: {
 
 type RawTemplateExercise = { exercise: Parameters<typeof serializeExercise>[0] }
 
-/** Everything else on the row is passed through untouched — including Dates,
- *  which callers such as the AI tool layer still format themselves. */
+/** Other fields pass through untouched, including Dates. */
 const serializeTemplate = <T extends { exercises: RawTemplateExercise[] }>(template: T) => ({
   ...template,
   exercises: template.exercises.map(te => ({ ...te, exercise: serializeExercise(te.exercise) })),
@@ -268,13 +240,7 @@ export const getTemplate = async (userId: string, id: string) => {
   return template && serializeTemplate(template)
 }
 
-/**
- * Replace a template's contents.
- *
- * Exercises and sets are deleted and rewritten rather than diffed. A plan is
- * small, and a diff would have to reconcile reordering, insertion and removal
- * to save a handful of rows — the reconciliation is where the bugs would be.
- */
+/** Replace a template's exercises and sets (rewritten, not diffed). */
 export const updateTemplate = async (userId: string, id: string, input: TemplateInput) => {
   const owned = await prisma.workoutTemplate.findFirst({ where: { id, userId }, select: { id: true } })
   if (!owned) return null
@@ -307,7 +273,7 @@ export const updateTemplate = async (userId: string, id: string, input: Template
   })
 }
 
-/** Archive, or bring one back. Templates are never destroyed. */
+/** Archive or restore; templates are never deleted. */
 export const setTemplateArchived = async (userId: string, id: string, archived: boolean) => {
   const owned = await prisma.workoutTemplate.findFirst({ where: { id, userId }, select: { id: true } })
   if (!owned) return null
@@ -319,13 +285,7 @@ export const setTemplateArchived = async (userId: string, id: string, archived: 
   }))
 }
 
-/**
- * Save a finished session as a repeatable plan.
- *
- * Reads what was actually performed and freezes it as the target for next time,
- * which is the honest starting point for "do that again" — better than any
- * suggestion, because the athlete has already proved they can do it.
- */
+/** Save a finished session's performed sets as a repeatable plan. */
 export const templateFromSession = async (userId: string, sessionId: string, name?: string) => {
   const session = await prisma.workoutSession.findFirst({
     where: { id: sessionId, userId },
@@ -377,12 +337,8 @@ const SCHEDULED_INCLUDE = {
 }
 
 /**
- * Put a template on a date, optionally with a reminder.
- *
- * The reminder becomes a row in Notification rather than a timer here. That
- * table already owns quiet hours, the daily cap, dedupe and delivery receipts,
- * and a second thing writing to the same phone is how people end up with
- * duplicate pushes at six in the morning.
+ * Put a template on a date. The reminder is a planned Notification row, so it
+ * goes through the scheduler's quiet hours, cap and dedupe.
  */
 export const scheduleTemplate = async (
   userId: string,
@@ -406,8 +362,7 @@ export const scheduleTemplate = async (
     throw new TemplateValidationError('Workouts can only be scheduled up to a year ahead.')
   }
 
-  // A reminder for a moment that has already passed would fire the instant it
-  // is created, which reads as a bug rather than a reminder.
+  // A reminder in the past is dropped rather than firing immediately
   const reminder =
     reminderAt instanceof Date &&
     !Number.isNaN(reminderAt.getTime()) &&
@@ -427,8 +382,7 @@ export const scheduleTemplate = async (
         body: `${template.name} is scheduled. Ready when you are.`,
         status: 'planned',
         plannedFor: reminder,
-        // Scoped to the slot, so re-scheduling the same template to a different
-        // day is a different reminder rather than a silently dropped duplicate.
+        // Scoped to the slot and time, so rescheduling creates a new reminder
         dedupeKey: `workout_reminder:${templateId}:${reminder.toISOString()}`,
       },
     })
@@ -461,11 +415,8 @@ export const listScheduled = async (
 }
 
 /**
- * Cancel a standby slot, withdrawing its reminder.
- *
- * The notification is deleted only while it is still `planned`. Once it has
- * been sent, the row is the record that it reached the phone — deleting it
- * would erase a delivery receipt the engagement tracking depends on.
+ * Cancel a standby slot. Its reminder is deleted only while still `planned` —
+ * a sent one is a delivery record.
  */
 export const cancelScheduled = async (userId: string, id: string) => {
   const scheduled = await prisma.scheduledWorkout.findFirst({ where: { id, userId } })
@@ -485,12 +436,8 @@ export const cancelScheduled = async (userId: string, id: string) => {
 }
 
 /**
- * Bind a scheduled slot to the session that fulfils it.
- *
- * Called once the athlete actually starts training from the plan. Counters on
- * the template advance here rather than at schedule time — a workout that was
- * planned and skipped has not been performed, and letting it count would make
- * "how often do I actually do this" a measure of intention.
+ * Bind a slot to the session fulfilling it. The template's counters advance
+ * here, when training actually starts.
  */
 export const startScheduled = async (userId: string, id: string, sessionId: string) => {
   const scheduled = await prisma.scheduledWorkout.findFirst({
@@ -522,7 +469,7 @@ export const startScheduled = async (userId: string, id: string, sessionId: stri
   })
 }
 
-/** Mark a slot done or deliberately skipped. */
+/** Mark a slot completed or skipped. */
 export const closeScheduled = async (
   userId: string,
   id: string,

@@ -5,22 +5,9 @@ import { fmtTime } from '../../pages/Workout/helpers'
 import { PencilIcon, TrashIcon } from '../icons'
 
 /**
- * What one exercise in a recorded session actually contained.
- *
- * This was an accordion inside the day's card. It became a sheet because the
- * set table is the thing you came to read: expanded in place it pushed every
- * later exercise off-screen, and on a phone the row you tapped often scrolled
- * out of view as it opened.
- *
- * A cardio entry is a run, not a set table — reps and weight are empty for
- * every row of one, and the distance, the pace and the route are the whole
- * record of what happened.
- *
- * Set rows carry their own swipe actions: LEFT reveals Edit on the right edge,
- * RIGHT reveals Delete on the left. That is the mirror of the session rows in
- * Calendar, which put delete on the right — deliberate here because it is what
- * was asked for, but the two being opposite is worth knowing before you learn
- * one of them by muscle memory.
+ * One exercise from a recorded session, in a bottom sheet: a set table, or
+ * run stats for cardio, plus the exercise note. Set rows swipe left for Edit,
+ * right for Delete (the mirror of Calendar's session rows).
  */
 
 interface Props {
@@ -30,10 +17,7 @@ interface Props {
   onPickSet: (set: any) => void
   onDeleteSet: (set: any) => void
   onOpenRun: (setId: string) => void
-  /**
-   * Resolves false if the write failed. Absent for an entry with no
-   * workoutExerciseId to write to, which leaves the note read-only.
-   */
+  /** Resolves false if the write failed. Absent → the note is read-only. */
   onSaveNotes?: (notes: string) => Promise<boolean>
   onClose: () => void
 }
@@ -73,10 +57,7 @@ export default function ExerciseSetsSheet({
       {isCardio && (
         <div className="flex flex-col gap-2">
           {cardioSets.map((s: any) => {
-            // Average pace comes from the stored run when there is one — it was
-            // computed from unrounded metres. Falling back to the rounded
-            // display distance costs a second or two on a short run, which is
-            // better than nothing.
+            // Stored pace (from unrounded metres) when available
             const paceSec = s.run?.avgPaceSec
               ?? (s.cardio?.distance > 0 && s.cardio?.time > 0
                   ? s.cardio.time / s.cardio.distance
@@ -103,8 +84,7 @@ export default function ExerciseSetsSheet({
                   ))}
                 </div>
 
-                {/* Only offer the route when one was recorded. A button that
-                    opens an empty map is worse than no button. */}
+                {/* Route button only when a route was recorded */}
                 {s.run ? (
                   <button
                     onClick={() => onOpenRun(s.id)}
@@ -193,11 +173,7 @@ export default function ExerciseSetsSheet({
         </>
       )}
 
-      {/* Below the sets, for every modality — a note is about the exercise as
-          a whole, and it is read after the numbers it explains. Editable here
-          at any time, not only in edit mode: notes are not a fatigue input,
-          so changing one rewrites nothing, and adding "that was the day my
-          knee went" afterwards is exactly when people think of it. */}
+      {/* The note, below the sets; editable any time since notes are not a fatigue input */}
       {onSaveNotes && exercise.workoutExerciseId ? (
         <ExerciseNotes
           key={exercise.workoutExerciseId}

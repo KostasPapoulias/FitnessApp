@@ -11,17 +11,8 @@ import { log } from '../lib/logger'
 
 /**
  * GET /api/progress/summary?weeks=12&days=30
- *
- * Everything the progress screen needs for its first paint, in one request.
- *
- * Three separate endpoints would have been tidier, and would have cost three
- * sequential round trips to a database that is ~290ms away — the screen would
- * have taken most of a second to fill in section by section. These three reads
- * are independent, so they go out together.
- *
- * The per-exercise e1RM series is NOT here: it depends on which exercise the
- * athlete taps, and pre-fetching one for every exercise in the list would read
- * their whole training history to draw a single chart.
+ * Volume trend, strength progress and muscle fatigue history for the progress
+ * screen, fetched in parallel.
  */
 export const getProgressSummary = async (req: AuthRequest, res: Response) => {
   try {
@@ -43,10 +34,7 @@ export const getProgressSummary = async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/progress/strength/:exerciseId
- *
- * One exercise's estimated strength over time. Recomputed from the sets, so it
- * can go down — see the service for why a monotonic best-so-far line would
- * defeat the purpose.
+ * One exercise's estimated 1RM over time, recomputed from its sets.
  */
 export const getExerciseStrengthSeries = async (req: AuthRequest, res: Response) => {
   try {
@@ -61,8 +49,7 @@ export const getExerciseStrengthSeries = async (req: AuthRequest, res: Response)
 
 /**
  * GET /api/progress/history?cursor=&limit=&modality=
- *
- * The workout history list. Cursor-paged; `nextCursor` is null on the last page.
+ * Cursor-paged workout history; `nextCursor` is null on the last page.
  */
 export const getWorkoutHistory = async (req: AuthRequest, res: Response) => {
   try {
@@ -84,9 +71,7 @@ export const getWorkoutHistory = async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/progress/exercises/:exerciseId/history?limit=10
- *
- * What this athlete has actually done with one movement. Scoped to `userId`
- * throughout — another athlete's sets are not history, they are a leak.
+ * The athlete's own recent sets of one exercise.
  */
 export const getExerciseHistoryForUser = async (req: AuthRequest, res: Response) => {
   try {

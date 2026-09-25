@@ -2,25 +2,16 @@ import api from './api'
 import { AiProposal, ScheduledWorkout, WorkoutTemplate } from '../types'
 
 export const aiService = {
-  // `newThread` asks the server to create the conversation now, on the first
-  // real message — nothing is persisted before that.
+  // `newThread` creates the thread with this first message
   sendMessage: async (message: string, threadId?: string, newThread?: boolean) => {
     const res = await api.post('/ai/chat', { message, threadId, newThread })
     return res.data.data as { reply: string; threadId: string; proposals: AiProposal[] }
   },
 
-  /**
-   * Turn a drafted card into real data.
-   *
-   * The only call that lets an AI suggestion reach the athlete's own tables,
-   * which is why it is an explicit tap rather than something the reply does
-   * on its way in.
-   */
+  /** Apply a drafted proposal card — the only way an AI suggestion becomes real data. */
   acceptProposal: async (proposalId: string) => {
     const res = await api.post(`/ai/proposals/${proposalId}/accept`)
-    // A discriminated union rather than one optional-everything shape: the
-    // three kinds return genuinely different objects, and the card has to know
-    // which one it is holding before it can open anything.
+    // Each proposal kind returns a different shape
     return res.data.data as
       | { kind: 'create_template'; template: WorkoutTemplate; scheduled: ScheduledWorkout | null }
       | { kind: 'schedule_workout'; template: WorkoutTemplate; scheduled: ScheduledWorkout }

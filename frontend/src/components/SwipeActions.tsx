@@ -1,61 +1,26 @@
 import { ReactNode, useRef, useState } from 'react'
 
 /**
- * A row that reveals an action when dragged sideways.
- *
- * Swipe LEFT to uncover the right-hand action; swipe RIGHT to uncover the
- * left-hand one. Which action lives on which edge is the caller's choice —
- * see `Props`. Either side can be omitted, and a side with no action does not
- * move at all.
- *
- * Three things about the previous version are worth knowing, because all three
- * were reported as "the swipe does nothing":
- *
- * · It bound touch events only, so on a desktop browser the row could not be
- *   moved at all — and the revealed buttons are `aria-hidden` with
- *   `tabIndex={-1}` while closed, so delete and edit were genuinely
- *   unreachable with a mouse or a keyboard. Pointer events cover mouse, touch
- *   and pen on one code path.
- *
- * · It gated `onTouchMove` on a `dragging` flag held in React state and set in
- *   `onTouchStart`. Every gesture therefore raced a commit on its first move.
- *   All gesture state lives in refs now; state is only the render mirror.
- *
- * · It called `stopPropagation` to hide the gesture from `AppLayout`'s page
- *   swipe, but only AFTER the 8px axis decision — so the first few pixels
- *   still started a page drag, and the `touchend` that would have ended it was
- *   then swallowed, stranding `<main>` mid-drag with `transition: none`.
- *   The root carries `data-no-page-swipe` instead and AppLayout declines the
- *   whole gesture from `touchstart`, so there is nothing to stop.
+ * A row that reveals an action when dragged sideways (pointer events, so it
+ * works with mouse, touch and pen). All gesture state lives in refs. The root
+ * carries `data-no-page-swipe`, so AppLayout's page swipe ignores the gesture.
  */
 
-/**
- * How far the row must travel before an action counts as revealed — and how
- * wide the button behind it is. The compact figure is for short rows, where a
- * stacked icon-over-label does not fit in the height available and would be
- * clipped by the row's own `overflow-hidden`.
- */
+/** Reveal distance and button width; `compact` is for short rows (icon only). */
 const REVEAL_FULL_PX = 72
 const REVEAL_COMPACT_PX = 56
-/** Below this a drag is a tap that wobbled, not a swipe. */
+/** Movement below this is a wobbly tap, not a swipe. */
 const DEAD_ZONE_PX = 8
 
 export interface SwipeAction {
   label: string
-  // A node, not a string: these were emoji and are now drawn icons.
   icon: React.ReactNode
   onSelect: () => void
-  /** Red for anything that destroys data; grey otherwise. */
+  /** Red for destructive actions. */
   tone?: 'danger' | 'neutral'
 }
 
-/**
- * Sides are named for where the button SITS, not for the direction of the
- * gesture that reveals it — a row moving left uncovers its right edge. The
- * two were previously fixed as edit-left / delete-right, which meant a caller
- * wanting them the other way round had no way to say so, and reading the call
- * site told you nothing about which way anything went.
- */
+/** Sides are named for where the button sits; swiping the row left reveals the right one. */
 interface Props {
   children: ReactNode
   /** On the left edge. Revealed by swiping RIGHT. */
@@ -71,17 +36,9 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
   const [offset, setOffset] = useState(0)
   const [dragging, setDragging] = useState(false)
   /**
-   * Which side is currently uncovered, or null for a row at rest.
-   *
-   * Nothing is painted behind a closed row. Leaving both buttons mounted under
-   * it looked fine in theory — the row is opaque and covers them — but the
-   * container clips with `overflow-hidden` + a border radius while the row
-   * itself is a composited layer from `will-change: transform`, and the two
-   * edges do not land on the same pixel. The result was a hairline of red and
-   * grey down the sides of every row.
-   *
-   * Cleared on transitionend rather than the moment the offset hits 0, so the
-   * button stays visible underneath while the row slides back over it.
+   * The uncovered side, or null. Nothing is rendered behind a closed row (it
+   * left a hairline at the edges). Cleared on transitionend, so the button stays
+   * visible while the row slides back.
    */
   const [side, setSide] = useState<'left' | 'right' | null>(null)
 
@@ -89,11 +46,11 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
   /** Null until the direction is known; 'y' means the list is scrolling. */
   const axis = useRef<'x' | 'y' | null>(null)
   const active = useRef(false)
-  /** Live offset. The state above lags it by a commit and must not be read. */
+  /** Live offset (the state above lags it). */
   const live = useRef(0)
-  /** Where the row rests between gestures, so a second drag continues it. */
+  /** Resting offset between gestures. */
   const resting = useRef(0)
-  /** A drag ends in a click the row must not pass on to whatever it covers. */
+  /** Swallows the click that ends a drag. */
   const swallowClick = useRef(false)
 
   const settled = offset <= -REVEAL_PX ? -REVEAL_PX
@@ -109,7 +66,7 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
   const close = () => { resting.current = 0; apply(0) }
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Right-click and middle-click are not gestures.
+    // Only the primary mouse button
     if (e.pointerType === 'mouse' && e.button !== 0) return
     start.current = { x: e.clientX, y: e.clientY }
     axis.current = null
@@ -126,29 +83,22 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
       if (Math.abs(dx) < DEAD_ZONE_PX && Math.abs(dy) < DEAD_ZONE_PX) return
       axis.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
       if (axis.current === 'y') {
-        // The list is scrolling. Bow out for the rest of this gesture rather
-        // than re-testing on every move, or a thumb drifting off-axis
-        // mid-scroll snatches the row out from under it.
+        // Vertical scroll: bow out for the rest of the gesture
         active.current = false
         return
       }
-      // Captured only once the gesture is known to be ours, so a vertical
-      // scroll is never stolen — and once captured the row keeps receiving
-      // moves even when the finger leaves it, which is most of why a fast
-      // swipe used to die halfway.
+      // Capture only once the gesture is ours, so moves keep arriving off the row
       e.currentTarget.setPointerCapture(e.pointerId)
       swallowClick.current = true
       setDragging(true)
     }
 
     let next = resting.current + dx
-    // Moving left uncovers the right edge, and vice versa. A side with no
-    // action does not move at all.
+    // A side with no action does not move
     if (next < 0 && !right) next = 0
     if (next > 0 && !left) next = 0
 
-    // Resist past the reveal point rather than stopping dead — the row keeps
-    // following the finger, so the gesture never feels broken.
+    // Resist past the reveal point
     apply(Math.abs(next) > REVEAL_PX
       ? Math.sign(next) * (REVEAL_PX + (Math.abs(next) - REVEAL_PX) * 0.25)
       : next)
@@ -174,15 +124,13 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
   }
 
   return (
-    // AppLayout reads this attribute on touchstart and leaves the whole
-    // gesture alone. See the note at the top of the file.
+    // `data-no-page-swipe`: AppLayout leaves this gesture alone
     <div
       className={`relative overflow-hidden ${compact ? 'rounded-lg' : 'rounded-card'}`}
       data-no-page-swipe
     >
 
-      {/* Actions sit behind the row and are only reachable once it has moved,
-          so neither can be hit by a stray tap on a closed row. */}
+      {/* Actions behind the row, reachable only once it has moved */}
       {left && side === 'left' && (
         <button
           onClick={() => { left.onSelect(); close() }}
@@ -221,10 +169,7 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
         onTransitionEnd={() => { if (live.current === 0) setSide(null) }}
-        // Tapping an open row closes it instead of activating whatever is
-        // underneath — the first thing everyone tries, and the alternative is
-        // opening a workout you were about to delete. The same guard eats the
-        // click that ends a drag, which would otherwise land on the row.
+        // Tapping an open row closes it (and the click ending a drag is swallowed)
         onClickCapture={e => {
           if (swallowClick.current) {
             swallowClick.current = false
@@ -242,8 +187,7 @@ export default function SwipeActions({ children, left, right, compact }: Props) 
         style={{
           transform: `translateX(${offset}px)`,
           transition: dragging ? 'none' : 'transform 0.2s ease',
-          // Vertical panning stays the browser's; horizontal is ours. Without
-          // this the page can scroll sideways under the drag on Android.
+          // Vertical panning stays the browser's
           touchAction: 'pan-y',
         }}
       >

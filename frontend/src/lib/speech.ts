@@ -1,24 +1,15 @@
 import { TextToSpeech } from '@capacitor-community/text-to-speech'
 
 /**
- * Spoken cues (requirement 6.2).
- *
- * The plugin ships a real web implementation over `speechSynthesis`, so native
- * and browser share one call. What this file adds is the two things a gym needs
- * and the raw plugin doesn't do:
- *
- *  - **Serialisation.** `speak()` on web cancels whatever is already speaking.
- *    Logging the last set of an exercise fires "set logged" and "next up, bench
- *    press" in the same tick, and without a queue the second silences the first.
- *
- *  - **Interruptibility by rank.** A rest-countdown cue is worth interrupting;
- *    "rest over" is not. `announce` takes the queue, `alert` clears it.
+ * Spoken cues. On top of the TTS plugin it adds a queue (web `speak()` cancels
+ * whatever is speaking) and interruption by rank: `announce` queues, `alert`
+ * clears the queue.
  */
 
 let chain: Promise<void> = Promise.resolve()
 let enabled = true
 
-/** Mirrors the Audio Cues toggle. Set once at session start, read on every cue. */
+/** Mirrors the Audio Cues toggle. */
 export const setSpeechEnabled = (on: boolean) => {
   enabled = on
   if (!on) void stopSpeaking()
@@ -29,7 +20,7 @@ export const stopSpeaking = async () => {
   try {
     await TextToSpeech.stop()
   } catch {
-    // Nothing was speaking, or the platform has no engine. Either is fine.
+    // Nothing speaking, or no engine
   }
 }
 
@@ -39,27 +30,19 @@ const say = async (text: string) => {
     await TextToSpeech.speak({
       text,
       lang: 'en-GB',
-      // Slightly quick: these are short cues heard mid-effort, and the default
-      // rate makes "three, two, one" land after the timer has already hit zero.
+      // Slightly fast, so countdowns land on time
       rate: 1.1,
       pitch: 1.0,
       volume: 1.0,
-      // Lets the cue duck music rather than pausing it, and keeps it audible
-      // when the phone is on silent — both of which matter in a gym.
+      // Ducks music rather than pausing it, and plays on silent
       category: 'ambient',
     })
   } catch {
-    // An unsupported platform or a denied audio session must never break the
-    // set that triggered the cue.
+    // A cue must never break the set that triggered it
   }
 }
 
-/**
- * Queue a cue behind anything already speaking.
- *
- * Errors are swallowed into the chain so one failed utterance can't poison
- * every cue that follows it.
- */
+/** Queue a cue behind anything already speaking; one failure can't break the chain. */
 export const announce = (text: string): Promise<void> => {
   chain = chain.then(() => say(text)).catch(() => {})
   return chain
@@ -72,13 +55,10 @@ export const alert = async (text: string): Promise<void> => {
 }
 
 // ── phrasing ────────────────────────────────────────────────────────────────
-// Kept here rather than at the call sites so the app has one voice, and so the
-// wording can be read in one place without opening four screens.
+// All cue wording, in one place.
 
 export const cues = {
-  // A negative load is calisthenics assistance, not a missing weight. Reading
-  // it as bare reps — which is what the `> 0` test alone did — makes an
-  // assisted set and a strict one sound identical.
+  // A negative load is assistance and is spoken as such
   setLogged: (setNumber: number, reps: number, weight: number) =>
     weight > 0
       ? `Set ${setNumber} logged. ${reps} reps at ${formatWeight(weight)} kilos.`
@@ -109,8 +89,6 @@ export const cues = {
   heard: (what: string) => what,
 
   // ── mobility ──────────────────────────────────────────────────────────────
-  // A hold is the one part of a session where the athlete is deliberately still
-  // and looking at nothing, so these carry the whole screen.
 
   holdStart: (name: string, seconds: number, side?: 'left' | 'right') =>
     side
@@ -126,8 +104,7 @@ export const cues = {
 
   roundComplete: (round: number) => `Round ${round} complete.`,
 
-  // Spoken at a round number rather than a rep count: mid-metcon nobody is
-  // counting along with the phone, they just want to know where they are.
+  // Seconds left in the cap
   capWarning: (seconds: number) => `${seconds} seconds left.`,
 
   capReached: (rounds: number) =>
@@ -140,18 +117,14 @@ export const cues = {
 
   runStarted: (activity: string) => `${activity} started.`,
 
-  // Distance first, then pace: the number that changes is the one worth
-  // leading with, and pace read first makes every split sound the same.
+  // Distance first, then pace
   kmSplit: (km: number, paceSeconds: number) =>
     `${km} kilometre${km === 1 ? '' : 's'}. ${formatPace(paceSeconds)}`.trim(),
 
   lapMarked: (lap: number) => `Lap ${lap}.`,
 
   // ── pace coach ────────────────────────────────────────────────────────────
-  // Short, and each one says the target, because a correction without the
-  // number it is correcting towards is just criticism. The wording is
-  // deliberately about the action ("pick it up") rather than the state ("you
-  // are slow") — it is heard mid-effort, once, and has to be acted on.
+  // Each cue names the target, and says the action ("pick it up"), not the state.
 
   paceTarget: (step: number, unit: 'km' | 'min', paceSeconds: number) =>
     step > 1
@@ -159,35 +132,29 @@ export const cues = {
       : `Target ${formatPace(paceSeconds)}`.trim(),
 
   // ── the dial coach ────────────────────────────────────────────────────────
-  // An instruction, not a correction. "Pick it up" is meaningless to someone
-  // standing on a treadmill — the only thing they can do is change a number, so
-  // the cue names the number and the direction to move it.
+  // On a machine the cue names the setting to change and the direction.
 
   paceSet: (step: number, unit: 'km' | 'min', paceSeconds: number) =>
     step > 1
       ? `${unit === 'km' ? 'Kilometre' : 'Minute'} ${step}. Set ${formatPace(paceSeconds)}`.trim()
       : `Set ${formatPace(paceSeconds)}`.trim(),
 
-  /** Said in pace, not in speed: it is the number on the app, not on the belt. */
+  /** In pace, as shown in the app, not the machine's speed. */
   paceDialFaster: (paceSeconds: number) => `Speed up to ${formatPace(paceSeconds)}`.trim(),
 
   paceDialEasier: (paceSeconds: number) => `Ease back to ${formatPace(paceSeconds)}`.trim(),
 
-  /** Confirmation that the dial landed. The whole point of the short dwell. */
+  /** Confirms the dial change landed. */
   paceHolding: (paceSeconds: number) => `Holding ${formatPace(paceSeconds)}`.trim(),
 
   paceFaster: (paceSeconds: number) => `Pick it up. Target ${formatPace(paceSeconds)}`.trim(),
 
   paceEasier: (paceSeconds: number) => `Ease off. Target ${formatPace(paceSeconds)}`.trim(),
 
-  /** The whole point of the dwell rules: being told when you fixed it. */
+  /** Said once the pace is back on target. */
   paceGood: () => 'Good pace.',
 
-  /**
-   * For a movement with no distance. The distance version would have read
-   * "zero kilometres", which sounds exactly like a session that failed to
-   * record — and this cue is the only confirmation an hour of work landed.
-   */
+  /** For movements with no distance (avoids "zero kilometres"). */
   countLogged: (count: number, unit: string, minutes: number) =>
     count > 0
       ? `Logged. ${count} ${unit} in ${minutes} minute${minutes === 1 ? '' : 's'}.`
@@ -196,18 +163,11 @@ export const cues = {
   runLogged: (km: number, minutes: number) =>
     `Run logged. ${formatWeight(km)} kilometre${km === 1 ? '' : 's'} in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
 
-  /** "three", "two", "one" — spoken, because digits read as a phone number. */
+  /** Words, not digits. */
   count: (n: number) => (['zero', 'one', 'two', 'three'][n] ?? String(n)),
 }
 
-/**
- * Pace, spoken the way a runner says it.
- *
- * "05:12" handed to a speech engine comes out as "five colon twelve" or "five
- * hundred and twelve" depending on the voice — never as a pace. Seconds are
- * always two digits out loud ("five oh eight", not "five eight") because a
- * dropped zero changes the number being reported by nearly a minute.
- */
+/** Pace as a runner says it — "five oh eight", never "five colon eight". */
 const formatPace = (seconds: number) => {
   if (!Number.isFinite(seconds) || seconds <= 0) return ''
   const m = Math.floor(seconds / 60)
@@ -216,10 +176,10 @@ const formatPace = (seconds: number) => {
   return `${m} ${spokenSeconds} per kilometre.`
 }
 
-/** Partial rounds are real work but "four point three three rounds" is noise. */
+/** Rounds to a whole number when spoken. */
 const formatRounds = (rounds: number) =>
   Number.isInteger(rounds) ? String(rounds) : String(Math.round(rounds * 10) / 10)
 
-/** 62.5 reads as "62.5"; 60.0 must read as "60", not "60 point 0". */
+/** 60.0 reads as "60"; 62.5 as "62.5". */
 const formatWeight = (kg: number) =>
   Number.isInteger(kg) ? String(kg) : String(Math.round(kg * 10) / 10)

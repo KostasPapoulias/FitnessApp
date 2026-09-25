@@ -1,19 +1,6 @@
 /**
- * Request validation.
- *
- * What this replaces is `req.body as SomeInterface` — a cast, which checks
- * nothing at all — followed by a hand-written test of one or two fields. The
- * fields nobody hand-checked went straight into Postgres.
- *
- * That matters more here than in most apps. A bad value is not a crash: a
- * weight of -50 or a rest of 36,000 seconds is accepted, becomes a WorkoutSet,
- * becomes fatigue, becomes training load, and every future suggestion is
- * computed from that history. By the time it is noticed the damage is in the
- * data, and fixing the code does not fix the data.
- *
- * Failures answer 400 with the app's usual `{ success, error }` shape plus a
- * `details` array, so a client can point at the offending field instead of
- * showing a generic failure.
+ * Request validation with Zod. Failures answer 400 with `{ success, error,
+ * details }`, where `details` names each offending field.
  */
 
 import { Response } from 'express'
@@ -28,20 +15,14 @@ export interface FieldIssue {
 
 const toIssues = (error: z.ZodError): FieldIssue[] =>
   error.issues.map(issue => ({
-    // `path` is empty when the whole body is the wrong shape (an array, a
-    // string). Naming that 'body' is more useful to a reader than ''.
+    // Empty path means the whole body was the wrong shape
     field: issue.path.length ? issue.path.join('.') : 'body',
     message: issue.message,
   }))
 
 /**
- * Validate `req.body` against `schema`.
- *
- * Returns the parsed value, or null after having already sent a 400 — so the
- * call site is `const body = parseBody(...); if (!body) return`. Returning null
- * rather than throwing keeps this usable inside the try/catch every controller
- * already has, without a validation failure being logged and reported as if it
- * were a server fault.
+ * Validate `req.body`. Returns the parsed value, or null after sending a 400 —
+ * so call sites read `const body = parseBody(...); if (!body) return`.
  */
 export const parseBody = <T extends z.ZodType>(
   schema: T,
@@ -54,9 +35,7 @@ export const parseBody = <T extends z.ZodType>(
 
   const details = toIssues(result.error)
 
-  // Logged, not reported. A 400 is the client being told no, which is normal
-  // traffic — but a sudden burst of them on one endpoint is how you find out a
-  // deploy changed a payload shape, and that is invisible without this line.
+  // Logged as a warning (not reported) — a burst of these reveals a payload-shape change
   log.warn('Request body rejected', { details })
 
   res.status(400).json({
@@ -69,12 +48,7 @@ export const parseBody = <T extends z.ZodType>(
   return null
 }
 
-/**
- * Same, for query strings.
- *
- * Query values are always strings, so these schemas need `z.coerce`. Kept as a
- * separate function purely so that is impossible to forget.
- */
+/** Same for query strings; schemas need `z.coerce` since values are strings. */
 export const parseQuery = <T extends z.ZodType>(
   schema: T,
   query: unknown,
@@ -96,73 +70,42 @@ export const parseQuery = <T extends z.ZodType>(
 }
 
 // ── shared scalars ─────────────────────────────────────────────────────────
-//
-// Bounds are physical, not defensive: they are set where a human being could
-// not have meant it. 1000 kg is past any lift ever performed, 1000 reps is past
-// any set ever performed, and 24 hours is longer than any session. A bound
-// tight enough to catch a typo would also reject a real outlier, and rejecting
-// a real training entry is the worse failure — the athlete did the work.
+// Bounds are physical, not defensive: set where no human could have meant the
+// value, so real outliers are still accepted.
 
 /** Load in kg. Negative is meaningless; assisted work uses `addedWeight`. */
 export const kg = z.number().min(0).max(1000)
 
-/** Assistance is negative added weight, so this one goes below zero. */
 export const addedKg = z.number().min(-500).max(500)
 
 export const reps = z.number().int().min(0).max(1000)
 
-/**
- * A cardio count — skips, floors, jacks. Not `reps`, because the physical
- * ceiling is nowhere near the same: 1000 is already an absurd set of squats and
- * barely nine minutes of skipping. Sharing the bound would have rejected an
- * ordinary rope session, and rejecting real training data is the worse failure
- * of the two.
- *
- * An hour of double-unders at 250 rope passes a minute is 15,000, so this is
- * set past the longest plausible effort rather than at the typical one.
- */
+/** A cardio count (skips, floors, jacks) — bounded far above `reps`. */
 export const count = z.number().int().min(0).max(20_000)
 
-/** 1–10. Not optional-with-a-default anywhere: an absent RPE is information. */
+/** 1–10. Never defaulted: an absent RPE is information. */
 export const rpe = z.number().min(1).max(10)
 
-/** Seconds. Capped at a day — anything longer is a forgotten stopwatch. */
+/** Seconds, up to a day. */
 export const seconds = z.number().min(0).max(86_400)
 
-/**
- * Kilometres — the unit `SetCardio.distance` and `SetWOD.distance` are stored
- * in, rounded to two decimals. (`RunTrack.distanceM` is the metre one; it is
- * validated by `validateRun`, not here.)
- *
- * 1000 km is past any single session ever logged and still catches the failure
- * that matters: a client sending metres. The bound this replaced was
- * `max: 500_000`, inherited from the old clamp table, which read the field as
- * metres — so a 5000 km "run" was accepted as valid.
- */
+/** Kilometres, as stored in SetCardio/SetWOD. Also catches a client sending metres. */
 export const distanceKm = z.number().min(0).max(1000)
 
 export const rounds = z.number().int().min(0).max(1000)
 
-/** Rest between sets, in seconds. An hour is already generous. */
+/** Rest between sets, in seconds. */
 export const restSeconds = z.number().int().min(0).max(3600)
 
-/** A cuid/uuid-ish foreign key. Only the shape is checked; ownership is not. */
+/** A foreign key's shape only; ownership is checked by the controller. */
 export const id = z.string().trim().min(1).max(64)
 
-/**
- * Free text the athlete typed.
- *
- * Bounded because an unbounded string is a way to fill a database. 2000 is
- * several paragraphs of session notes.
- */
+/** Free text the athlete typed. */
 export const notes = z.string().max(2000)
 
 export const shortText = z.string().trim().min(1).max(120)
 
-/**
- * Bodyweight in kg. The lower bound is deliberately low: this is also used for
- * a child's profile, and 20 kg is a real value where 0 never is.
- */
+/** Bodyweight in kg (low floor to allow children's profiles). */
 export const bodyWeightKg = z.number().min(20).max(500)
 
 export const heightCm = z.number().min(50).max(260)

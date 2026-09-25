@@ -13,13 +13,9 @@ const IcCheck = () => (
 )
 
 /**
- * A strength session with no set card, rest timer or clock: one card per
- * exercise, ticked off as it is finished, all of it logged at Finish.
- *
- * It is still a real session, opened the moment this screen mounts. The finish
- * sends elapsed time, and the fatigue model scores whole-body load as minutes ×
- * RPE — so the clock runs even though it is never shown, and this screen is
- * meant to be open during the workout rather than filled in afterwards.
+ * Quick log: a strength session with no set card, rest timer or visible clock.
+ * One card per exercise, ticked off when done; everything is logged at Finish.
+ * The session still times itself, since elapsed time feeds systemic load.
  */
 export default function QuickLog() {
   const navigate = useNavigate()
@@ -30,18 +26,15 @@ export default function QuickLog() {
   } = useWorkoutStore()
 
   const [saving, setSaving] = useState(false)
-  // Held here rather than read from the store's logError: every successful
-  // completeSet clears that, so with exercises saving in parallel one
-  // exercise's success can erase another's failure before it is ever shown.
+  // Local, since the store's logError is cleared by each successful save
   const [finishError, setFinishError] = useState<string | null>(null)
-  // Ref, not state: two taps in one tick would both read `saving` as false
+  // Ref guard against double taps
   const finishingRef = useRef(false)
 
   const beginSession = () => {
     const s = useWorkoutStore.getState()
     if (s.sessionId || s.selectedExercises.length === 0) return
-    // Nothing attached yet — see `startSession` for why only ticked exercises
-    // ever are.
+    // No exercises attached yet; only ticked ones are, at Finish
     startSession({ registerExercises: false })
       .catch(() => { /* startError is surfaced from the store */ })
   }
@@ -65,18 +58,14 @@ export default function QuickLog() {
       .map((se, exIdx) => ({ se, exIdx }))
       .filter(({ se }) => se.done && !se.skipped)
 
-    // Exercises in parallel, sets within one in order. The first set is what
-    // attaches the exercise to the session; firing its siblings alongside it
-    // would attach it once per set.
-    // `as`, not an annotation: TypeScript would narrow an annotated `= null` to
-    // null for good, not seeing the callbacks below assign it.
+    // Exercises in parallel, sets within each in order (the first set attaches
+    // the exercise). `as`, so TypeScript doesn't narrow it to null.
     let failure = null as string | null
     await Promise.all(targets.map(async ({ exIdx }) => {
       const { sets } = useWorkoutStore.getState().selectedExercises[exIdx]
       for (let setIdx = 0; setIdx < sets.length; setIdx++) {
         const { reps, weight, rpe } = sets[setIdx]
-        // No restSeconds: nobody timed the rest, and a planned figure written
-        // into the log would read as a measured one.
+        // No restSeconds: rest wasn't timed
         if (!(await completeSet({ reps, weight, rpe }, { exIdx, setIdx }))) {
           failure ??= useWorkoutStore.getState().logError ?? 'Some sets could not be saved.'
           return
@@ -85,8 +74,7 @@ export default function QuickLog() {
     }))
 
     if (failure) {
-      // Whatever did land is keyed by set number on the server, so pressing
-      // Finish again overwrites rather than duplicates.
+      // Retrying is safe: sets upsert by set number
       setFinishError(failure)
       finishingRef.current = false
       setSaving(false)
@@ -99,12 +87,11 @@ export default function QuickLog() {
       : 0
     navigate('/workout/finish', {
       state: { snapshot: summariseSession(state.selectedExercises, state.completedSets, elapsed) },
-      replace: true,   // back must not return to a session that is over
+      replace: true,   // back must not return to a finished session
     })
   }
 
-  // Held until the Finish screen takes over, which renders this same card —
-  // the two read as one moment rather than a swap.
+  // Held until the Finish screen takes over with the same card
   if (saving) {
     return <SaveToCalendar pending onSettled={() => {}} headline="Saving your sets" />
   }
@@ -165,9 +152,7 @@ export default function QuickLog() {
             <ExerciseCard
               key={se.exercise.id}
               se={se}
-              // Once any of its sets are on the server the card is frozen. Only
-              // reachable after a Finish that failed part-way, and editing then
-              // would leave the server holding sets the card no longer shows.
+              // Frozen once any of its sets are saved (after a partly failed Finish)
               locked={completedSets.some(cs => cs.exerciseId === se.exercise.id)}
               onUpdate={(setIdx, patch) => updateSet(exIdx, setIdx, patch)}
               onAdd={() => addSet(exIdx)}
@@ -214,7 +199,7 @@ export default function QuickLog() {
 
 type SetPatch = { reps?: number; weight?: number; rpe?: number }
 
-// ── one exercise: a row per set, one row open for editing, and the tick ───
+// ── one exercise: set rows, one open for editing, and the tick ─────────────
 function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
   se: SelectedExercise
   locked: boolean
@@ -226,22 +211,18 @@ function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
   const ex = se.exercise
   const done = Boolean(se.done)
 
-  // One row open at a time: two open editors on a phone is a screen of
-  // steppers with no way to tell which set they belong to. Guarded rather than
-  // reset in an effect — a suggestion landing can shorten the list under it.
+  // One editor open at a time
   const [open, setOpen] = useState<number | null>(null)
   const openIdx = !locked && open !== null && open < se.sets.length ? open : null
 
   const handleToggle = () => {
-    // Ticking says "these numbers are what I did" — an editor left open under
-    // that reads as a set still being changed.
+    // Ticking closes the editor
     setOpen(null)
     onToggle()
   }
 
   const handleAdd = () => {
-    // Open the new row. It starts as a copy of the last set, and the reason to
-    // add one is nearly always to change it — a back-off set, a drop.
+    // Open the new row (a copy of the last set, usually to change)
     setOpen(se.sets.length)
     onAdd()
   }
@@ -276,8 +257,7 @@ function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
         </button>
       </div>
 
-      {/* Where the pre-filled numbers came from. They were not typed by the
-          athlete, so the reason has to be on the card they are vouching for. */}
+      {/* Where the pre-filled numbers came from */}
       {se.suggestion && !done && !locked && (
         <p className="px-4 -mt-1 pb-3 text-dark-300 text-[11.5px] leading-snug">
           {se.suggestion.note}
@@ -287,8 +267,7 @@ function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
       <div className={`flex flex-col gap-1.5 px-3 ${locked ? 'pb-3' : ''}`}>
         {se.sets.map((s, si) => (
           <SetRow
-            // Index keys are right here: sets have no identity of their own,
-            // and "set 2" is whatever currently sits second.
+            // Index keys: sets have no identity of their own
             key={si}
             n={si + 1}
             set={s}
@@ -376,10 +355,8 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
         )}
       </button>
 
-      {/* 0fr → 1fr animates to the editor's real height, which a max-height
-          guess cannot. `visibility` flips late on the way closed so the
-          collapse is still seen, and it takes a closed editor's inputs out of
-          the tab order — clipping alone would leave them focusable. */}
+      {/* Grid 0fr → 1fr animates to the real height; `visibility` removes closed
+          inputs from the tab order */}
       <div
         className="grid"
         style={{
@@ -436,8 +413,7 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
               )}
               <button
                 onClick={onRemove}
-                // The last set stays: an exercise with nothing in it is not
-                // "done with zero sets", it is untick-and-move-on.
+                // The last set can't be removed; untick the exercise instead
                 disabled={!canRemove}
                 className="flex-1 py-2.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
                            text-brand-red text-[12.5px] font-semibold
@@ -453,20 +429,12 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
   )
 }
 
-/**
- * −/+ around a number that can also be typed into.
- *
- * Typing matters more here than on Plan Sets: this screen is the whole log,
- * and 2.5 kg steps from an estimate to a real working weight can be twenty
- * taps. The field holds a string while focused and commits on blur — an
- * emptied field reverts instead, because `Number('')` is 0 and a stray zero
- * would be logged as a set done at nothing.
- */
+/** −/+ stepper that can also be typed into; an emptied field reverts on blur. */
 function Stepper({ label, value, step, next, min, max, decimal, onChange }: {
   label: string
   value: number
   step: number
-  /** Replaces the flat `step` for the buttons — weight steps on the plate grid. */
+  /** Custom step for the buttons (weight uses the plate grid). */
   next?: (value: number, dir: 1 | -1) => number
   min: number
   max: number
@@ -485,7 +453,7 @@ function Stepper({ label, value, step, next, min, max, decimal, onChange }: {
     setDraft(null)
   }
 
-  // 36px: pressed between sets, often with chalk or a shaking hand
+  // 36px targets
   const btn = `w-9 h-9 flex-shrink-0 rounded-[10px] border border-dark-600 bg-dark-700
                text-white text-lg font-bold flex items-center justify-center
                active:scale-90 transition-transform disabled:opacity-30`
@@ -504,7 +472,7 @@ function Stepper({ label, value, step, next, min, max, decimal, onChange }: {
           onChange={e => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-          // 17px, not smaller: iOS zooms the page into any input under 16px
+          // 17px: iOS zooms into inputs under 16px
           className="flex-1 min-w-0 w-full bg-transparent text-center text-[17px] font-extrabold
                      tabular-nums outline-none focus:text-brand-teal"
         />

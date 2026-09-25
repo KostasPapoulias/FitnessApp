@@ -1,18 +1,6 @@
-// Reads for the progress screen.
-//
-// Nothing here computes anything new. Every number the app needed to show
-// progress was already in Postgres and had never been read back: e1RM per
-// exercise, session volume, systemic load, and a full log of muscle fatigue
-// deltas. This file is the read side of datasets that only ever had a write
-// side.
-//
-// Two rules it sticks to:
-//
-//   - Aggregate in SQL where the row count is unbounded (sets, sessions),
-//     in memory where it is not (weeks in a window, muscles in the catalogue).
-//   - Reuse the same arithmetic the model uses. e1RM comes from
-//     `estimateE1rm` and the fatigue curve from `replayFatigueCurve`, so a
-//     chart cannot quietly disagree with the number that drove training.
+// Reads for the progress screen: weekly volume, strength estimates, per-exercise
+// e1RM series and muscle fatigue history. Reuses the model's own arithmetic
+// (`estimateE1rm`, `replayFatigueCurve`) so charts match the numbers that drove training.
 
 import prisma from '../lib/prisma'
 import { estimateE1rm, HOLD_SECONDS_PER_REP, recoveryRateFor, resolveAge } from './fatigue-model.service'
@@ -20,7 +8,7 @@ import { replayFatigueCurve } from './fatigue-recompute.service'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-/** Weeks of volume history. A quarter is enough to see a block; a year is noise on a phone. */
+/** Weeks of volume history. */
 export const DEFAULT_VOLUME_WEEKS = 12
 export const MAX_VOLUME_WEEKS = 52
 
@@ -30,31 +18,22 @@ export const MAX_FATIGUE_DAYS = 180
 /** Monday of the week containing `date`, at local midnight. */
 const startOfWeek = (date: Date): Date => {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  // getDay() is 0 for Sunday, which belongs to the week that started six days
-  // earlier — not to the one about to start.
+  // getDay() is 0 for Sunday, which belongs to the previous week
   const offset = (d.getDay() + 6) % 7
   d.setDate(d.getDate() - offset)
   return d
 }
 
-/**
- * YYYY-MM-DD from the LOCAL date parts, not via toISOString.
- *
- * `startOfWeek` returns local midnight, and local midnight west of UTC is the
- * previous day in UTC — so `toISOString().slice(0, 10)` labelled the Monday
- * bucket as the Sunday before it. The bucketing itself was consistent either
- * way, since both sides went through the same function; only the label the
- * client renders was wrong, which is the kind of off-by-one nobody reports.
- */
+/** YYYY-MM-DD from local date parts (toISOString would shift west-of-UTC dates back a day). */
 const localDateKey = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
 export interface VolumeWeek {
   /** ISO date of the Monday. */
   weekStart: string
-  /** Mechanical tonnage: sum of the sessions' `totalVolume`. */
+  /** Mechanical tonnage (sum of `totalVolume`). */
   volumeKg: number
-  /** Whole-body cost: sum of `systemicLoad`, the same sRPE units training load uses. */
+  /** Whole-body load (sum of `systemicLoad`, sRPE units). */
   load: number
   sessions: number
   sets: number
@@ -62,7 +41,7 @@ export interface VolumeWeek {
 
 export interface VolumeTrend {
   weeks: VolumeWeek[]
-  /** Totals for the most recent complete-or-current week and the one before. */
+  /** The current week and the one before. */
   thisWeek: VolumeWeek | null
   previousWeek: VolumeWeek | null
   /** Weeks in the window that had at least one session. */
@@ -70,13 +49,8 @@ export interface VolumeTrend {
 }
 
 /**
- * Weekly training volume.
- *
- * Both a tonnage and a load series, because they answer different questions and
- * disagree usefully: a week of running moves `load` a long way and `volumeKg`
- * barely at all. Set count comes along because tonnage is meaningless for
- * anyone whose training is mostly bodyweight or cardio — for them the bar chart
- * would read as zero work done.
+ * Weekly training volume: tonnage, systemic load and set count — tonnage alone
+ * reads as zero for bodyweight and cardio athletes.
  */
 export const getVolumeTrend = async (
   userId: string,
@@ -89,8 +63,7 @@ export const getVolumeTrend = async (
   const sessions = await prisma.workoutSession.findMany({
     where: {
       userId,
-      // Finished sessions only. An abandoned one has no volume and no load, so
-      // it would contribute a session to the count and nothing to the bars.
+      // Finished sessions only
       duration: { not: null },
       dateTime: { gte: firstWeekStart },
     },
@@ -98,17 +71,13 @@ export const getVolumeTrend = async (
       dateTime: true,
       totalVolume: true,
       systemicLoad: true,
-      // Counted rather than fetched — the set rows themselves are not wanted
-      // here, and including them would pull every modality relation for a
-      // quarter of training to produce one integer per session.
+      // Counted, not fetched
       workoutExercises: { select: { _count: { select: { sets: true } } } },
     },
     orderBy: { dateTime: 'asc' },
   })
 
-  // Pre-seed every week in the window. A missing week is a real zero — weeks
-  // off are the part of a volume chart that explains the rest of it — and
-  // bucketing only the weeks that have data would silently close the gaps.
+  // Pre-seed every week so weeks off show as zeros
   const buckets = new Map<string, VolumeWeek>()
   for (let i = 0; i < windowWeeks; i++) {
     const weekStart = new Date(firstWeekStart.getTime() + i * 7 * MS_PER_DAY)
@@ -146,24 +115,17 @@ export interface StrengthEntry {
   modality: string
   /** Best estimated one-rep max, in kg. */
   e1rm: number
-  /** When the estimate last moved — i.e. when the best set was logged. */
+  /** When the estimate last moved. */
   achievedAt: string
   /** Most recent session containing this exercise, finished or not. */
   lastPerformedAt: string | null
-  /** Sessions this exercise appears in. Below 2 there is no trend to draw. */
+  /** Sessions containing the exercise; below 2 there is no trend. */
   sessionCount: number
 }
 
 /**
- * Every exercise the athlete has a strength estimate for, best first.
- *
- * `ExerciseStrengthEstimate` is the app's own running best — computed on every
- * finish, corrected on every edit, and shown nowhere. This is the PR list: for
- * a strength app it is the single most conspicuous thing that was missing.
- *
- * Calisthenics appears here too. Its e1RM includes bodyweight, so the number is
- * a total load rather than something loaded on a bar — the modality is returned
- * so the client can say which.
+ * Every exercise with a strength estimate, best first (the PR list). For
+ * calisthenics the e1RM includes bodyweight.
  */
 export const getStrengthProgress = async (userId: string): Promise<StrengthEntry[]> => {
   const estimates = await prisma.exerciseStrengthEstimate.findMany({
@@ -176,11 +138,7 @@ export const getStrengthProgress = async (userId: string): Promise<StrengthEntry
 
   if (estimates.length === 0) return []
 
-  // Session count and last-performed in ONE query for every exercise at once.
-  // Two grouped queries would be tidier to read, but `_max` cannot reach
-  // through the session relation, so one of them had to be this scan anyway —
-  // and a second round trip to the remote database costs more than folding both
-  // out of the same rows here.
+  // Session count and last-performed for every exercise, from one query
   const appearances = await prisma.workoutExercise.findMany({
     where: {
       exerciseId: { in: estimates.map(e => e.exerciseId) },
@@ -194,8 +152,7 @@ export const getStrengthProgress = async (userId: string): Promise<StrengthEntry
   const lastByExercise = new Map<string, Date>()
   for (const row of appearances) {
     countByExercise.set(row.exerciseId, (countByExercise.get(row.exerciseId) ?? 0) + 1)
-    // Rows arrive newest first, so the first one seen for an exercise is its
-    // most recent session.
+    // Newest first, so the first row per exercise is its latest session
     if (!lastByExercise.has(row.exerciseId)) lastByExercise.set(row.exerciseId, row.session.dateTime)
   }
 
@@ -215,23 +172,15 @@ export interface E1rmPoint {
   at: string
   /** Best e1RM implied by that session's sets. */
   e1rm: number
-  /** The set it came from, so the point can be read as something that happened. */
+  /** The set the estimate came from. */
   bestSet: { reps: number; weight: number; rpe: number | null } | null
   /** True where this point set a new all-time best. */
   isPr: boolean
 }
 
 /**
- * One exercise's estimated strength, session by session.
- *
- * Recomputed from the sets rather than read from a stored series: the estimate
- * table is a single running maximum with one timestamp, so it cannot say what
- * the athlete's e1RM was in March. The sets can, and they are the same input
- * the estimate was built from.
- *
- * Deliberately NOT monotonic. A best-so-far line only ever goes up and would
- * hide the whole point of a progress chart — a block where the numbers went
- * backwards. PRs are flagged instead.
+ * One exercise's e1RM per session, recomputed from its sets. Not monotonic —
+ * regressions stay visible; PRs are flagged.
  */
 export const getExerciseE1rmSeries = async (
   userId: string,
@@ -257,9 +206,7 @@ export const getExerciseE1rmSeries = async (
 
   const bodyWeight = profile?.weight ?? 70
 
-  // One point per SESSION, not per workoutExercise row: the same exercise can
-  // legitimately appear twice in a session, and two points on the same day
-  // would draw as a vertical spike.
+  // One point per session, even if the exercise appears twice in it
   const bySession = new Map<string, E1rmPoint>()
 
   for (const workoutExercise of workoutExercises) {
@@ -279,9 +226,7 @@ export const getExerciseE1rmSeries = async (
         bestSet = { reps: Math.round(repEquivalent), weight: load, rpe: set.rpe }
       }
 
-      // Cardio, mobility and metcon sets have no e1RM at all. Skipped rather
-      // than scored as zero, which would drag the line to the floor on any day
-      // the exercise was logged for time.
+      // Sets with no e1RM (cardio, mobility, metcon) are skipped, not scored as 0
       if (estimate <= 0) continue
 
       const sessionId = workoutExercise.session.id
@@ -318,23 +263,14 @@ export interface MuscleFatigueHistory {
   points: { at: string; level: number }[]
   /** Sessions that loaded this muscle inside the window. */
   hits: { at: string; delta: number; sessionId: string | null }[]
-  /** Mean level across the window — how much load this muscle actually carries. */
+  /** Mean level across the window. */
   averageLevel: number
   peakLevel: number
 }
 
 /**
- * A muscle's fatigue over time, reconstructed from its delta log.
- *
- * The stored rows are events, not a series: `fatigueLevelAfter` is the spike
- * immediately after a session and says nothing about the four days of recovery
- * that followed. Drawing the events alone would show peaks joined by straight
- * lines through territory the athlete was actually recovering across, which is
- * the opposite of what this app claims to model.
- *
- * So the curve is replayed through `replayFatigueCurve` — the same walk that
- * rebuilds `MuscleFatigueCurrent` — and sampled once a day. Today's last
- * sample therefore equals what the body map is showing, by construction.
+ * Each muscle's fatigue over time, replayed from its delta log with
+ * `replayFatigueCurve` and sampled daily — the last sample equals the body map.
  */
 export const getMuscleFatigueHistory = async (
   userId: string,
@@ -347,9 +283,7 @@ export const getMuscleFatigueHistory = async (
   const [profile, muscles, logs] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId } }),
     prisma.muscle.findMany({ select: { id: true, name: true, recoveryHalfLifeHours: true } }),
-    // The FULL log, not just the window. A session three days before the window
-    // opens is still sitting on the muscle on day one, and starting the replay
-    // at the window edge would show every athlete beginning from zero.
+    // The full log, so fatigue carried into the window is included
     prisma.muscleFatigueLog.findMany({
       where: { userId },
       select: { muscleId: true, delta: true, createdAt: true, workoutSessionId: true },
@@ -364,8 +298,7 @@ export const getMuscleFatigueHistory = async (
     resolveAge(profile?.birthDate, profile?.age)
   )
 
-  // Sampled at the same clock time each day so the spacing is even. Anchored to
-  // `now` rather than to midnight, so the last point is the current state.
+  // One sample per day at the current clock time; the last is now
   const sampleTimes: Date[] = []
   for (let i = window - 1; i >= 0; i--) {
     sampleTimes.push(new Date(now.getTime() - i * MS_PER_DAY))
@@ -382,8 +315,7 @@ export const getMuscleFatigueHistory = async (
 
   for (const muscle of muscles) {
     const muscleLogs = logsByMuscle.get(muscle.id)
-    // Never trained, in this athlete's entire history. Omitted rather than
-    // returned as a flat zero line — fifteen empty charts is not information.
+    // Never-trained muscles are omitted
     if (!muscleLogs || muscleLogs.length === 0) continue
 
     const { samples } = replayFatigueCurve(
@@ -417,7 +349,6 @@ export const getMuscleFatigueHistory = async (
     })
   }
 
-  // Most-loaded first. The muscles carrying the most fatigue across the window
-  // are the ones worth looking at, and an alphabetical list buries them.
+  // Most-loaded first
   return histories.sort((a, b) => b.averageLevel - a.averageLevel)
 }

@@ -11,7 +11,7 @@ export interface User {
 export interface UserProfile {
   userId: string
   name: string
-  /** Legacy. Prefer birthDate — an age stored once goes stale silently. */
+  /** Legacy — prefer birthDate. */
   age?: number
   weight?: number
   height?: number
@@ -21,7 +21,7 @@ export interface UserProfile {
   birthDate?: string | null
   trainingDaysPerWeek?: number | null
   experienceYears?: number | null
-  /** Null means the onboarding gate has not been passed. */
+  /** Null until the onboarding gate is passed. */
   onboardingCompletedAt?: string | null
   optionalStageDoneAt?: string | null
 }
@@ -31,13 +31,9 @@ export interface Settings {
   notificationEnabled: boolean
   inactivityDaysThreshold: number
   theme: string
-  /**
-   * Off degrades the AI coach rather than removing it: the chat still answers,
-   * but with no body data and no tools, and coach notifications stop. Enforced
-   * server-side in ai.service.ts — never treat this as a client-side hint.
-   */
+  /** AI data consent. Off: the coach gets no body data or tools (enforced server-side). */
   aiConsentEnabled: boolean
-  /** The account's language. The device's lives in useLocaleStore. */
+  /** The account's language (the device's lives in useLocaleStore). */
   language: Locale
 }
 
@@ -56,15 +52,9 @@ export interface MuscleFatigue {
 export type ReadinessStatus = 'ready' | 'caution' | 'rest'
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 
-/**
- * What last night's sleep did to the readiness score.
- *
- * `applied: false` is a real, expected state — nothing logged, or the newest
- * log is too old to count — and the UI must say so rather than showing a 0
- * that looks like a measurement. The server owns the wording in `note`.
- */
+/** What last night's sleep did to readiness. `applied: false` (nothing recent logged) is a normal state. */
 export interface SleepReadiness {
-  /** Signed readiness points. Always 0 when `applied` is false. */
+  /** Signed readiness points; 0 when not applied. */
   adjustment: number
   applied: boolean
   reason: 'applied' | 'none' | 'stale'
@@ -77,19 +67,17 @@ export interface SleepReadiness {
 export interface FatigueData {
   muscles: MuscleFatigue[]
   readinessScore: number
-  // Whole-body fatigue — the cardiovascular/central cost of recent training,
-  // which no single muscle's level can express. Cardio and metcons load this.
+  // Whole-body fatigue (cardio and metcons load this)
   systemicFatigue: number
   systemicRecoveryTargetAt: string | null
-  // Server-computed banding — prefer this over re-thresholding readinessScore
-  // on the client, so the cutoffs stay in one place (readiness.service.ts).
+  // Server-computed banding — use this rather than re-thresholding
   readinessStatus: ReadinessStatus
   fitnessLevel: FitnessLevel
-  /** Sleep's share of readinessScore above — already folded into it. */
+  /** Sleep's share of readinessScore, already included. */
   sleep: SleepReadiness
 }
 
-// Training load — the weeks-long trend, as opposed to today's soreness
+// Training load — the weeks-long trend
 export type LoadTrend = 'ramping' | 'building' | 'maintaining' | 'detraining'
 export type FormState = 'fresh' | 'neutral' | 'tired' | 'overreaching'
 
@@ -119,36 +107,16 @@ export interface Exercise {
   name: string
   description?: string
   modality: string
-  /**
-   * Illustration for the list row, served from this app's own `public/`.
-   *
-   * Null for the handful of movements the media library does not depict — the
-   * WOD block, and walking and cycling outdoors — and for every exercise the
-   * athlete created themselves. Anything rendering it must fall back rather
-   * than assume, which is why it is nullable and not optional: absent is a
-   * real, permanent state here, not a not-loaded-yet one.
-   */
+  /** List thumbnail; null where there is no artwork (and for custom exercises). */
   thumbnailUrl?: string | null
-  /**
-   * Typical speed for this movement, km/h. Calibration only — it is what turns
-   * distance covered into work comparable across activities. Do NOT read it as
-   * "does this have a pace?": the stair climber has no reference speed and is
-   * still something you set a pace on. `cardioTracking` answers that.
-   */
+  /** Typical speed (km/h), for distance → work. Not an indicator of pace support — see cardioTracking. */
   referenceSpeedKmh?: number | null
   /**
-   * How this movement's work is measured, which decides the shape of the whole
-   * cardio screen rather than merely whether a coach is offered:
-   *
-   *   'gps'     distance, and the phone can measure it — map, route, live pace
-   *   'machine' distance, but nothing measures it — a dial, and no route
-   *   'reps'    no distance at any effort — a counter, and no pace
-   *
-   * Optional because an exercise cached before the field existed has none;
-   * absent is treated as 'gps', which is what every cardio session did then.
+   * How the movement is measured: 'gps' (map, route, pace), 'machine' (dial,
+   * no route) or 'reps' (counter). Absent means 'gps'.
    */
   cardioTracking?: CardioTracking
-  /** Counts per minute at a typical effort. Only for 'reps' movements. */
+  /** Counts per minute at typical effort ('reps' movements). */
   referenceCadenceRpm?: number | null
   /** What the count is called — 'skips', 'floors', 'reps'. Wording only. */
   repUnit?: string | null
@@ -156,20 +124,14 @@ export interface Exercise {
   categories: string[]
   equipment: string[]
   isCustom: boolean
-  // Only the catalogue carries these: they describe how fatigued the athlete
-  // is right now, not the movement. An exercise reached through a saved plan
-  // arrives without them.
+  // Catalogue-only fields (absent when reached through a saved plan)
   fatigueWarning?: boolean
   maxMuscleFatigue?: number
-  /** Loads a muscle flagged "work around it" in Training Setup. */
+  /** Works a muscle marked "caution". */
   injuryCaution?: boolean
-  /** Needs kit not ticked in Training Setup. Still listed, sorted last. */
+  /** Needs equipment the athlete lacks; listed last. */
   needsMissingEquipment?: boolean
-  /**
-   * Starred by this athlete. Optional for the same reason as the fatigue flags
-   * above — an exercise reached through a saved plan or a template arrives
-   * without it, and `undefined` there means "not known", not "not starred".
-   */
+  /** Starred; `undefined` means unknown, not "not starred". */
   isFavorite?: boolean
 }
 
@@ -207,7 +169,7 @@ export interface WorkoutSet {
   restSeconds?: number
   strength?: { reps: number; weight: number }
   cardio?: { distance?: number; time?: number; reps?: number }
-  // `time` is seconds under tension for isometric holds (reps is 0 then)
+  // `time` is hold seconds (reps is 0 then)
   calisthenics?: { reps: number; addedWeight: number; time?: number }
   wod?: { distance?: number; time?: number }
   mobility?: { time?: number }
@@ -235,8 +197,7 @@ export interface PlannedSet {
   rpe: number
   restSeconds: number
 }
-// Saved plans — a workout the athlete intends to do, as opposed to one they
-// did. Sessions stay the factual record; templates are editable intentions.
+// Saved plans (templates) — editable intentions, separate from logged sessions.
 export interface TemplateSet {
   id: string
   setNumber: number
@@ -262,7 +223,7 @@ export interface WorkoutTemplate {
   id: string
   name: string
   notes: string | null
-  /** An AI-drafted plan stays labelled as one for its whole life. */
+  /** 'ai' for coach-drafted plans. */
   source: 'user' | 'ai'
   archivedAt: string | null
   lastPerformedAt: string | null
@@ -284,17 +245,11 @@ export interface ScheduledWorkout {
   completedAt: string | null
 }
 
-// Something the AI has drafted and the athlete has not yet accepted. Nothing
-// exists in the app's own tables until one of these is tapped.
+// An AI-drafted change awaiting the athlete's tap.
 export interface AiProposal {
   id: string
   kind: 'create_template' | 'schedule_workout' | 'create_exercise'
-  /**
-   * pending — still tappable. applied — already added, shown so the thread
-   * keeps its history. expired — too old to apply, shown for the same reason.
-   * Absent on a card the server has just returned from a send, which is
-   * pending by definition.
-   */
+  /** pending (tappable), applied or expired. Absent on a freshly returned card (pending). */
   status?: 'pending' | 'applied' | 'expired'
   title: string
   lines: string[]
@@ -304,16 +259,14 @@ export interface AiProposal {
   messageId?: string | null
 }
 
-// Progress — the read side of datasets the app was computing and never showing.
-// Shapes mirror backend/src/services/progress.service.ts and
-// workout-history.service.ts; keep them in step.
+// Progress — mirrors backend progress.service.ts and workout-history.service.ts.
 
 export interface VolumeWeek {
   /** ISO date of the Monday. */
   weekStart: string
-  /** Mechanical tonnage. Near zero for bodyweight- or cardio-only training. */
+  /** Mechanical tonnage. */
   volumeKg: number
-  /** Whole-body cost in sRPE units — the same units training load uses. */
+  /** Whole-body load in sRPE units. */
   load: number
   sessions: number
   sets: number
@@ -330,7 +283,7 @@ export interface StrengthEntry {
   exerciseId: string
   exerciseName: string
   modality: string
-  /** kg. For calisthenics this includes bodyweight, so it is a total load. */
+  /** kg; for calisthenics includes bodyweight. */
   e1rm: number
   achievedAt: string
   lastPerformedAt: string | null
@@ -342,14 +295,14 @@ export interface E1rmPoint {
   at: string
   e1rm: number
   bestSet: { reps: number; weight: number; rpe: number | null } | null
-  /** Set a new all-time best. The series is not monotonic — it can go down. */
+  /** A new all-time best (the series is not monotonic). */
   isPr: boolean
 }
 
 export interface MuscleFatigueHistory {
   muscleId: string
   muscleName: string
-  /** One sample per day, oldest first, replayed through the decay curve. */
+  /** Daily samples, oldest first. */
   points: { at: string; level: number }[]
   /** Sessions that loaded this muscle inside the window. */
   hits: { at: string; delta: number; sessionId: string | null }[]
@@ -388,7 +341,7 @@ export interface ExerciseHistorySet {
   setNumber: number
   rpe: number | null
   reps: number | null
-  /** kg. Total load for calisthenics, i.e. bodyweight plus anything added. */
+  /** kg; for calisthenics, bodyweight plus added. */
   weight: number | null
   timeSec: number | null
   distanceKm: number | null
@@ -402,7 +355,7 @@ export interface ExerciseHistoryEntry {
   e1rm: number | null
   topWeight: number | null
   totalVolume: number
-  /** The athlete's note against the exercise that day, if any. */
+  /** The athlete's note on the exercise that day. */
   notes: string | null
 }
 
@@ -411,8 +364,8 @@ export interface ExerciseHistory {
   entries: ExerciseHistoryEntry[]
   lastPerformedAt: string | null
   bestE1rm: number | null
-  /** Total sessions containing this exercise — may exceed `entries.length`. */
+  /** Total sessions with this exercise (may exceed entries). */
   sessionCount: number
-  /** Most recent note from any session — not necessarily `entries[0]`'s. */
+  /** Most recent note from any session. */
   lastNote: { text: string; dateTime: string } | null
 }

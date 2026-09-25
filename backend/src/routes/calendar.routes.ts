@@ -5,27 +5,31 @@ const router = Router();
 
 router.use(verifyToken);
 
-/** * @route GET /api/calendar?month=4&year=2026
- * @private
- * @returns user's calendar
+/**
+ * @route GET /api/calendar?month=4&year=2026
+ * @protected
+ * @returns per-day summaries for one month
  */
 router.get('/', getCalendarMonth);
 
-/** * @route GET /api/calendar/activity
- * @private
+/**
+ * @route GET /api/calendar/activity
+ * @protected
  * @returns 53-week training heatmap + streak stats
  */
 router.get('/activity', getCalendarActivity);
 
-/** * @route GET /api/calendar/muscles
- * @private
- * @returns weekly muscle-group set volume + imbalance/coach insights
+/**
+ * @route GET /api/calendar/muscles
+ * @protected
+ * @returns weekly muscle-group set volume + imbalance insights
  */
 router.get('/muscles', getCalendarMuscles);
 
-/** * @route GET /api/calendar/:date  date = "2026-04-25"
- * @private
- * @returns details of a specific day in the calendar
+/**
+ * @route GET /api/calendar/:date   (YYYY-MM-DD)
+ * @protected
+ * @returns the sessions, sets and fatigue snapshot for one day
  */
 router.get('/:date', getCalendarDay);
 

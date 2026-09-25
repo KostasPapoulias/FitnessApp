@@ -13,23 +13,10 @@ import { HOLD_SECONDS_PER_REP } from './fatigue-model.service'
 import { scoreSession } from './session-scoring.service'
 
 /**
- * Rebuild a user's fatigue state from their history.
- *
- * Needed because a completed session could never be removed or corrected. The
- * obvious fix — subtract the session's stored deltas back out — does not work:
- * `accumulate` SATURATES as it approaches the ceiling, so a session's
- * contribution is not linearly separable from the ones around it. Two sessions
- * whose deltas sum to 90 do not leave 90 behind, and subtracting either one
- * afterwards lands somewhere arbitrary.
- *
- * So the state is replayed instead of patched. `MuscleFatigueLog` holds every
- * delta ever applied with its timestamp, and `WorkoutSession.systemicLoad`
- * holds the whole-body side, which makes the current levels a pure function of
- * history — exactly reproducible, and correct by construction rather than by
- * the arithmetic happening to commute.
- *
- * It is also cheap: two queries, an in-memory replay, and about sixteen upserts
- * regardless of how much history there is.
+ * Rebuilds a user's fatigue state by replaying history. Saturating
+ * accumulation makes a session's contribution impossible to subtract, so
+ * edits and deletions replay every MuscleFatigueLog delta and every session's
+ * systemic load instead.
  */
 
 export interface FatigueReplayEvent {
@@ -47,19 +34,9 @@ export interface FatigueReplayResult {
 }
 
 /**
- * Replay one muscle's (or the systemic) curve.
- *
- * Between two events the level decays along the same implied curve everything
- * else reads, then the new delta accumulates on top. `recoveryTargetAt` has to
- * be recomputed at each step because the decay is reconstructed FROM it — a
- * level without a matching window would decay along the old one and drift.
- *
- * `sampleAt` reads the curve at arbitrary instants without changing it, which
- * is how the progress screen draws a fatigue history. Sampling lives here
- * rather than in a charting service on purpose: a second implementation of
- * this walk would disagree with the stored state in exactly the cases that are
- * hardest to notice — a saturating session, or a long gap between events.
- * Sample times must be sorted ascending.
+ * Replay one decay curve (a muscle, or systemic): decay between events, then
+ * accumulate each delta. `sampleAt` (sorted ascending) reads the curve at given
+ * instants without changing it — used for the progress fatigue chart.
  */
 export const replayFatigueCurve = (
   events: FatigueReplayEvent[],
@@ -74,15 +51,12 @@ export const replayFatigueCurve = (
   const samples: number[] = []
   let nextSample = 0
 
-  // The level at `when`, decayed from the last event but WITHOUT advancing the
-  // walk — a sample must not become an event.
+  // Level at `when` without advancing the walk
   const peek = (when: Date) =>
     updatedAt ? getEffectiveFatigueLevel({ fatigueLevel: level, updatedAt, recoveryTargetAt }, when) : 0
 
   for (const event of events) {
-    // Every sample that falls before this event reads the decay so far. Taken
-    // before the delta lands, so a sample timestamped the same instant as a
-    // session shows the state going into it, not the spike out of it.
+    // Samples before this event read the pre-event state
     while (nextSample < sampleAt.length && sampleAt[nextSample] < event.at) {
       samples.push(peek(sampleAt[nextSample]))
       nextSample++
@@ -104,8 +78,7 @@ export const replayFatigueCurve = (
 
   if (!updatedAt) return { level: 0, recoveryTargetAt: null, trace, samples }
 
-  // Decay from the last event to now, then re-anchor the window to now so the
-  // stored row means the same thing as one written by finishSession.
+  // Decay to now and re-anchor the window, matching a row written by finishSession
   level = getEffectiveFatigueLevel({ fatigueLevel: level, updatedAt, recoveryTargetAt }, now)
   return {
     level,
@@ -117,11 +90,7 @@ export const replayFatigueCurve = (
 
 const replay = replayFatigueCurve
 
-/**
- * Recompute `MuscleFatigueCurrent` and `SystemicFatigue` from what remains in
- * the athlete's history. Call after anything that changes, removes or re-scores
- * a finished session.
- */
+/** Recompute MuscleFatigueCurrent and SystemicFatigue from history. Call after any session change. */
 export const recomputeUserFatigue = async (userId: string): Promise<void> => {
   const now = new Date()
 
@@ -133,27 +102,20 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
       select: { id: true, muscleId: true, delta: true, createdAt: true, fatigueLevelAfter: true },
       orderBy: { createdAt: 'asc' },
     }),
-    // Only finished sessions carry systemic load; an abandoned one never
-    // reached the scoring path and has none.
+    // Only finished sessions carry systemic load
     prisma.workoutSession.findMany({
       where: { userId, duration: { not: null }, systemicLoad: { not: null } },
       select: { dateTime: true, systemicLoad: true },
       orderBy: { dateTime: 'asc' },
     }),
-    // Every muscle that has a row OR has history — a muscle whose only session
-    // was just deleted still has a stale row to clear, and skipping it would
-    // leave fatigue the athlete no longer has any record of. Read here rather
-    // than on its own line further down: it depends on nothing above it, and a
-    // sequential round trip to Railway is worth more than the tidier placement.
+    // Existing rows too, so a muscle whose only session was deleted is reset
     prisma.muscleFatigueCurrent.findMany({
       where: { userId },
       select: { muscleId: true },
     }),
   ])
 
-  // The same level × age multiplier finishSession applies. Recovery speed is a
-  // property of the athlete, not of the session, so replaying with today's
-  // value is right even for deltas logged before their profile changed.
+  // Today's level × age multiplier, as finishSession applies
   const recoveryRate = recoveryRateFor(
     profile?.fitnessLevel,
     resolveAge(profile?.birthDate, profile?.age)
@@ -177,26 +139,12 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
     now
   )
 
-  // `fatigueLevelAfter` is history, not a cache — the calendar's per-day muscle
-  // map colours itself from it. Removing a session changes what every LATER log
-  // was "after", so those rows are corrected too, or the calendar keeps showing
-  // a day as red because of a workout that no longer exists.
-  //
-  // Only rows that actually moved are written. A deletion typically shifts the
-  // handful of logs after it and nothing before, so this stays small even for
-  // an athlete with years of history.
+  // `fatigueLevelAfter` colours the calendar's day maps, so later logs whose
+  // level changed are corrected too (only rows that actually moved).
   const levelFixes: { id: string; levelAfter: number }[] = []
 
-  // The replay is pure arithmetic, so it happens OUTSIDE the transaction and
-  // the transaction becomes a list of writes with no thinking in between.
-  //
-  // This was an interactive `$transaction(async tx => ...)` issuing one
-  // statement at a time. Against the remote database that is ~290 ms each, so
-  // 15 muscle upserts alone spent 4.4 s of the 5 s Prisma allows an
-  // interactive transaction. Editing a set in a session with a few exercises
-  // therefore died on P2028 "Transaction not found", which the controller
-  // surfaced as a bare 500. The array form ships every statement in ONE round
-  // trip and is still atomic.
+  // Replay outside the transaction; the writes go as one batched array
+  // transaction (one round trip, still atomic).
   const writes: Prisma.PrismaPromise<unknown>[] = []
 
   for (const muscleId of muscleIds) {
@@ -205,9 +153,7 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
     const { level, recoveryTargetAt, trace } = replay(events, halfLife, now)
 
     for (const step of trace) {
-      // Half a fatigue point is far below anything the UI can render, and
-      // rewriting rows that only differ by float noise would turn a cheap
-      // correction into a full-history write on every delete.
+      // Ignore sub-half-point float noise
       if (Math.abs((storedLevelAfter.get(step.id) ?? 0) - step.levelAfter) > 0.5) {
         levelFixes.push(step)
       }
@@ -236,7 +182,7 @@ export const recomputeUserFatigue = async (userId: string): Promise<void> => {
   await prisma.$transaction(writes)
 }
 
-/** The includes `scoreSession` needs, in one place so callers cannot under-fetch. */
+/** The includes `scoreSession` needs. */
 const SCORABLE_INCLUDE = {
   workoutExercises: {
     include: {
@@ -251,19 +197,9 @@ const SCORABLE_INCLUDE = {
 } as const
 
 /**
- * Re-score a finished session and replace the fatigue it logged.
- *
- * Called after a set inside it is edited or removed. The session's own
- * `MuscleFatigueLog` rows are deleted and rewritten from the new score, dated
- * to the session rather than to now — an edit made a week later must not land
- * a week's worth of fresh fatigue on the athlete.
- *
- * Does NOT touch MuscleFatigueCurrent. `recomputeUserFatigue` does that from
- * the rewritten logs, so there is exactly one place that decides what the
- * current level is.
- *
- * Returns the exercise ids the session touched, since their strength estimates
- * need recomputing too.
+ * Re-score a finished session and replace its MuscleFatigueLog rows, dated to
+ * the session. Current levels are left to `recomputeUserFatigue`. Returns the
+ * exercise ids touched (their e1RM needs recomputing).
  */
 export const rescoreSession = async (
   userId: string,
@@ -278,8 +214,7 @@ export const rescoreSession = async (
 
   const exerciseIds = [...new Set(session.workoutExercises.map(we => we.exerciseId))]
 
-  // An unfinished session never reached the scoring path, so it has no logs to
-  // replace and no totals worth writing. Editing its sets is just editing rows.
+  // Unfinished sessions have no logs or totals to rewrite
   if (session.duration == null) return exerciseIds
 
   const [profile, estimates] = await Promise.all([
@@ -291,10 +226,7 @@ export const rescoreSession = async (
 
   const score = scoreSession(session, {
     bodyWeight: profile?.weight ?? 70,
-    // The estimate as it stands today, not as it stood when the session was
-    // first scored. Reconstructing the historical value would mean replaying
-    // every session's e1RM as well, and the difference only shifts how costly
-    // a set is judged to have been by a few percent.
+    // Today's estimates — a close enough approximation for a re-score
     e1rmByExercise: new Map(estimates.map(e => [e.exerciseId, e.e1rm])),
     duration: session.duration,
   })
@@ -304,17 +236,13 @@ export const rescoreSession = async (
     muscleId,
     workoutSessionId: sessionId,
     delta,
-    // Provisional. recomputeUserFatigue replays the whole series and corrects
-    // every row's level, including these, immediately after.
+    // Provisional; corrected by recomputeUserFatigue right after
     fatigueLevelAfter: 0,
     source: 'workout',
     createdAt: session.dateTime,
   }))
 
-  // Array form, and `createMany` rather than a create per muscle, for the
-  // reason spelled out in recomputeUserFatigue: one statement at a time over a
-  // ~290 ms link runs an interactive transaction out of its 5 s budget.
-  // Statements run in the order given, so the delete still precedes the insert.
+  // Batched array transaction; the delete runs before the insert
   await prisma.$transaction([
     prisma.workoutSession.update({
       where: { id: sessionId },
@@ -334,17 +262,9 @@ export const rescoreSession = async (
 }
 
 /**
- * Recompute the rolling best e1RM for specific exercises.
- *
- * `ExerciseStrengthEstimate` is a running maximum — `finishSession` only ever
- * raises it. That is correct while history only grows, and wrong the moment a
- * session can be removed: delete the day someone hit a PR and the estimate
- * keeps claiming it, which then inflates every future starting weight and makes
- * every subsequent set score as easier than it was.
- *
- * Scoped to the exercises actually touched rather than the whole catalogue —
- * a delete affects a handful, and rescanning everything on every edit would
- * read the athlete's entire training history each time.
+ * Recompute the best e1RM for the given exercises from finished sessions —
+ * needed because the stored estimate is a running maximum that deletions can
+ * invalidate.
  */
 export const recomputeStrengthEstimates = async (
   userId: string,
@@ -357,8 +277,7 @@ export const recomputeStrengthEstimates = async (
     prisma.workoutExercise.findMany({
       where: {
         exerciseId: { in: exerciseIds },
-        // Only sessions that were actually completed. An abandoned session's
-        // sets are not training history and must not set a personal best.
+        // Finished sessions only
         session: { userId, duration: { not: null } },
       },
       select: {
@@ -397,17 +316,12 @@ export const recomputeStrengthEstimates = async (
     }
   }
 
-  // Pipelined, same as the other two: a session with a dozen exercises is a
-  // dozen sequential round trips otherwise, which is most of an interactive
-  // transaction's budget spent on the network.
+  // Batched as one transaction
   const stale = exerciseIds.filter(id => (bestByExercise.get(id) ?? 0) <= 0)
   const scored = exerciseIds.filter(id => (bestByExercise.get(id) ?? 0) > 0)
 
   await prisma.$transaction([
-    // Nothing left to base an estimate on. Deleted rather than left at its old
-    // value: a stale estimate is worse than none, because starting-load.service
-    // treats its absence as "no history" and falls back to the calibrated
-    // table instead of a number that is now fiction.
+    // No history left: delete, so starting-load falls back to its table
     ...(stale.length
       ? [prisma.exerciseStrengthEstimate.deleteMany({
           where: { userId, exerciseId: { in: stale } },

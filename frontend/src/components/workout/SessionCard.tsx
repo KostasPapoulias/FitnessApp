@@ -1,20 +1,10 @@
 /**
- * The card that stands for the session itself while the server is being asked
- * about it — starting one, and finishing one.
- *
- * Shared by both screens on purpose. They are the two ends of the same
- * workout and they used to be two unrelated emoji; one shape means the app
- * looks like it is doing one continuous thing rather than two random ones.
- *
- * Nothing here moves the card. No float, no breath, no scale: a surface that
- * bobs or swells reads as a stalled spinner, and it is what both of these
- * screens did before. The only motion is the teal segment lapping the border,
- * which is the one honest statement available — work is happening, and no
- * claim is made about how much is left.
+ * The session card shown while a session is starting or finishing. The only
+ * motion is a segment lapping the border — no bobbing or scaling.
  */
 
 interface CardProps {
-  /** Bold line. The session's name, not a status. */
+  /** Bold line: the session's name. */
   title?: string
   /** Second line — "14 sets · 48:20", "6 exercises". */
   detail?: string
@@ -43,32 +33,10 @@ export function SessionCard({ title = 'Workout', detail, live = false, spin = fa
 }
 
 /**
- * A teal segment running a lap of the card's own border.
- *
- * An SVG rect rather than a gradient sweep, because the segment has to follow
- * the rounded corners: anything masked across the box travels in a straight
- * line and cuts the corner, which is exactly where the eye is.
- *
- * `pathLength="100"` renormalises the perimeter to 100 units, so the dash
- * pattern is a percentage and one lap is always -100 — no measuring the box,
- * and a taller card laps at the same visual speed rather than slower.
- *
- * `inset-0` on an absolutely positioned child resolves to the PADDING box,
- * which already starts one pixel in — past the card's own 1px border. The rect
- * sits on that boundary and its 2px stroke is centred there, so the segment
- * covers the border exactly and bleeds one pixel inward. Insetting it any
- * further (the obvious `inset-[1px]`, to "clear the border") stacks on top of
- * that pixel and the segment floats inside the outline instead of replacing
- * it — invisible at 1× and unmistakable the moment you zoom.
- *
- * `rx` is 13 rather than the card's 14 for the same reason: a rounded corner
- * inset by a pixel has a radius a pixel smaller.
- *
- * `h-full w-full` is not redundant next to `inset-0`. An `<svg>` is a replaced
- * element, so `height: auto` takes its INTRINSIC height — 150px — and the
- * `bottom` inset is then dropped as over-constrained. The rect's `height="100%"`
- * resolves against that 150px viewport instead of the card, and on a card
- * shorter than 150px the trace hangs visibly out of the bottom.
+ * A teal segment lapping the card's border. `pathLength="100"` makes one lap
+ * -100 whatever the card's size. The rect sits on the padding box (rx 13, one
+ * less than the card), and `h-full w-full` is required — an <svg> otherwise
+ * defaults to 150px tall.
  */
 function PerimeterTrace() {
   return (
@@ -93,7 +61,7 @@ function PerimeterTrace() {
   )
 }
 
-/** Rotation only — the one kind of motion left once bobbing and scaling are out. */
+/** A rotating arc. */
 function ArcMark() {
   return (
     <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 flex-shrink-0 text-brand-teal" aria-hidden="true">
@@ -112,12 +80,7 @@ function ArcMark() {
   )
 }
 
-/**
- * The centred panel both waits render: card, headline, one line of context.
- *
- * SaveToCalendar wraps this and adds the flight; a wait with nowhere to fly to
- * — starting a session — uses it directly.
- */
+/** The centred waiting panel: card, headline, one line of context. */
 export default function SessionStatus({
   headline,
   hint,

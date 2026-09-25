@@ -3,22 +3,9 @@ import { useT } from '../../i18n'
 import { StarFilledIcon } from '../icons'
 
 /**
- * The app's one line chart.
- *
- * Lifted out of `BodyweightCard`, which built the first one: measured width,
- * scrub-to-nearest-point, a single labelled endpoint, and a table twin. The
- * progress screen needed the same thing twice more (estimated 1RM, muscle
- * fatigue) and three copies of a scrub handler would have drifted — they
- * already differ in what they plot and nothing else.
- *
- * Two conventions it keeps, both deliberate:
- *
- *   - **The nearest point wins the scrub, not the one under the finger.** A 2px
- *     line is not a hit target on a phone, so the whole plot height is live at
- *     any x.
- *   - **A tooltip is never the only way to read a value.** Every chart carries a
- *     table twin behind a toggle. It is also the only readable form of the data
- *     for anyone not using a pointer.
+ * The app's line chart: measured width, scrub to the nearest point (the whole
+ * height is live), a labelled endpoint, and a table view for reading values
+ * without a pointer.
  */
 
 const SURFACE = '#1A1A1A'  // dark-800, the card behind the plot
@@ -30,45 +17,40 @@ const PAD_X = 10
 const PAD_TOP = 16         // room for the endpoint label above the last point
 
 export interface TrendPoint {
-  /** ISO timestamp. Used for the axis and the table, never for spacing. */
+  /** ISO timestamp, for the axis and table (points are spaced by index). */
   at: string
   value: number
-  /** Draws a ring instead of nothing — a PR, or any point worth calling out. */
+  /** Draws a ring (e.g. a PR). */
   marked?: boolean
-  /** Extra line in the tooltip and the table, e.g. "100kg × 5". */
+  /** Extra line in the tooltip and table, e.g. "100kg × 5". */
   detail?: string
 }
 
 interface Props {
   points: TrendPoint[]
-  /** Value → display string, unit included. Used everywhere a number is shown. */
+  /** Value → display string, unit included. */
   format: (value: number) => string
   /** Line and fill colour. Defaults to brand-teal. */
   color?: string
   /**
-   * `auto` fits the data with padding — correct for bodyweight or a 1RM, where
-   * the interesting movement is a few percent and a zero baseline flattens it.
-   * `zero` anchors at 0, which is required for anything already expressed as a
-   * proportion of a maximum (fatigue is 0–100 and must not be rescaled).
+   * `auto` fits the data (bodyweight, 1RM); `zero` anchors at 0 (values that
+   * are already a proportion, like fatigue).
    */
   baseline?: 'auto' | 'zero'
-  /** With `baseline: 'zero'`, the top of the domain. Defaults to the data's max. */
+  /** With `baseline: 'zero'`, the domain's top. Defaults to the data's max. */
   ceiling?: number
-  /** Floor on the visible span, so a flat series does not become dramatic noise. */
+  /** Minimum visible span, so a flat series stays flat. */
   minSpan?: number
   plotHeight?: number
-  /** Column heading for the table twin. */
+  /** Column heading in the table view. */
   valueHeader?: string
   /** Shown instead of the plot when there is nothing to draw. */
   empty?: ReactNode
-  /**
-   * Shown under the value when there is exactly one point. Worth setting where
-   * the reader can do something about it — "log another and a trend appears".
-   */
+  /** Hint shown when there is exactly one point. */
   singleHint?: string
 }
 
-// The reader's locale, from useT: '12 Sept' in English, '12 Σεπ' in Greek.
+// Date in the reader's locale.
 const fmtDate = (iso: string, intl: string) =>
   new Date(iso).toLocaleDateString(intl, { day: 'numeric', month: 'short' })
 
@@ -93,8 +75,7 @@ export default function TrendChart({
   const [showTable, setShowTable] = useState(false)
   const { t, intl } = useT()
 
-  // Measured, not assumed. The card sits inside AppLayout's centred
-  // max-w-[430px], and a viewBox scaled to fit would stretch the type with it.
+  // Measured width, so text is not stretched by a scaled viewBox
   useLayoutEffect(() => {
     const element = wrapRef.current
     if (!element) return
@@ -104,8 +85,7 @@ export default function TrendChart({
     return () => observer.disconnect()
   }, [])
 
-  // A stable id per instance: two charts on one screen sharing a gradient id
-  // means the second one silently takes the first one's colour.
+  // Unique gradient id per instance
   const gradientId = useMemo(
     () => `trend-fill-${Math.random().toString(36).slice(2, 9)}`,
     []
@@ -133,8 +113,7 @@ export default function TrendChart({
     const innerW = Math.max(width - PAD_X * 2, 1)
     const innerH = plotHeight - PAD_TOP
 
-    // Evenly spaced by index rather than by date. Training is irregular, and
-    // spacing by time leaves most of the plot empty around a two-week gap.
+    // Spaced by index, not date, so training gaps don't empty the plot
     const x = (i: number) => PAD_X + (i / (points.length - 1)) * innerW
     const y = (value: number) =>
       PAD_TOP + innerH - ((value - min) / (max - min || 1)) * innerH
@@ -167,8 +146,7 @@ export default function TrendChart({
     return <div className="px-4 pb-4 text-dark-400 text-xs">{empty ?? t('chart.empty')}</div>
   }
 
-  // One point is a number, not a trend. Drawing a flat line across the card
-  // would imply a stability nobody measured.
+  // A single point is shown as a value, not a line
   if (points.length === 1) {
     return (
       <div className="px-4 pb-4">
@@ -197,7 +175,7 @@ export default function TrendChart({
       >
         {geometry && (
           <svg width={width} height={plotHeight + AXIS_H} className="block">
-            {/* Recessive grid: solid hairlines one shade off the surface. */}
+            {/* Grid lines */}
             {[0, 0.5, 1].map(t => {
               const y = PAD_TOP + (plotHeight - PAD_TOP) * t
               return <line key={t} x1={PAD_X} x2={width - PAD_X} y1={y} y2={y} stroke={GRID} strokeWidth={1} />
@@ -219,8 +197,7 @@ export default function TrendChart({
               strokeLinecap="round"
             />
 
-            {/* Called-out points. Hollow rings, so they read as annotations on
-                the line rather than as a second series drawn over it. */}
+            {/* Marked points as hollow rings */}
             {points.map((point, i) => point.marked && (
               <circle
                 key={`mark-${i}`}
@@ -244,8 +221,7 @@ export default function TrendChart({
                   fill={color} stroke={SURFACE} strokeWidth={2} />
               </>
             ) : lastCoord && (
-              // The endpoint is the only filled point when idle — a value beside
-              // every dot is chaos and goes unread.
+              // Only the endpoint is filled when idle
               <circle cx={lastCoord.x} cy={lastCoord.y} r={5}
                 fill={color} stroke={SURFACE} strokeWidth={2} />
             )}
@@ -259,8 +235,7 @@ export default function TrendChart({
           </svg>
         )}
 
-        {/* Range as text rather than a tick ladder — two numbers carry a
-            mobile-width plot and a full axis would crowd it. */}
+        {/* Value range as text */}
         {geometry && (
           <div className="absolute top-0 left-0 px-3 text-[10px] text-dark-400 tabular-nums">
             {format(baseline === 'zero' ? (ceiling ?? geometry.rawMax) : geometry.rawMax)}

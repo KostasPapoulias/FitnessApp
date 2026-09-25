@@ -8,8 +8,7 @@ router.use(verifyToken)
 
 /**
  * @route GET /api/config/map
- * @protected — the key is public once tiles load, but there is no reason to
- *              hand it to anyone who has not signed in
+ * @protected
  * @returns MapTiler style URL for the route map
  */
 router.get('/map', getMapConfig)

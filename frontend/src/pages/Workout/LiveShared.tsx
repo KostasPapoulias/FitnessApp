@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { rpeColor, rpeTint, rpeLabel } from './helpers'
 
-// Payload logged to the store when a set/hold completes
+// Payload logged when a set or hold completes.
 export interface LogPayload {
   reps: number
   weight: number
@@ -14,27 +14,16 @@ export interface LogPayload {
   rounds?: number     // wod rounds completed
 }
 
-/**
- * A modality view's own answer to a spoken command. Return true if it acted.
- *
- * The alternative was to keep teaching `ActiveWorkout` what every modality
- * screen can do, which is how it ended up gating voice behind `strengthFlow` in
- * the first place — the strength path was the only one it knew about, so it was
- * the only one that could be spoken to. "Pause" means the run clock on a run
- * and the hold on a stretch, and only the screen showing it knows which.
- */
+/** A modality view's handler for a spoken command; returns true if it acted. */
 export type ModalityVoiceHandler = (command: VoiceCommand) => boolean
 
-// Callbacks ActiveWorkout hands to every modality view
+// Callbacks ActiveWorkout passes to every modality view.
 export interface ModalityViewProps {
   elapsed: number                       // whole-session seconds
   onRest: (p: LogPayload) => void       // log set → show rest timer
   onAdvance: (p: LogPayload) => void    // log set → next set/exercise, no rest
   onFinish: () => void                  // end the session → Finish screen
-  /**
-   * Claim spoken commands while this view is mounted. Pass null to release.
-   * Views wire this through `useModalityVoice` rather than calling it directly.
-   */
+  /** Claim spoken commands while mounted (null releases). Use via `useModalityVoice`. */
   registerVoice: (handler: ModalityVoiceHandler | null) => void
 }
 
@@ -118,14 +107,12 @@ export function RpeRow({ value, onPick }: { value: number; onPick: (n: number) =
 }
 
 // ── end-of-effort RPE prompt ──
-// Cardio and metcons used to ship a hardcoded RPE (6 and 8), which left the
-// fatigue model with no measure of how hard the session actually was — the one
-// input that separates a recovery jog from a threshold run.
+// Asks how hard a cardio or metcon effort was — the fatigue model's intensity input.
 export function EffortPrompt({
   icon, label, title, detail, summary, initial = 7, confirmLabel = 'Save & Finish',
   busy, onConfirm,
 }: {
-  /** The modality's mark, drawn by the caller at the size this screen wants. */
+  /** The modality's mark, drawn by the caller. */
   icon: React.ReactNode
   label: string
   title: string
@@ -192,19 +179,14 @@ export function EffortPrompt({
 export function LiveStartGate({
   icon, label, title, detail, onStart, onBack, children,
 }: {
-  /** The modality's mark, drawn by the caller at the size this screen wants. */
+  /** The modality's mark, drawn by the caller. */
   icon: React.ReactNode
   label: string
   title: string
   detail: string
   onStart: () => void
   onBack?: () => void
-  /**
-   * Anything that has to be decided BEFORE the clock starts, between the
-   * description and the Start button. A pace target is the case this exists
-   * for: it is worthless once the run is underway, because the point of it is
-   * the kilometre you are about to run.
-   */
+  /** Anything to decide before the clock starts (e.g. a pace target). */
   children?: React.ReactNode
 }) {
   return (

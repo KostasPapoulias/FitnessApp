@@ -38,11 +38,8 @@ export default function SecuritySettings() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
 
-  // The launch gate reads a cached copy of `enabled` so it can paint the pad on
-  // the first frame. This screen is the only place that changes it, so every
-  // read of the real status writes the cache back — a PIN removed here and not
-  // mirrored would leave the next launch stuck behind a pad with no PIN to open
-  // it.
+  // Every status read updates the launch gate's cached `enabled` flag, so a
+  // removed PIN never leaves the next launch stuck behind a pad
   const refresh = () =>
     securityService.getPinStatus()
       .then(s => { setStatus(s); rememberPinEnabled(s.enabled) })
@@ -59,7 +56,7 @@ export default function SecuritySettings() {
     setBusy(true)
     try {
       await securityService.setPin(pin, status?.enabled ? { currentPin } : undefined)
-      // Already unlocked here by definition — don't lock on the way out
+      // Already unlocked here, so don't lock on the way out
       sessionStorage.setItem('somatrack_unlocked', '1')
       await refresh()
       reset()

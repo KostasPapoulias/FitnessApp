@@ -1,9 +1,7 @@
 import { create } from 'zustand'
 import { onboardingService, Injury } from '../services/onboarding.service'
 
-// Shared onboarding state: the optional-stage prompt on Home and the equipment
-// and injury summary on Profile, fetched once on launch by AppLayout rather
-// than by each screen that reads it.
+// Onboarding state (optional-stage prompt, equipment and injuries), fetched once by AppLayout.
 
 interface OnboardingStore {
   loaded: boolean
@@ -30,8 +28,7 @@ export const useOnboardingStore = create<OnboardingStore>()((set) => ({
         injuries: state.injuries,
       })
     } catch {
-      // `loaded` gates the setup prompt on Home, so a failed fetch leaves it
-      // hidden rather than prompting against state nobody has read yet.
+      // `loaded` gates the Home prompt, so a failed fetch keeps it hidden
       set({ loaded: false })
     }
   },

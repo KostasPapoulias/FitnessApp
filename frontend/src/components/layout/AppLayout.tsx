@@ -8,30 +8,21 @@ import { useOfflineQueue } from '../../hooks/useOfflineQueue'
 
 const SWIPE_ROUTES = ['/', '/calendar', '/ai', '/profile']
 
-/** Past this much horizontal travel the page commits to the next route. */
+/** Horizontal travel that commits a swipe to the next route. */
 const COMMIT_PX = 80
-/** How much of the finger's travel the page actually moves. */
+/** Fraction of finger travel the page follows. */
 const DRAG_DAMPING = 0.3
 
 /**
- * Whether something nearer the finger has a better claim on a sideways drag.
- *
- * Two cases, and both were live bugs. A row that swipes to reveal its own
- * actions marks itself `data-no-page-swipe`. Anything that scrolls sideways —
- * the activity heatmap, a row of filter chips — is detected rather than
- * tagged, so a new one is covered the day it is added.
- *
- * Checked at `touchstart` and for the whole gesture, not re-tested per move:
- * the page swipe used to start during the first few pixels of a row swipe and
- * then never see the `touchend`, which left `<main>` translated a couple of
- * pixels off-axis with `transition: none` until the next gesture.
+ * Whether something closer to the finger owns a sideways drag: an element
+ * marked `data-no-page-swipe`, or anything that scrolls horizontally.
+ * Decided at touchstart for the whole gesture.
  */
 const claimedBySomethingCloser = (target: EventTarget | null, boundary: Element) => {
   let node = target instanceof Element ? target : null
   while (node && node !== boundary) {
     if (node.hasAttribute('data-no-page-swipe')) return true
-    // +1 absorbs the sub-pixel difference a fractional layout leaves behind on
-    // an element that does not actually overflow.
+    // +1 absorbs sub-pixel layout differences
     if (node.scrollWidth > node.clientWidth + 1) {
       const { overflowX } = getComputedStyle(node)
       if (overflowX === 'auto' || overflowX === 'scroll') return true
@@ -47,24 +38,17 @@ export default function AppLayout() {
   const { isPhone } = useDeviceType()
   const fetchOnboardingState = useOnboardingStore(s => s.fetchState)
 
-  // Fetched here rather than on Home, because coach-marks live on screens a
-  // user can reach directly — landing on Calendar first would otherwise leave
-  // every hint permanently hidden behind `loaded === false`.
+  // Fetched once for the whole app
   useEffect(() => {
     fetchOnboardingState()
   }, [])
 
-  // Drains sets logged with no signal. Here rather than on the workout screen
-  // because the athlete has usually navigated away by the time the connection
-  // comes back — and because this is also what restores the badge count after
-  // a cold launch.
+  // Drains sets queued offline (also restores the badge count on launch)
   useOfflineQueue()
 
   const touchStartX  = useRef(0)
   const touchStartY  = useRef(0)
-  // Gesture state is refs; `dragX` state is the render mirror only. Reading
-  // the state back inside a handler is a commit behind, which is why the old
-  // `onTouchEnd` had to work off a value that could still be 0 on a fast flick.
+  // Gesture state lives in refs; `dragX` only mirrors it for rendering
   const active       = useRef(false)
   const axis         = useRef<'x' | 'y' | null>(null)
   const liveDragX    = useRef(0)
@@ -74,7 +58,7 @@ export default function AppLayout() {
   const currentIndex = SWIPE_ROUTES.indexOf(location.pathname)
   const isSwipeable  = currentIndex !== -1
 
-  // Don't swipe during workout flows
+  // No page swipe in workout flows
   const isWorkoutFlow = location.pathname.startsWith('/workout')
 
   const endGesture = () => {
@@ -85,13 +69,10 @@ export default function AppLayout() {
     setDragX(0)
   }
 
-  // A route change mid-gesture (a nav tap, a redirect) would otherwise leave
-  // the page parked at its drag offset, and a transformed ancestor also
-  // re-anchors every `position: fixed` sheet inside it.
+  // Reset any in-progress drag on route change
   useEffect(() => { endGesture() }, [location.pathname])
 
-  // `<main>` is the scrolling element and it outlives the page inside it, so
-  // without this a new screen opens at wherever the last one was scrolled to.
+  // <main> persists across pages, so reset its scroll on navigation
   const mainRef = useRef<HTMLElement>(null)
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }) }, [location.pathname])
 
@@ -110,15 +91,14 @@ export default function AppLayout() {
     const deltaX = e.touches[0].clientX - touchStartX.current
     const deltaY = e.touches[0].clientY - touchStartY.current
 
-    // Decide once, then hold. Re-deciding per move meant a diagonal drag
-    // flickered between scrolling the list and dragging the page.
+    // Decide the axis once per gesture
     if (axis.current === null) {
       if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) return
       axis.current = Math.abs(deltaX) > Math.abs(deltaY) ? 'x' : 'y'
       if (axis.current === 'y') { active.current = false; setIsDragging(false); return }
     }
 
-    // Resist at edges
+    // No swipe past the first or last route
     if (deltaX > 0 && currentIndex === 0) return
     if (deltaX < 0 && currentIndex === SWIPE_ROUTES.length - 1) return
 
@@ -143,29 +123,9 @@ export default function AppLayout() {
   return (
     <>
     <div className={`h-dvh overflow-hidden bg-dark-900 text-white ${isPhone ? 'mx-auto max-w-[430px]' : 'w-full'}`}>
-      {/* The sidebar renders on !isPhone, so the offset keys off the same flag —
-          `lg:pl-72` left a 768–1024px gap where the sidebar covered content. */}
-      {/* The top inset is applied once, here, rather than on each page header:
-          under `viewport-fit=cover` the status bar overlays the page, and every
-          screen's own `pt-4`/`pt-6` is far short of a 59px notch.
-          The bottom clears the real nav rather than a guessed 5rem. */}
-      {/*
-        `h-dvh`, not `min-h-dvh`, and this is the whole shape of the shell.
-
-        With a minimum the height was indefinite, so every page added its own
-        `min-h-dvh` to get one — and a 100dvh child inside a 100dvh box that
-        also pads for the notch and the nav makes a document taller than the
-        screen by exactly those insets. On a phone that is a strip of empty
-        background you can scroll down into on every single screen, and enough
-        overflow to make the browser's URL bar collapse and the viewport jump
-        the first time you touch anything.
-
-        A definite height fixes both ends: the document is exactly the viewport
-        and never scrolls, `<main>` is the one scrolling region, and pages fill
-        it with `flex-1` instead of restating the viewport. It is also what
-        pages with their own sticky header and inner scroller were relying on
-        the old 100dvh for.
-      */}
+      {/* The single scrolling region. h-dvh (not min-h-dvh) keeps the document
+          exactly the viewport; the top safe-area inset and the nav's height are
+          padded here, once, for every page. Left offset matches the sidebar. */}
       <main
         ref={mainRef}
         className={`flex flex-col h-dvh overflow-y-auto overscroll-contain
@@ -179,29 +139,14 @@ export default function AppLayout() {
           transition: isDragging ? 'none' : 'transform 0.3s ease',
         }}
       >
-        {/*
-          A second boundary, around the routed page only.
-
-          Keyed on the path so navigating away from a screen that threw clears
-          the error — without the key, React keeps the boundary's state and
-          every subsequent route renders the crash screen instead, which reads
-          as the whole app being broken rather than one page.
-
-          Retry is offered here because the surrounding shell is still alive:
-          re-rendering one page after a transient failure (a half-loaded store,
-          a race on a fetch) genuinely can succeed.
-        */}
+        {/* Page-level boundary, keyed on the path so navigating away clears a
+            crash. Retry is offered because the shell is still alive. */}
         <ErrorBoundary boundary="page" allowRetry key={location.pathname}>
           <Outlet />
         </ErrorBoundary>
       </main>
     </div>
-    {/*
-      Outside the shell, so its containing block is the viewport and nothing
-      else. It loses nothing by moving: the nav sets its own
-      `left-1/2 -translate-x-1/2 w-full max-w-[430px]`, so the phone-width
-      centring the shell provides was never what positioned it.
-    */}
+    {/* Outside the shell, so its containing block is the viewport */}
     <BottomNav />
     </>
   )

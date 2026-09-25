@@ -1,32 +1,17 @@
-// Acute vs chronic training load.
-//
-// Muscle fatigue answers "how sore am I right now". It cannot answer the
-// question that actually decides whether training is working: am I building
-// fitness, or digging a hole? That needs the trend of whole-body load over
-// weeks, not the state of a muscle today.
-//
-// This is the standard impulse-response model (Banister; what TrainingPeaks
-// calls CTL/ATL/TSB). Two exponentially weighted moving averages over each
-// session's `systemicLoad`:
-//
-//   fitness (chronic, 42-day) — the work you have absorbed and adapted to
-//   fatigue (acute, 7-day)    — the work still sitting on you
-//   form    = fitness − fatigue
-//
-// Ramping acute load far past chronic is the single best-evidenced predictor of
-// overuse injury, which is why the ratio is reported too.
+// Acute vs chronic training load (Banister impulse-response; CTL/ATL/TSB).
+// Two EWMAs over each session's `systemicLoad`:
+//   fitness (chronic, 42-day), fatigue (acute, 7-day), form = fitness − fatigue.
+// The acute:chronic ratio flags overuse-injury risk.
 
 import prisma from '../lib/prisma'
 
 export const CHRONIC_DAYS = 42
 export const ACUTE_DAYS = 7
 
-// The acute:chronic ratio is conventionally 7 days against 28, not against the
-// 42-day fitness constant. Using 42 here made steady training look like a spike.
+// The acute:chronic ratio uses the conventional 7 vs 28 days.
 export const ACWR_CHRONIC_DAYS = 28
 
-// Days of history to read. Five chronic time constants is well past the point
-// where older sessions still move the average.
+// Days of history to read; older sessions no longer move the averages.
 const HISTORY_DAYS = 180
 
 export type LoadTrend = 'ramping' | 'building' | 'maintaining' | 'detraining'
@@ -46,9 +31,8 @@ export interface TrainingLoad {
   /** fitness − fatigue. Positive means fresh, negative means carrying load. */
   form: number
   /**
-   * Acute:chronic workload ratio. Above ~1.5 is a spike worth warning about,
-   * below ~0.8 means training is tailing off. Null until there is enough
-   * chronic history for the ratio to mean anything.
+   * Acute:chronic workload ratio: above ~1.5 is a spike, below ~0.8 is tailing
+   * off. Null until there is enough chronic history.
    */
   ratio: number | null
   trend: LoadTrend
@@ -74,15 +58,9 @@ const bucketByDay = (dailyLoads: DailyLoad[]): Map<number, number> => {
 }
 
 /**
- * Exponentially weighted moving average of daily load.
- *
- * Days without training are real zeros, not gaps — resting is what converts
- * acute load into fitness, so they have to pull the average down.
- *
- * Seeded with the athlete's average daily load rather than zero. Starting from
- * zero means the 42-day average needs about six weeks to climb to the truth, so
- * everyone looks unfit and every steady week looks like a spike — a consistent
- * 8-week block scored 1.58 and got flagged as overreaching.
+ * Exponentially weighted moving average of daily load. Rest days count as
+ * zeros. Seeded with the athlete's average daily load, not zero, so a short
+ * history does not look like a spike.
  */
 export const ewma = (dailyLoads: DailyLoad[], timeConstantDays: number): number => {
   if (timeConstantDays <= 0) return 0
@@ -96,8 +74,7 @@ export const ewma = (dailyLoads: DailyLoad[], timeConstantDays: number): number 
 
   const decay = Math.exp(-1 / timeConstantDays)
   let value = total / span
-  // Walk forward in time from the oldest day so each step decays the running
-  // average once per day, including the days with no training at all.
+  // Walk forward from the oldest day, decaying once per day
   for (let daysAgo = oldest; daysAgo >= 0; daysAgo--) {
     value = value * decay + (byDay.get(daysAgo) ?? 0) * (1 - decay)
   }
@@ -121,10 +98,7 @@ export const classifyTrend = (ratio: number | null): LoadTrend => {
   return 'detraining'
 }
 
-/**
- * Form banded relative to current fitness — being 20 units down means something
- * very different to a beginner and to someone carrying a large chronic load.
- */
+/** Form banded relative to current fitness. */
 export const classifyForm = (form: number, fitness: number): FormState => {
   if (fitness <= 0) return 'neutral'
   const relative = form / fitness
@@ -142,15 +116,12 @@ export const computeTrainingLoad = (
   const fatigue = ewma(dailyLoads, ACUTE_DAYS)
   const form = fitness - fatigue
 
-  // Rolling means, not the EWMAs above: the ratio has to compare like with
-  // like, and the 7-vs-28-day rolling form is the one the injury-risk research
-  // is actually built on.
+  // The ratio uses rolling means (7 vs 28 days), as in the injury-risk research
   const acute = rollingMean(dailyLoads, ACUTE_DAYS)
   const chronic = rollingMean(dailyLoads, ACWR_CHRONIC_DAYS)
 
   const established = sessionCount >= 3
-  // A ratio against a near-zero chronic load is meaningless — one session after
-  // a long layoff would read as an infinite spike.
+  // A ratio against near-zero chronic load is meaningless
   const ratio = established && chronic >= 1 ? acute / chronic : null
 
   const inWindow = (from: number, to: number) =>

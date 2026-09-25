@@ -6,18 +6,8 @@ import { INPUT_BASE } from '../../components/forms/Fields'
 import { CardioTracking, ExerciseCategory } from '../../types'
 
 /**
- * Add a movement the catalogue does not have.
- *
- * The form asks only what the athlete can actually know about their own
- * exercise. It deliberately does NOT expose damageFactor, loadFactor or the
- * per-muscle impact weightings: those feed MuscleFatigueCurrent, readiness and
- * every future progression suggestion, and a number typed wrong here would be
- * invisible — the app would simply advise rest on the wrong days from then on.
- * The server derives all of them from the primary/secondary split.
- *
- * That split is the one judgement being asked for, so the copy leans on it:
- * "what is this exercise really for" is a question a person can answer, where
- * "is the chest involved at 0.65 or 0.8" is not.
+ * Create a custom exercise. Asks only what the athlete can know — muscles as
+ * primary or secondary; the server derives all calibration numbers.
  */
 
 type Role = 'primary' | 'secondary'
@@ -52,8 +42,7 @@ export default function CreateExercise() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Prefilled when arriving from a fruitless search, so the name they already
-  // typed is not typed twice.
+  // Prefilled from a search that found nothing
   const presetName: string = location.state?.name ?? ''
   const presetModality: string | undefined = location.state?.modality
 
@@ -65,15 +54,7 @@ export default function CreateExercise() {
 
   const [name, setName] = useState(presetName)
   const [modalityId, setModalityId] = useState('')
-  /**
-   * How this movement's work is measured. Cardio only.
-   *
-   * Asked, unlike the calibration numbers the backend derives and deliberately
-   * hides — damageFactor and the rest are invisible when wrong, and a bad one
-   * quietly poisons readiness for good. This is the opposite: the athlete knows
-   * the answer without being taught anything, and a wrong answer shows up
-   * immediately as a map on a rope session.
-   */
+  /** How this cardio movement is measured — asked because a wrong answer is immediately visible. */
   const [cardioTracking, setCardioTracking] = useState<CardioTracking>('gps')
   const [description, setDescription] = useState('')
   const [roleByMuscle, setRoleByMuscle] = useState<Record<string, Role>>({})
@@ -84,8 +65,7 @@ export default function CreateExercise() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Four independent catalogues, one wait. Sequentially this is four round
-    // trips to Railway before the form can render anything.
+    // Four independent lookups, batched
     Promise.all([
       exerciseService.getModalities(),
       onboardingService.getOptions(),
@@ -109,9 +89,7 @@ export default function CreateExercise() {
   const modalityName = modalities.find(m => m.id === modalityId)?.name ?? ''
 
   const cycleMuscle = (muscleId: string) => {
-    // One control, three states: off → primary → secondary → off. A separate
-    // checkbox and radio per muscle needs two taps to say the common thing,
-    // and fifteen muscles of that is a form nobody finishes.
+    // One control cycles off → primary → secondary → off
     setRoleByMuscle(prev => {
       const next = { ...prev }
       if (!next[muscleId]) next[muscleId] = 'primary'
@@ -129,8 +107,7 @@ export default function CreateExercise() {
     [roleByMuscle]
   )
 
-  // Mirrors the server's rules so the button explains itself rather than
-  // bouncing the form back with a 400 after a round trip.
+  // Mirrors the server's rules so the button can explain what is missing
   const problem =
     name.trim().length < 2 ? 'Give it a name.' :
     !modalityId ? 'Choose what kind of exercise it is.' :
@@ -149,12 +126,10 @@ export default function CreateExercise() {
         muscles: Object.entries(roleByMuscle).map(([muscleId, role]) => ({ muscleId, role })),
         categoryIds,
         equipmentIds,
-        // Ignored by the backend for every other modality, so it is sent
-        // unconditionally rather than guarded here as well.
+        // Ignored server-side for non-cardio modalities
         cardioTracking,
       })
-      // Straight to the detail screen: it is the proof the exercise exists and
-      // the place they can add it to the session they were building.
+      // To the new exercise's detail screen
       navigate('/exercise-detail', { state: { exerciseId: created.id }, replace: true })
     } catch (err: any) {
       setError(err?.response?.data?.error ?? 'Could not save that exercise. Try again.')
@@ -222,8 +197,7 @@ export default function CreateExercise() {
           )}
         </div>
 
-        {/* How it is measured — cardio only, because it is the only modality
-            where the answer changes the screen. */}
+        {/* Measurement type — cardio only */}
         {modalityName === 'Cardio' && (
           <div>
             <label className="text-dark-300 text-xs uppercase tracking-wider">
@@ -352,8 +326,7 @@ export default function CreateExercise() {
         )}
       </div>
 
-      {/* Save tray. Normal flow would scroll away above the nav; this sits
-          above it using the height BottomNav publishes at runtime. */}
+      {/* Save tray, above the nav */}
       <div className="fixed bottom-[calc(var(--bottom-nav-h)+1rem)] left-1/2 -translate-x-1/2
                       w-[calc(100%-2.5rem)] max-w-[390px] z-40">
         <button

@@ -12,35 +12,21 @@ import {
 import { AuthRequest } from '../server';
 import { log } from '../lib/logger';
 
-// Get all exercises
 // GET /api/exercises?category=Legs&modality=Strength&search=squat
-// filtering by category, modality, and search term
+// The catalogue plus the user's custom exercises, filtered, ranked by
+// equipment/injury constraints and annotated with fatigue and favourites.
 export const getExercises = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { category, modality, search } = req.query
 
-    // Five independent reads, issued together rather than one after another.
-    // Measured against the real database, the sequential version cost ~1.5 s
-    // more per request at a ~515 ms round trip — see TODO item 18.
-    //
-    // In practice only four of these reach Postgres: the shared catalogue is
-    // served from memory (see exercise-catalogue.service), which is where most
-    // of this endpoint's time used to go.
+    // Independent reads, batched; the shared catalogue comes from memory
     const [shared, custom, fatigueCurrent, constraints, favorites] = await Promise.all([
       sharedCatalogue(),
       customExercisesFor(req.userId!),
       prisma.muscleFatigueCurrent.findMany({ where: { userId: req.userId! } }),
-      // Equipment the athlete has, and anything they are training around. Both
-      // are no-ops until the optional onboarding stage has been answered.
+      // Equipment and injury constraints (no-ops until answered)
       getTrainingConstraints(req.userId!),
-      // Joined into the same batch rather than issued after it: this endpoint
-      // is already the one the picker hits on every open, and on the remote
-      // database a fifth sequential round trip costs more than the query does.
-      //
-      // Guarded rather than asserted, unlike its neighbours — this router is
-      // `optionalAuth`, and `where: { userId: undefined }` is not "no rows",
-      // it is EVERY row, which would star the whole catalogue for a signed-out
-      // caller.
+      // Guarded: under optionalAuth, `userId: undefined` would match every row
       req.userId
         ? prisma.favoriteExercise.findMany({
             where: { userId: req.userId },
@@ -51,23 +37,19 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
 
     const favoriteIds = new Set(favorites.map(f => f.exerciseId))
 
-    // Filtering moved out of SQL and into memory. Over ~172 rows it is
-    // microseconds, and it is what lets one cached read serve every
-    // combination of category / modality / search the picker can produce — as
-    // a WHERE clause, each combination was its own uncacheable query.
+    // Filtered in memory over the cached catalogue
     const exercises = filterCatalogue([...shared, ...custom], {
       category: category ? String(category) : undefined,
       modality: modality ? String(modality) : undefined,
       search: search ? String(search) : undefined,
     }).sort(byCatalogueName)
 
-    // Fatigue for this user, to flag exercises that load something already spent.
+    // Effective fatigue per muscle, to flag exercises hitting a spent muscle
     const fatigueMap = buildEffectiveFatigueMap(fatigueCurrent)
 
     const { ranked, hiddenCount, missingEquipmentCount } =
       rankByConstraints(exercises, constraints)
 
-    // Add fatigue warning to each exercise
     const exercisesWithFatigue = ranked.map(exercise => {
       const maxFatigue = Math.max(
         0,
@@ -82,9 +64,7 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
         description: exercise.description,
         modality: exercise.modality.name,
         referenceSpeedKmh: exercise.referenceSpeedKmh,
-        // What the run screen is allowed to offer. 'gps' gets a map and a
-        // follow; 'machine' a dial and a pace but no route; 'reps' a counter
-        // and no pace at all, because none exists at any effort.
+        // What the cardio screen offers: 'gps' map, 'machine' dial, 'reps' counter
         cardioTracking: exercise.cardioTracking,
         referenceCadenceRpm: exercise.referenceCadenceRpm,
         repUnit: exercise.repUnit,
@@ -95,30 +75,21 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
         })),
         categories: exercise.categoryLinks.map(cl => cl.category.name),
         equipment: exercise.equipmentLinks.map(el => el.equipment.name),
-        // Null for the handful with no artwork — the WOD block and outdoor
-        // walking and cycling, which the media library simply does not depict.
-        // The client falls back to the modality emoji rather than a gap.
+        // Null where the media library has no artwork; the client shows an icon
         thumbnailUrl: exercise.media?.[0]?.thumbnailUrl ?? null,
         isCustom: exercise.createdByUserId !== null,
-        fatigueWarning: maxFatigue >= 70, //  show red warning
+        fatigueWarning: maxFatigue >= 70,
         maxMuscleFatigue: Math.round(maxFatigue),
-        // Loads a muscle the athlete flagged as "work around it". Shown, but
-        // the client marks it.
+        // Works a muscle marked 'caution'
         injuryCaution: exercise.caution,
-        // Needs kit they did not tick. Still listed — sorted to the bottom —
-        // so the catalogue never looks like it is missing exercises.
+        // Needs equipment the athlete lacks; listed, sorted last
         needsMissingEquipment: exercise.needsMissingEquipment,
-        // Sent on every row so the list can offer a Favourites filter without
-        // a second request. Deliberately does NOT affect `rankByConstraints`:
-        // a star says "I like this movement", not "I can do it today", and
-        // letting it reorder the list would bury the equipment and injury
-        // signals that exist to keep someone from getting hurt.
+        // Does not affect ranking — a favourite is a preference, not availability
         isFavorite: favoriteIds.has(exercise.id),
       }
     })
 
-    // Surfaced so the client can explain itself: hiddenByInjury is the only
-    // thing actually removed, and unavailable counts what got demoted.
+    // Tells the client what was hidden (injury) and demoted (equipment)
     res.json({
       success: true,
       data: exercisesWithFatigue,
@@ -135,18 +106,12 @@ export const getExercises = async (req: AuthRequest, res: Response): Promise<voi
 
 };
 
-//   Get single exercise
-// GET /api/exercises/:id
-// Full detail 
+// GET /api/exercises/:id — full detail, scoped to shared or the caller's own exercises
 export const getExerciseById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 
-    // Scoped the same way the list is. `findUnique` on the id alone handed any
-    // caller another athlete's custom exercise — including its name and
-    // description, which people write in their own words — to anyone who
-    // guessed a uuid. Harmless while nobody could create one; not harmless now
-    // that they can.
+    // Custom exercises are visible only to their owner
     const exercise = await prisma.exercise.findFirst({
       where: {
         id,
@@ -172,11 +137,8 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
       return
     }
 
-    // Three independent per-user reads, issued together. They were sequential,
-    // which on the remote database is ~3 round trips stacked behind the lookup
-    // above for no reason — none of them depends on the others.
+    // Independent per-user reads, batched
     const [personalBest, timesLogged, favorite] = await Promise.all([
-      // Get personal best for this exercise for this user
       prisma.workoutSet.findFirst({
         where: {
           setType: 'STRENGTH',
@@ -189,7 +151,6 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
         orderBy: { strength: { weight: 'desc' } }
       }),
 
-      // Count how many times user has logged this exercise
       prisma.workoutExercise.count({
         where: {
           exerciseId: id,
@@ -197,9 +158,7 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
         }
       }),
 
-      // Guarded, not asserted — see getExercises. On this route an unguarded
-      // `userId: undefined` would find the first star by anyone and light the
-      // icon for a signed-out reader.
+      // Guarded — see getExercises
       req.userId
         ? prisma.favoriteExercise.findUnique({
             where: { userId_exerciseId: { userId: req.userId, exerciseId: id } },
@@ -222,7 +181,7 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
         muscles: exercise.muscleLinks.map(ml => ({
           name: ml.muscle.name,
           impactFactor: ml.impactFactor,
-          // Primary = high impact, Secondary = medium, Stabiliser = low
+          // Primary ≥ 0.8 impact, Secondary ≥ 0.5, otherwise Stabiliser
           role: ml.impactFactor >= 0.8 ? 'Primary' :
                 ml.impactFactor >= 0.5 ? 'Secondary' : 'Stabiliser'
         })),
@@ -246,17 +205,8 @@ export const getExerciseById = async (req: AuthRequest, res: Response) => {
   }
 }
 
-//   Create a custom exercise
-// POST /api/exercises
-//
-// `Exercise.createdByUserId` existed, the list endpoint filtered on it, and
-// `getExercises` returned an `isCustom` flag — with no route that could ever
-// set it. This is the missing half.
-//
-// The athlete supplies what they can actually know about their own movement:
-// what it is called, which modality it belongs to, which muscles it works and
-// how hard, what kit it needs. Everything the fatigue model consumes is derived
-// from that in custom-exercise.service.ts and never typed directly.
+// POST /api/exercises — create a custom exercise. The athlete describes the
+// movement; its calibration is derived in custom-exercise.service.
 export const createExercise = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const {
@@ -266,7 +216,7 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
 
     const prepared = await prepareCustomExercise(req.userId!, {
       name,
-      // The form posts ids; the service resolves an id or a name either way.
+      // Accepts a modality id or name
       modality: modalityId ?? modality,
       description,
       muscles: Array.isArray(muscles)
@@ -279,16 +229,14 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
 
     const created = await createCustomExercise(req.userId!, prepared)
 
-    // The new row is not in the cached half — custom exercises are read per
-    // request — but the merged list's ordering and counts are, so drop it.
+    // The merged list's order and counts changed
     invalidateCatalogue()
 
     res.status(201).json({ success: true, data: created })
 
   } catch (error) {
     if (error instanceof CustomExerciseError) {
-      // A clash or a full shelf is the athlete's own state, not a fault — 409
-      // so the client can say which, rather than showing a generic failure.
+      // Invalid input 400; duplicate or limit 409
       res.status(error.code === 'invalid' ? 400 : 409)
         .json({ success: false, error: error.message })
       return
@@ -298,9 +246,7 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
   }
 }
 
-//   Get all categories
-// GET /api/exercises/categories
-// Returns categories with the current fatigue state for the user
+// GET /api/exercises/categories — categories with the user's average fatigue across their muscles
 export const getCategories = async (req: AuthRequest, res: Response) => {
   try {
     const categories = await prisma.exerciseCategory.findMany({
@@ -320,16 +266,14 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
       orderBy: { name: 'asc' }
     })
 
-    // Get current fatigue for this user
     const fatigueCurrent = await prisma.muscleFatigueCurrent.findMany({
       where: { userId: req.userId! }
     })
 
-    // Build a map of muscleId -> fatigueLevel for fast lookup
+    // muscleId → effective fatigue level
     const fatigueMap = buildEffectiveFatigueMap(fatigueCurrent)
 
-    // For each category calculate its overall fatigue
-    // based on the muscles of exercises in that category
+    // Average fatigue across every muscle the category's exercises work
     const categoriesWithFatigue = categories.map(category => {
       const muscleIds = new Set<string>()
 
@@ -347,7 +291,6 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
         ? fatigueLevels.reduce((a, b) => a + b, 0) / fatigueLevels.length
         : 0
 
-      // Convert number to label for the UI
       const fatigueStatus =
         avgFatigue >= 70 ? 'high' :
         avgFatigue >= 35 ? 'moderate' :
@@ -358,7 +301,7 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
         name: category.name,
         exerciseCount: category.exerciseLinks.length,
         fatigueLevel: Math.round(avgFatigue),
-        fatigueStatus // 'high' | 'moderate' | 'recovered'
+        fatigueStatus
       }
     })
 
@@ -370,7 +313,6 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
   }
 }
 
-//    Get modalities 
 // GET /api/exercises/modalities
 export const getModalities = async (_req: AuthRequest, res: Response) => {
   try {
@@ -384,22 +326,12 @@ export const getModalities = async (_req: AuthRequest, res: Response) => {
   }
 }
 
-//   Star an exercise
-// POST /api/exercises/:id/favorite
-//
-// Idempotent: starring something already starred is a success, not a 409. The
-// star is a toggle in the UI and toggles get double-tapped, so the endpoint
-// that backs one has to be safe to call twice — `upsert` against the composite
-// primary key makes the second call a no-op instead of a unique violation the
-// client would have to interpret.
+// POST /api/exercises/:id/favorite — idempotent (upsert on the composite key)
 export const addFavorite = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 
-    // Scoped exactly like getExerciseById. Without this, a starred uuid is an
-    // existence oracle for other athletes' custom exercises — and worse, the
-    // foreign key would happily accept the row, so their movement would then
-    // appear by name in this user's favourites list.
+    // Scoped like getExerciseById, so other users' custom exercises cannot be starred
     const exercise = await prisma.exercise.findFirst({
       where: {
         id,
@@ -427,20 +359,12 @@ export const addFavorite = async (req: AuthRequest, res: Response) => {
   }
 }
 
-//   Unstar an exercise
-// DELETE /api/exercises/:id/favorite
-//
-// Also idempotent, and for a sharper reason than the POST: unstarring twice is
-// what happens every time a tap is retried on a bad connection. `deleteMany`
-// rather than `delete` because `delete` throws P2025 when the row is already
-// gone — which is the exact state the caller was asking for.
+// DELETE /api/exercises/:id/favorite — idempotent; deleteMany does not throw when absent
 export const removeFavorite = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params
 
-    // No ownership lookup here, unlike the POST. The delete is already scoped
-    // to this user's own rows, so the worst a bad id can do is delete nothing,
-    // and a 404 would leak the same existence signal the POST is careful about.
+    // Scoped to the user's own rows, so no ownership lookup is needed
     await prisma.favoriteExercise.deleteMany({
       where: { userId: req.userId!, exerciseId: id },
     })

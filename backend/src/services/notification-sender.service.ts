@@ -3,11 +3,8 @@ import { sendToSubscriptions } from '../lib/pushSender'
 import { isTypeAllowed, tierOf } from './notification-preference.service'
 
 /**
- * The single path every notification takes.
- *
- * Nothing calls the push layer directly. Everything goes through here so that
- * one row exists per notification — which is what makes the daily cap, dedupe,
- * ghost detection and engagement tracking possible at all.
+ * The single path every notification takes: one ledger row per notification,
+ * which the daily cap, dedupe, ghost detection and engagement tracking rely on.
  */
 
 export interface SendRequest {
@@ -16,11 +13,10 @@ export interface SendRequest {
   title: string
   body: string
   source?: 'rule' | 'ai'
-  /** Blocks repeats. Same key ⇒ the notification is silently skipped. */
+  /** Same key as an earlier notification ⇒ skipped. */
   dedupeKey?: string
   url?: string
-  /** User-initiated sends (the Test button) skip the opt-in checks — the tap
-   *  IS the consent, and a test that silently no-ops teaches nothing. */
+  /** User-initiated sends (the Test button) skip the opt-in checks. */
   bypassPreferences?: boolean
 }
 
@@ -46,8 +42,7 @@ export const sendNotification = async (req: SendRequest): Promise<SendOutcome> =
     return { status: 'skipped', reason: 'no devices subscribed' }
   }
 
-  // The row is created BEFORE sending, so its id can travel in the payload and
-  // come back as the delivery receipt.
+  // Created before sending so its id can come back as the delivery receipt
   let notification
   try {
     notification = await prisma.notification.create({
@@ -63,7 +58,7 @@ export const sendNotification = async (req: SendRequest): Promise<SendOutcome> =
       }
     })
   } catch (error: any) {
-    // Unique violation on (userId, dedupeKey) — this nudge already went out
+    // Unique violation on (userId, dedupeKey): already sent
     if (error.code === 'P2002') return { status: 'skipped', reason: 'duplicate' }
     throw error
   }
@@ -82,25 +77,19 @@ export const sendNotification = async (req: SendRequest): Promise<SendOutcome> =
       data: {
         status: 'failed',
         failReason: result.removed > 0 ? 'subscription expired' : 'push service rejected',
-        // Release the dedupe key. The unique constraint is permanent, so a
-        // failed row would hold the key forever and every future retry of this
-        // nudge would be rejected as a duplicate — one brief push-service
-        // outage permanently killing that notification for that user.
+        // Release the dedupe key so a later retry is not blocked forever
         dedupeKey: null,
       }
     })
     return { status: 'failed', reason: 'no device accepted the push' }
   }
 
-  // Only advance from `planned`. The service worker can ack `displayed` before
-  // this resolves — sendToSubscriptions waits on the SLOWEST endpoint, so a
-  // phone can render and report back while another endpoint is still hanging.
-  // An unconditional write would overwrite that delivery receipt with `sent`.
+  // Only advance from `planned` — a display ack can arrive before this resolves
   await prisma.notification.updateMany({
     where: { id: notification.id, status: 'planned' },
     data: { status: 'sent', sentAt: new Date() }
   })
-  // sentAt is set regardless of which status won the race
+  // sentAt is set whichever status won
   await prisma.notification.updateMany({
     where: { id: notification.id, sentAt: null },
     data: { sentAt: new Date() }
@@ -110,15 +99,9 @@ export const sendNotification = async (req: SendRequest): Promise<SendOutcome> =
 }
 
 /**
- * Prune subscriptions that accept pushes but never confirm displaying them.
- *
- * A push service returning 201 only means it took the payload. A home screen
- * icon deleted without unsubscribing, or a worker that can no longer run, keeps
- * accepting sends forever — a ghost. The service worker's display acks are the
- * only way to tell the difference, so a run of sends with no ack is the signal.
- *
- * Deliberately conservative: acks need network at display time, so an offline
- * phone looks identical to a ghost for a while.
+ * Removes subscriptions that accept pushes but never confirm displaying them
+ * (e.g. a deleted home-screen icon). Conservative, since an offline phone looks
+ * the same for a while.
  */
 export const pruneGhostSubscriptions = async (userId: string) => {
   const recent = await prisma.notification.findMany({
@@ -129,7 +112,7 @@ export const pruneGhostSubscriptions = async (userId: string) => {
 
   if (recent.length < GHOST_SUSPECT_THRESHOLD) return { pruned: false, streak: 0 }
 
-  // Count the unbroken run of never-displayed sends from the most recent back
+  // Consecutive never-displayed sends, newest first
   let streak = 0
   for (const notification of recent) {
     if (notification.displayedAt) break
@@ -138,8 +121,7 @@ export const pruneGhostSubscriptions = async (userId: string) => {
 
   if (streak >= GHOST_DELETE_THRESHOLD) {
     await prisma.pushSubscription.deleteMany({ where: { userId } })
-    // Flip the master switch off too, so the UI stops claiming notifications
-    // are on for a device that has not rendered one in five attempts.
+    // Turn the master switch off so the UI stops claiming push is on
     await prisma.notificationPreference.updateMany({
       where: { userId },
       data: { pushEnabled: false }

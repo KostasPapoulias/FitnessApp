@@ -11,23 +11,12 @@ import {
 } from './fatigue-model.service'
 
 /**
- * Turn a session's logged sets into the numbers the rest of the app derives
- * from: mechanical volume, average RPE, whole-body load, and the per-muscle
- * fatigue deltas.
- *
- * Lifted verbatim out of `finishSession`, which was the only caller while a
- * completed session could never change. Now that sets can be edited and
- * sessions deleted, a session has to be re-scorable — and a second copy of this
- * arithmetic would be the worst thing in the codebase to maintain, because the
- * two would disagree silently and only in the fatigue numbers, which is exactly
- * the output nobody can eyeball.
- *
- * Pure: it reads the session it is handed and returns numbers. Every database
- * decision — what to persist, what to reverse, what to replay — stays with the
- * caller.
+ * Scores a session's sets into volume, average RPE, systemic load, per-muscle
+ * fatigue deltas and e1RM estimates. Pure — the single copy used both when a
+ * session finishes and when an edited one is re-scored.
  */
 
-/** The shape the scorer needs. A superset of this is fine. */
+/** The fields the scorer reads. */
 export interface ScorableSession {
   workoutExercises: {
     exercise: {
@@ -73,34 +62,28 @@ export const scoreSession = (
   }: {
     bodyWeight: number
     e1rmByExercise: Map<string, number>
-    /** Minutes. Drives systemic load. */
+    /** Session duration; drives systemic load. */
     duration: number | null
   }
 ): SessionScore => {
-  // Calculate session totals
-  // totalVolume is mechanical load in KG (strength + calisthenics only).
-  // Cardio distance and mobility seconds are different units and are
-  // deliberately excluded — whole-body cost is carried by systemicLoad.
+  // totalVolume is mechanical kg only (strength + calisthenics); whole-body
+  // cost is carried by systemicLoad
   let totalVolume = 0
   let totalRpe = 0
   let rpeCount = 0
 
-  // muscleDeltas accumulates fatigue per muscle across ALL exercises
-  // Map: muscleId -> { delta, muscle }
+  // Fatigue per muscle, accumulated across every exercise
   const muscleDeltas = new Map<string, {
     delta: number
     muscleName: string
     halfLifeHours: number
   }>()
 
-  // How many sets of each modality — weights the session's systemic load
   const setTypeCounts = new Map<string, number>()
-  // Best e1RM seen this session, to fold back into the estimate afterwards
   const newE1rm = new Map<string, number>()
 
   type MuscleLink = ScorableSession['workoutExercises'][number]['exercise']['muscleLinks']
-  // A metcon is one effort spread over several movements, so it cannot be
-  // scored set by set — collected here and split after the main loop.
+  // Metcon sets are collected and scored as one effort after the loop
   const wodEntries: {
     links: MuscleLink
     damage: number
@@ -108,14 +91,12 @@ export const scoreSession = (
     seconds: number
     rounds: number
     rpe: number | null
-    /** `wodLoadFactor` for this movement — 1 when it was done at bodyweight. */
+    /** `wodLoadFactor` for this movement; 1 at bodyweight. */
     load: number
   }[] = []
 
-  // `damageFactor` is the movement's mechanical cost per unit of work, kept
-  // separate from impactFactor (which only says which muscles are recruited).
-  // Without it, cycling scored higher on quads than running of the same
-  // length, because cycling happens to carry a higher impactFactor.
+  // damageFactor is the movement's mechanical cost per unit of work;
+  // impactFactor only says which muscles are recruited
   const addMuscleDelta = (links: MuscleLink, hse: number, damageFactor: number) => {
     if (hse <= 0 || damageFactor <= 0) return
     for (const muscleLink of links) {
@@ -157,9 +138,7 @@ export const scoreSession = (
         newE1rm.set(exercise.id, Math.max(newE1rm.get(exercise.id) ?? 0, estimate))
 
       } else if (set.calisthenics) {
-        // Load is the user's own bodyweight plus any added/assisted weight.
-        // Feeding it through the same curve as barbell work is what finally
-        // makes a hard set of push-ups cost the same as a hard bench set.
+        // Load is bodyweight plus added (or minus assisted) weight
         const load = bodyWeight + set.calisthenics.addedWeight
         const holdSeconds = set.calisthenics.time
         const repEquivalent = set.calisthenics.reps > 0
@@ -174,11 +153,8 @@ export const scoreSession = (
         newE1rm.set(exercise.id, Math.max(newE1rm.get(exercise.id) ?? 0, estimate))
 
       } else if (set.cardio) {
-        // distance/time are not kilograms — no volume, but a real load.
-        // Distance drives the local cost where the activity has a reference
-        // speed, so ground actually covered counts rather than time on foot;
-        // a count does the same job for the movements that have no distance at
-        // any effort, and the clock is the fallback for both.
+        // No volume, but real load: distance (or count) where the activity has
+        // a reference rate, else the clock
         addMuscleDelta(muscleLinks, cardioHse(
           set.cardio.time ?? 0,
           set.rpe,
@@ -196,7 +172,7 @@ export const scoreSession = (
           seconds: set.wod.time ?? 0,
           rounds: set.wod.rounds ?? 0,
           rpe: set.rpe,
-          // Relative to the athlete, resolved here where bodyweight is known.
+          // Relative to the athlete's bodyweight
           load: wodLoadFactor(set.wod.weight, bodyWeight),
         })
 
@@ -206,9 +182,8 @@ export const scoreSession = (
     }
   }
 
-  //  Score the metcon as a whole, then split it across its movements
-  // Every movement's set carries the same elapsed clock, so scoring them
-  // individually would multiply the workout by the number of movements.
+  // Score the metcon as a whole, then split it across its movements — each
+  // movement's set carries the same clock, so scoring them separately multiplies it
   if (wodEntries.length > 0) {
     const seconds = Math.max(...wodEntries.map(w => w.seconds))
     const rounds = Math.max(...wodEntries.map(w => w.rounds))
@@ -218,10 +193,7 @@ export const scoreSession = (
       : null
     const totalReps = wodEntries.reduce((sum, w) => sum + w.repsPerRound * rounds, 0)
 
-    // Load raises the metcon's cost in proportion to how much of its work was
-    // done under a bar, weighted by rep contribution rather than counted per
-    // movement — otherwise adding one loaded movement to a five-movement metcon
-    // would scale the whole thing as if every movement were loaded.
+    // Load multiplier weighted by each movement's rep contribution
     const repBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound, 0)
     const loadMultiplier = repBase > 0
       ? wodEntries.reduce((sum, w) => sum + w.load * (w.repsPerRound / repBase), 0)
@@ -229,9 +201,7 @@ export const scoreSession = (
 
     const totalHse = wodHse(seconds, rpe, totalReps) * loadMultiplier
 
-    // Share out by rep contribution weighted by load, so the movement holding
-    // the bar takes the larger part of what it caused. Falls back to an even
-    // split when the movements were logged without rep counts.
+    // Split by rep contribution × load; even split when reps were not logged
     const shareBase = wodEntries.reduce((sum, w) => sum + w.repsPerRound * w.load, 0)
     for (const entry of wodEntries) {
       const share = shareBase > 0
@@ -243,8 +213,7 @@ export const scoreSession = (
 
   const avgRpe = rpeCount > 0 ? totalRpe / rpeCount : 0
 
-  // Whole-body cost of the session. A long run leaves every individual muscle
-  // reading fine, which is exactly why readiness never used to move for it.
+  // Whole-body cost of the session
   const sessionLoad = systemicLoad(duration ?? 0, avgRpe, setTypeCounts)
 
   return { totalVolume, avgRpe, sessionLoad, muscleDeltas, newE1rm }

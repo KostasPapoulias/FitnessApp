@@ -7,22 +7,8 @@ import VolumeBars from '../components/progress/VolumeBars'
 import { StarFilledIcon } from '../components/icons'
 
 /**
- * The progress screen.
- *
- * For a strength app this was the most conspicuous absence in the product:
- * `ExerciseStrengthEstimate` was computed on every finished session, corrected
- * on every edit, and rendered nowhere. Same for session volume and the muscle
- * fatigue log. Nothing here is a new measurement — it is all reading back what
- * was already being written.
- *
- * Three tabs rather than one long scroll, because they are three different
- * questions and only one is ever being asked: am I getting stronger, am I doing
- * more, and where is the load landing. Each tab's expensive read happens once,
- * on first visit.
- *
- * `TrainingLoadCard` stays on Profile. Fitness/fatigue/form is the same family
- * of question, but it is already there and moving it would take a card away
- * from a screen someone is using today.
+ * Progress: strength estimates, session volume and per-muscle fatigue history,
+ * in three tabs. Each tab's data is fetched on first visit.
  */
 
 type Tab = 'Strength' | 'Volume' | 'Recovery'
@@ -67,7 +53,7 @@ export default function Progress() {
         <h1 className="text-xl font-extrabold text-white">Progress</h1>
       </div>
 
-      {/* Tabs, matching Calendar's control so the two screens feel like siblings. */}
+      {/* Tabs, matching Calendar's control */}
       <div className="flex gap-2 mb-4">
         {(['Strength', 'Volume', 'Recovery'] as Tab[]).map(t => (
           <button
@@ -118,13 +104,7 @@ export default function Progress() {
   )
 }
 
-/**
- * Every exercise with a strength estimate, best first, each expanding into its
- * own history.
- *
- * The series is fetched per exercise when it is opened. Pre-fetching all of them
- * would read the athlete's entire set history to draw charts nobody looked at.
- */
+/** Exercises with a strength estimate, best first; each series is fetched when expanded. */
 function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
   const [openId, setOpenId] = useState<string | null>(null)
   const [series, setSeries] = useState<Record<string, E1rmPoint[]>>({})
@@ -199,9 +179,7 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
                   <div className="h-32 m-3 bg-dark-700 rounded animate-pulse" />
                 ) : points && points.length > 0 ? (
                   <>
-                    {/* Not a best-so-far line: it goes down when the athlete's
-                        sets got lighter, which is the whole reason to look. PRs
-                        are ringed instead. */}
+                    {/* Actual values, not best-so-far, so a decline is visible; PRs are ringed */}
                     <TrendChart
                       points={points.map(p => ({
                         at: p.at,
@@ -237,11 +215,8 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
 }
 
 /**
- * Per-muscle fatigue over the last 30 days.
- *
- * Ordered by average load, so the muscles actually carrying the training are at
- * the top. The series is a replay of the decay curve rather than the logged
- * spikes, so today's last point is the same number the body map is showing.
+ * Per-muscle fatigue over 30 days, heaviest first. A replay of the decay curve,
+ * so the last point matches the body map.
  */
 function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
   const [openId, setOpenId] = useState<string | null>(null)
@@ -294,7 +269,7 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="text-right">
-                  {/* Colour is never the only cue — the label says "now". */}
+                  {/* Colour is never the only cue */}
                   <p className={`text-lg font-bold leading-none tabular-nums ${fatigueTone(current)}`}>
                     {current}%
                   </p>
@@ -307,9 +282,7 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
 
             {isOpen && (
               <div className="border-t border-dark-700">
-                {/* Anchored at zero with a fixed 100 ceiling: fatigue is already
-                    a percentage of a maximum, and auto-fitting it would make a
-                    quiet month look like a hard one. */}
+                {/* Fixed 0–100 scale, so a quiet month doesn't look like a hard one */}
                 <TrendChart
                   points={muscle.points.map(p => ({ at: p.at, value: p.level }))}
                   format={v => `${v}%`}

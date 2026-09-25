@@ -16,7 +16,7 @@ interface RegisterBody {
   email: string;
   password: string;
   name?: string;
-  /** 'en' | 'el' — the language picked on the Register screen. */
+  /** 'en' | 'el', picked on the Register screen. */
   language?: string;
 }
 
@@ -26,9 +26,8 @@ interface LoginBody {
 }
 
 /**
- * Tokens carry the user's tokenVersion at issue time. The middleware compares
- * it against the stored value, so incrementing that column revokes every token
- * outstanding for the user — the only way to retire a stateless JWT early.
+ * Tokens carry the user's tokenVersion at issue time; bumping the stored
+ * version revokes them all (see token-version.service).
  */
 const signToken = (userId: string, tokenVersion: number): string =>
   jwt.sign(
@@ -55,7 +54,6 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -63,19 +61,15 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     if (existingUser) {
       res.status(409).json({
         success: false,
-        // Says what to do next. The client shows this verbatim, and "user
-        // already exists" left people re-typing an address that was never the
-        // problem.
+        // Tells the user what to do next
         error: 'That email is already registered. Sign in instead.',
       });
       return;
     }
 
-    // Hash password
-    // salt 10 rounds
+    // bcrypt, 10 rounds
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
     const user = await prisma.user.create({
       data: {
         email,
@@ -86,8 +80,7 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
           },
         },
         settings: {
-          // The explicit choice if the client sent one, otherwise whatever
-          // the Register screen was showing — which is what the header says.
+          // The explicit choice, else the language of the Register screen
           create: { language: isLocale(language) ? language : localeOf(res) },
         },
       },
@@ -132,9 +125,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Look up normalised first. Accounts created before normalisation may hold
-    // a mixed-case address, so fall back to the raw value rather than locking
-    // those people out of their own accounts.
+    // Normalised lookup first, then the raw address for pre-normalisation accounts
     const normalized = normalizeEmail(rawEmail);
     const select = {
       id: true,
@@ -142,8 +133,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       password: true,
       profile: true,
       tokenVersion: true,
-      // The account's language, so a new phone switches to it on sign-in
-      // instead of waiting for the next cold launch's /me.
+      // So a new device switches to the account's language on sign-in
       settings: { select: { language: true } },
     };
 
@@ -159,7 +149,6 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    // Verify password
     const validPassword = await bcrypt.compare(password, user.password);
 
     if (!validPassword) {
@@ -172,7 +161,7 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
     const token = signToken(user.id, user.tokenVersion);
 
-    // Neither the hash nor the token version belongs in a response
+    // Neither the hash nor the token version is returned
     const { password: _, tokenVersion: _tv, ...userWithoutPassword } = user;
 
     res.json({
@@ -209,7 +198,7 @@ export const me = async (req: AuthRequest, res: Response): Promise<void> => {
         email: true,
         createdAt: true,
         profile: true,
-        // Not `true` — that shipped the PIN hash. See CLIENT_SETTINGS_SELECT.
+        // Allowlisted settings — never the PIN hash
         settings: { select: CLIENT_SETTINGS_SELECT },
       },
     });
@@ -237,10 +226,7 @@ export const me = async (req: AuthRequest, res: Response): Promise<void> => {
 
 /**
  * POST /api/auth/forgot-password
- *
- * Always answers the same way, whether or not the address is registered.
- * Anything else turns this into an account-existence oracle — and for a
- * fitness app, "does this person have an account here" is personal.
+ * Always the same answer, so the endpoint cannot reveal who has an account.
  */
 export const forgotPassword = async (req: AuthRequest, res: Response): Promise<void> => {
   const accepted = {
@@ -252,9 +238,7 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
 
   try {
     if (!isMailConfigured) {
-      // Said out loud rather than silently accepted. A deployment with no mail
-      // key would otherwise tell every user their link was sent and leave them
-      // waiting for a message that was never going to arrive.
+      // Refuse openly rather than claim a link was sent
       res.status(503).json({
         success: false,
         error: 'Password reset is unavailable right now. Contact support.',
@@ -264,8 +248,7 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
 
     const email = normalizeEmail(req.body?.email);
     if (!email) {
-      // A malformed address cannot belong to an account, so the honest answer
-      // and the safe answer are the same one.
+      // A malformed address cannot have an account — same answer
       res.json(accepted);
       return;
     }
@@ -273,16 +256,13 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
     await requestPasswordReset(email, {
       baseUrl: APP_BASE_URL,
       requestIp: req.ip,
-      // The language of the screen they asked from, not the account's: someone
-      // locked out and reading Greek should not get the email in English
-      // because the account still holds the default.
+      // Email in the language of the screen they asked from
       locale: localeOf(res),
     });
 
     res.json(accepted);
   } catch (error) {
-    // Logged, but never surfaced: which addresses fail to send is itself a
-    // signal about which addresses exist.
+    // Logged, never surfaced — failures would reveal which addresses exist
     log.error('forgotPassword failed', error);
     res.json(accepted);
   }
@@ -290,9 +270,7 @@ export const forgotPassword = async (req: AuthRequest, res: Response): Promise<v
 
 /**
  * POST /api/auth/reset-password
- *
- * Consumes the token from the email and sets a new password. Every outstanding
- * session and every other pending link for the account dies with it.
+ * Sets a new password from an emailed token; revokes all sessions and other links.
  */
 export const resetPassword = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -303,8 +281,7 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // The same rules registration applies. A reset is not a back door around
-    // the password policy.
+    // Same password rules as registration
     const passwordCheck = validatePassword(password);
     if (!passwordCheck.ok) {
       res.status(400).json({ success: false, error: passwordCheck.error });
@@ -313,9 +290,7 @@ export const resetPassword = async (req: AuthRequest, res: Response): Promise<vo
 
     await completePasswordReset(token.trim(), password as string);
 
-    // Deliberately no token in the response. Signing them in off the back of a
-    // link in an inbox skips the one thing that proves they know the new
-    // password — which is the whole point of having just set it.
+    // No token returned: the user signs in with the new password
     res.json({
       success: true,
       data: { message: 'Password updated. Sign in with your new password.' },

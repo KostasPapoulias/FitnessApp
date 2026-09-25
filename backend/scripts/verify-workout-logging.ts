@@ -1,6 +1,6 @@
 /**
- * End-to-end check of the set/session logging fixes, against a throwaway user
- * that is deleted again at the end (User cascades to everything it owns).
+ * End-to-end checks of set logging and session finishing against a throwaway
+ * user, deleted at the end.
  *
  *   npx tsx scripts/verify-workout-logging.ts
  */
@@ -170,8 +170,7 @@ async function main() {
     }
 
     // ── a metcon fatigues EVERY movement in it, not just the first ────────
-    // The live view logged one set at the store's current exercise index,
-    // which a WOD never advances, so movements 2..n were silently ignored.
+    // Every movement in a metcon must be scored, not just the first
     console.log('\n[WOD covers every movement]')
     const wodMoves = await prisma.exercise.findMany({
       where: { modality: { name: 'WOD' } },
@@ -199,8 +198,7 @@ async function main() {
       check('every movement in the metcon contributes fatigue',
         missed.length === 0, `${missed.length} of ${expected.size} muscles got nothing`)
 
-      // The movements share one clock, so scoring them individually would
-      // multiply the workout by the number of movements.
+      // Shared clock: scoring movements separately would multiply the workout
       const s5 = await prisma.workoutSession.create({ data: { userId: user.id } })
       const soloWe = await prisma.workoutExercise.create({
         data: { sessionId: s5.id, exerciseId: wodMoves[0].id, orderIndex: 1 },
@@ -213,8 +211,7 @@ async function main() {
       })
       const solo = await finishViaController(prisma, user.id, s5.id, 720)
       const total = (r: any) => r.musclesAffected.reduce((a: number, m: any) => a + m.delta, 0)
-      // Same duration, same total reps — the metcon spread over three movements
-      // may land on more muscles, but must not cost several times as much.
+      // Spread over three movements it may hit more muscles, but must not cost several times as much
       check('a 3-movement metcon is scored once, not once per movement',
         total(metcon) < total(solo) * 2.5,
         `3-movement ${Math.round(total(metcon))} vs 1-movement ${Math.round(total(solo))}`)
@@ -282,8 +279,7 @@ async function main() {
         const r = await finishViaController(prisma, user.id, s.id, 600)
         return r.musclesAffected.reduce((a: number, m: any) => a + m.delta, 0)
       }
-      // Same relative effort at double the absolute load: under the old
-      // tonnage model the strong lifter accrued exactly twice the fatigue.
+      // Same relative effort at double the load: equal cost
       const weak = await benchSession(60, 72)
       const strong = await benchSession(120, 144)
       check('doubling absolute load at the same relative effort does not double fatigue',
@@ -295,8 +291,7 @@ async function main() {
     }
 
     // ── running vs cycling: the damage-profile fix ───────────────────────
-    // impactFactor alone had cycling (quads 0.7) beating running (quads 0.6),
-    // so the model called a bike ride harder on the legs than a run.
+    // Running must score harder on the legs than cycling
     console.log('\n[mechanical damage profile]')
     const running = await prisma.exercise.findFirst({ where: { name: 'Running' } })
     const cycling = await prisma.exercise.findFirst({ where: { name: 'Cycling' } })
@@ -351,8 +346,7 @@ async function main() {
         live.sessionCount > 0 && live.fitness > 0,
         `sessions=${live.sessionCount} fitness=${live.fitness}`)
 
-      // Steady training must not be flagged as a spike — the cold-start bug
-      // scored a consistent 8-week block at 1.58 and called it overreaching.
+      // Steady training must not read as a spike
       const steady: { daysAgo: number; load: number }[] = []
       for (let d = 0; d < 56; d++) if (d % 7 < 4) steady.push({ daysAgo: d, load: 200 })
       const steadyLoad = computeTrainingLoad(steady, steady.length)
