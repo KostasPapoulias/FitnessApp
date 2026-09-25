@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import {
-  getProfile, updateProfile, logSleep, logNutrition, getBiometrics, deleteAccount,
+  getProfile, updateProfile, logSleep, logNutrition, getBiometrics, deleteAccount, exportData,
 } from '../controllers/profile.controller';
+import { exportLimiter } from '../middleware/rateLimit.middleware';
 import {
   getOnboardingOptions,
   getOnboardingState,
@@ -84,6 +85,13 @@ router.post('/nutrition', logNutrition);
  * @returns a measurement series, oldest first. ?type= defaults to WEIGHT
  */
 router.get('/biometrics', getBiometrics);
+
+/**
+ * @route GET /api/profile/export
+ * @protected
+ * @returns everything held about the caller, for GDPR portability
+ */
+router.get('/export', exportLimiter, exportData);
 
 /**
  * @route DELETE /api/profile/account

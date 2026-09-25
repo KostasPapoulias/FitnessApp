@@ -6,6 +6,7 @@ import { Response } from 'express';
 import prisma from '../lib/prisma';
 import type { AuthRequest } from '../server';
 import { log } from '../lib/logger'
+import { fatigueColor } from '../services/data-export.service'
 import { INTL_LOCALE, Locale, localeOf } from '../lib/locale'
 
 // Muscle -> muscle-group mapping, mirrors the groups used on the
@@ -342,9 +343,7 @@ export const getCalendarDay = async (req: AuthRequest, res: Response) => {
           muscleName:       f.muscle.name,
           fatigueLevelAfter: f.fatigueLevelAfter,
           delta:            f.delta,
-          color:
-            f.fatigueLevelAfter >= 70 ? '#EF4444' :
-            f.fatigueLevelAfter >= 35 ? '#FACC15' : '#4ADE80'
+          color: fatigueColor(f.fatigueLevelAfter)
         }))
       }
     })

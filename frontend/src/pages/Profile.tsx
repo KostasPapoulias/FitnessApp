@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/useAuthStore'
 import { useFatigueStore } from '../store/useFatigueStore'
 import { useOnboardingStore } from '../store/useOnboardingStore'
 import { profileService } from '../services/profile.service'
+import { exportService } from '../services/export.service'
 import {
   cmToFeetInches, feetInchesToCm, kgToLb, lbToKg,
 } from '../services/onboarding.service'
@@ -522,6 +523,9 @@ export default function Profile() {
   const [settingsError, setSettingsError]   = useState<string | null>(null)
   const [weightSeries, setWeightSeries]     = useState<BiometricPoint[]>([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  // 'done' carries the filename, so the row can say where the export went
+  const [exportState, setExportState] =
+    useState<{ status: 'idle' | 'busy' | 'error' } | { status: 'done'; file: string }>({ status: 'idle' })
   const [pushEnabled, setPushEnabled]       = useState(false)
   const [prefs, setPrefs]                   = useState<NotificationPreferences | null>(null)
 
@@ -633,6 +637,29 @@ export default function Profile() {
       setSettings(previous)
       if (patch.language) setLocale(previousLocale)
       setSettingsError(t('profile.saveFailed'))
+    }
+  }
+
+  /**
+   * Fetch everything, render the report, save it.
+   *
+   * The report builder is loaded on demand: it carries the body artwork and
+   * a page of markup that nobody needs until they ask for an export.
+   */
+  const handleExport = async () => {
+    if (exportState.status === 'busy') return
+    setExportState({ status: 'busy' })
+    try {
+      const [data, report] = await Promise.all([
+        exportService.getAll(),
+        import('../lib/exportReport'),
+      ])
+      const html = report.buildExportHtml(data, { locale, gender: data.profile?.gender ?? null })
+      const file = report.exportFileName(data)
+      await report.saveExportFile(file, html)
+      setExportState({ status: 'done', file })
+    } catch {
+      setExportState({ status: 'error' })
     }
   }
 
@@ -1019,8 +1046,13 @@ export default function Profile() {
           <SettingsRow
             icon={<DownloadIcon />}
             label={t('profile.export')}
-            sublabel={t('profile.exportSub')}
-            onClick={() => alert(t('profile.exportSoon'))}
+            sublabel={
+              exportState.status === 'busy' ? t('profile.exporting')
+              : exportState.status === 'error' ? t('profile.exportFailed')
+              : exportState.status === 'done' ? t('profile.exportDone', { file: exportState.file })
+              : t('profile.exportSub')
+            }
+            onClick={handleExport}
           />
         </div>
 

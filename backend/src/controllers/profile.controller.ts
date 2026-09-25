@@ -5,6 +5,7 @@ import { yearsBetween } from './onboarding.controller'
 import { CLIENT_SETTINGS_SELECT } from './settings.controller'
 import { log } from '../lib/logger'
 import { parseBody } from '../lib/validate'
+import { buildDataExport } from '../services/data-export.service'
 import {
   logNutritionSchema, logSleepSchema, updateProfileSchema,
 } from '../schemas/profile.schema'
@@ -291,6 +292,24 @@ export const getBiometrics = async (req: AuthRequest, res: Response) => {
 }
 
 // DELETE /api/profile/account
+// GET /api/profile/export
+//
+// Everything the app holds about the caller, for the Export Data row. The
+// client renders it into a report and embeds this JSON inside that report, so
+// the response is the whole of what the person takes away. See the service
+// for what is deliberately left out.
+export const exportData = async (req: AuthRequest, res: Response) => {
+  try {
+    const data = await buildDataExport(req.userId!)
+    // A personal record, not something a proxy or the browser should keep
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ success: true, data })
+  } catch (error) {
+    log.error('exportData failed', error)
+    res.status(500).json({ success: false, error: 'Server error' })
+  }
+}
+
 export const deleteAccount = async (req: AuthRequest, res: Response) => {
   try {
     // Cascade deletes handle everything — one delete removes all user data

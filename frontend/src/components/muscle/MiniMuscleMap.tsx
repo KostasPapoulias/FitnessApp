@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { bodySvg, useBodyGender } from './bodyAssets'
 
-const MUSCLE_NAME_TO_GROUP: Record<string, string[]> = {
+// Exported for the data export, which draws the same map for every session and
+// must colour the same groups for the same muscle names.
+export const MUSCLE_NAME_TO_GROUP: Record<string, string[]> = {
   'Quadriceps': ['Quads'],
   'Hamstrings': ['Hamstrings'],
   'Glutes': ['Glutes'],

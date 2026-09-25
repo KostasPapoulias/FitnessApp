@@ -82,6 +82,22 @@ export const passwordResetLimiter = rateLimit({
 })
 
 /**
+ * The full data export.
+ *
+ * The heaviest read in the API — every session, every set, every run's route,
+ * in one response. Nobody needs it more than a couple of times in a row, and
+ * a client stuck retrying it would hold database connections the live screens
+ * need.
+ */
+export const exportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: json('Export limit reached. Try again in a few minutes.'),
+})
+
+/**
  * Everything else authenticated.
  *
  * Generous — this is a backstop against a runaway client or a scraper, not a
