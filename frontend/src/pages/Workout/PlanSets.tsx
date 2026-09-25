@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { templateService } from '../../services/template.service'
-import { rpeColor, cycleRpe, nextLoad } from './helpers'
+import { rpeColor, nextLoad } from './helpers'
+import NumberField from '../../components/workout/NumberField'
 import { LightbulbIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
 
@@ -216,7 +217,11 @@ export default function PlanSets() {
                       {/* reps */}
                       <div className="flex items-center justify-center gap-1">
                         <Step onClick={() => updateSet(ei, si, { reps: Math.max(1, s.reps - 1) })}>−</Step>
-                        <span className="flex-1 min-w-0 text-center text-[15px] font-bold tabular-nums">{s.reps}</span>
+                        <div className="flex-1 min-w-0">
+                          <NumberField kind="reps" label={`Set ${si + 1} reps`} value={s.reps}
+                            onChange={reps => updateSet(ei, si, { reps })}
+                            className="text-[15px] font-bold" />
+                        </div>
                         <Step onClick={() => updateSet(ei, si, { reps: s.reps + 1 })}>+</Step>
                       </div>
                       {/* weight */}
@@ -228,17 +233,19 @@ export default function PlanSets() {
                           weight: (v => ex.modality === 'Calisthenics' ? v : Math.max(0, v))(
                             nextLoad(s.weight, -1)),
                         })}>−</Step>
-                        <span className="flex-1 min-w-0 text-center text-[15px] font-bold tabular-nums">{s.weight}</span>
+                        <div className="flex-1 min-w-0">
+                          <NumberField kind="weight" label={`Set ${si + 1} weight`} value={s.weight}
+                            signed={ex.modality === 'Calisthenics'}
+                            onChange={weight => updateSet(ei, si, { weight })}
+                            className="text-[15px] font-bold" />
+                        </div>
                         <Step onClick={() => updateSet(ei, si, { weight: nextLoad(s.weight, 1) })}>+</Step>
                       </div>
                       {/* rpe */}
-                      <button
-                        onClick={() => updateSet(ei, si, { rpe: cycleRpe(s.rpe) })}
+                      <NumberField kind="rpe" label={`Set ${si + 1} RPE`} value={s.rpe}
+                        onChange={rpe => updateSet(ei, si, { rpe })}
                         className="text-[15px] font-extrabold"
-                        style={{ color: rpeColor(s.rpe) }}
-                      >
-                        {s.rpe}
-                      </button>
+                        style={{ color: rpeColor(s.rpe) }} />
                       {/* remove */}
                       <button
                         onClick={() => removeSet(ei, si)}

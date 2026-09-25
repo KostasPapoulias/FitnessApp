@@ -4,6 +4,7 @@ import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
 import { hapticCountdownTick } from '../../lib/haptics'
 import { announce } from '../../lib/speech'
 import { rpeColor, nextLoad } from './helpers'
+import NumberField from '../../components/workout/NumberField'
 import { SpeakerIcon, VibrateIcon } from '../../components/icons'
 
 interface RestTimerProps {
@@ -176,7 +177,11 @@ export default function RestTimer({
             {/* reps */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
               <p className="text-[10px] tracking-wide text-dark-400 mb-1">REPS</p>
-              <p className="text-[17px] font-extrabold tabular-nums mb-1.5">{nextSetObj.reps}</p>
+              <div className="mb-1.5 px-1">
+                <NumberField kind="reps" label="Next set reps" value={nextSetObj.reps}
+                  onChange={reps => updateSet(nEx, nSet, { reps })}
+                  className="text-[17px] font-extrabold" />
+              </div>
               <div className="flex items-center justify-center gap-1.5">
                 <MiniStep onClick={() => updateSet(nEx, nSet, { reps: Math.max(1, nextSetObj.reps - 1) })}>−</MiniStep>
                 <MiniStep onClick={() => updateSet(nEx, nSet, { reps: nextSetObj.reps + 1 })}>+</MiniStep>
@@ -187,7 +192,12 @@ export default function RestTimer({
               <p className="text-[10px] tracking-wide text-dark-400 mb-1">
                 {nextIsCalisthenics ? 'LOAD' : 'WEIGHT'}
               </p>
-              <p className="text-[17px] font-extrabold tabular-nums mb-1.5">{nextSetObj.weight}</p>
+              <div className="mb-1.5 px-1">
+                <NumberField kind="weight" label="Next set weight" value={nextSetObj.weight}
+                  signed={nextIsCalisthenics}
+                  onChange={weight => updateSet(nEx, nSet, { weight })}
+                  className="text-[17px] font-extrabold" />
+              </div>
               <div className="flex items-center justify-center gap-1.5">
                 <MiniStep onClick={() => updateSet(nEx, nSet, { weight: loadFloor(nextLoad(nextSetObj.weight, -1)) })}>−</MiniStep>
                 <MiniStep onClick={() => updateSet(nEx, nSet, { weight: nextLoad(nextSetObj.weight, 1) })}>+</MiniStep>
@@ -196,12 +206,12 @@ export default function RestTimer({
             {/* rpe */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
               <p className="text-[10px] tracking-wide text-dark-400 mb-1">RPE</p>
-              <button
-                onClick={() => updateSet(nEx, nSet, { rpe: (nextSetObj.rpe % 10) + 1 })}
-                className="text-xl font-extrabold py-1.5"
-                style={{ color: rpeColor(nextSetObj.rpe) }}>
-                {nextSetObj.rpe}
-              </button>
+              <div className="px-1">
+                <NumberField kind="rpe" label="Next set RPE" value={nextSetObj.rpe}
+                  onChange={rpe => updateSet(nEx, nSet, { rpe })}
+                  className="text-xl font-extrabold py-1.5"
+                  style={{ color: rpeColor(nextSetObj.rpe) }} />
+              </div>
             </div>
           </div>
         </div>

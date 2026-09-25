@@ -402,6 +402,8 @@ export interface ExerciseHistoryEntry {
   e1rm: number | null
   topWeight: number | null
   totalVolume: number
+  /** The athlete's note against the exercise that day, if any. */
+  notes: string | null
 }
 
 export interface ExerciseHistory {
@@ -411,4 +413,6 @@ export interface ExerciseHistory {
   bestE1rm: number | null
   /** Total sessions containing this exercise — may exceed `entries.length`. */
   sessionCount: number
+  /** Most recent note from any session — not necessarily `entries[0]`'s. */
+  lastNote: { text: string; dateTime: string } | null
 }

@@ -11,6 +11,7 @@ import { ROTATING_EXAMPLES } from '../../constants/voiceCommands'
 import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
 import ExerciseNotes, { ExerciseNotesHandle } from '../../components/workout/ExerciseNotes'
 import PreviousNote from '../../components/workout/PreviousNote'
+import NumberField from '../../components/workout/NumberField'
 import SaveToCalendar from '../../components/workout/SaveToCalendar'
 import SessionStatus from '../../components/workout/SessionCard'
 import RestTimer from './RestTimer'
@@ -28,6 +29,8 @@ export default function ActiveWorkout() {
   const navigate = useNavigate()
   // Lets the Note button at the bottom of the screen open the field at the top.
   const notesRef = useRef<ExerciseNotesHandle>(null)
+  // What the quick chips are centred on — see where they are built.
+  const chipAnchor = useRef<{ key: string; weight: number; reps: number } | null>(null)
   const {
     selectedExercises, sessionId, sessionStartTime,
     currentExerciseIndex, currentSetIndex, completedSets,
@@ -509,13 +512,40 @@ export default function ActiveWorkout() {
   const muscle = ex.muscles.map(m => m.name).join(' · ')
   const totalSets = currentExercise.sets.length
 
-  // Quick chips
-  const wBase = cur.weight
-  const weightChips = Array.from(new Set(
-    [wBase, nextLoad(wBase, 1), nextLoad(nextLoad(wBase, 1), 1), Math.max(0, nextLoad(wBase, -1))]
-      .map(w => Math.round(w * 10) / 10)))
-  const repChips = Array.from(new Set(
-    [Math.max(1, cur.reps - 2), cur.reps, cur.reps + 2, cur.reps + 4]))
+  // Quick chips — one step down, the plan, and two up, low to high.
+  //
+  // They were listed as [plan, +1, +2, −1], so the row read 20, 22.5, 25, 17.5:
+  // up, up, then a drop. And they were rebuilt around the CURRENT value, so
+  // tapping one re-centred the row under the finger and every chip changed
+  // number at once. Now they are anchored to the value the set started with
+  // and only re-centre when the value leaves them (a stepper, a typed number,
+  // a scrub) or the set changes. The ref is written during render, but only
+  // ever to a value derived from this render's props, so a StrictMode double
+  // render writes the same thing twice.
+  const chipKey = `${currentExerciseIndex}:${currentSetIndex}`
+  const anchor = chipAnchor.current
+  const chipsFor = (base: { weight: number; reps: number }) => ({
+    weight: Array.from(new Set([
+      Math.max(0, nextLoad(base.weight, -1)),
+      base.weight,
+      nextLoad(base.weight, 1),
+      nextLoad(nextLoad(base.weight, 1), 1),
+    ])),
+    reps: Array.from(new Set([
+      Math.max(1, base.reps - 2), base.reps, base.reps + 2, base.reps + 4,
+    ])),
+  })
+  if (!anchor || anchor.key !== chipKey) {
+    chipAnchor.current = { key: chipKey, weight: cur.weight, reps: cur.reps }
+  } else {
+    const held = chipsFor(anchor)
+    chipAnchor.current = {
+      key: chipKey,
+      weight: held.weight.includes(cur.weight) ? anchor.weight : cur.weight,
+      reps: held.reps.includes(cur.reps) ? anchor.reps : cur.reps,
+    }
+  }
+  const { weight: weightChips, reps: repChips } = chipsFor(chipAnchor.current!)
 
   // Up next
   let upNext: { title: string; detail: string }
@@ -629,7 +659,11 @@ export default function ActiveWorkout() {
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.max(0, nextLoad(cur.weight, -1)) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
                            bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
-              <span className="flex-1 min-w-0 text-center text-[22px] sm:text-[26px] font-extrabold tabular-nums">{cur.weight}</span>
+              <div className="flex-1 min-w-0">
+                <NumberField kind="weight" label="Weight" value={cur.weight}
+                  onChange={weight => updateSet(currentExerciseIndex, currentSetIndex, { weight })}
+                  className="text-[22px] sm:text-[26px] font-extrabold" />
+              </div>
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: nextLoad(cur.weight, 1) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
@@ -656,7 +690,11 @@ export default function ActiveWorkout() {
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: Math.max(1, cur.reps - 1) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
                            bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
-              <span className="flex-1 min-w-0 text-center text-[22px] sm:text-[26px] font-extrabold tabular-nums">{cur.reps}</span>
+              <div className="flex-1 min-w-0">
+                <NumberField kind="reps" label="Reps" value={cur.reps}
+                  onChange={reps => updateSet(currentExerciseIndex, currentSetIndex, { reps })}
+                  className="text-[22px] sm:text-[26px] font-extrabold" />
+              </div>
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: cur.reps + 1 })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600

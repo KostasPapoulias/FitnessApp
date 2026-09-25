@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { rpeColor, cycleRpe, nextLoad } from './helpers'
+import { rpeColor, nextLoad } from './helpers'
+import NumberField from '../../components/workout/NumberField'
 import { ModalityIcon } from '../../components/icons'
 
 const STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
@@ -157,7 +158,11 @@ export default function WorkoutQueue() {
                         <div className="text-xs font-bold text-dark-300 text-center">{si + 1}</div>
                         <div className="flex items-center justify-center gap-0.5">
                           <MiniStep onClick={() => updateSet(i, si, { reps: Math.max(1, s.reps - 1) })}>−</MiniStep>
-                          <span className="flex-1 min-w-0 truncate text-center text-[13px] font-bold tabular-nums">{s.reps}</span>
+                          <div className="flex-1 min-w-0">
+                            <NumberField kind="reps" label={`Set ${si + 1} reps`} value={s.reps}
+                              onChange={reps => updateSet(i, si, { reps })}
+                              className="text-[13px] font-bold" />
+                          </div>
                           <MiniStep onClick={() => updateSet(i, si, { reps: s.reps + 1 })}>+</MiniStep>
                         </div>
                         <div className="flex items-center justify-center gap-0.5">
@@ -167,13 +172,17 @@ export default function WorkoutQueue() {
                             weight: (v => e.exercise.modality === 'Calisthenics' ? v : Math.max(0, v))(
                               nextLoad(s.weight, -1)),
                           })}>−</MiniStep>
-                          <span className="flex-1 min-w-0 truncate text-center text-[13px] font-bold tabular-nums">{s.weight}</span>
+                          <div className="flex-1 min-w-0">
+                            <NumberField kind="weight" label={`Set ${si + 1} weight`} value={s.weight}
+                              signed={e.exercise.modality === 'Calisthenics'}
+                              onChange={weight => updateSet(i, si, { weight })}
+                              className="text-[13px] font-bold" />
+                          </div>
                           <MiniStep onClick={() => updateSet(i, si, { weight: nextLoad(s.weight, 1) })}>+</MiniStep>
                         </div>
-                        <button onClick={() => updateSet(i, si, { rpe: cycleRpe(s.rpe) })}
-                          className="text-sm font-extrabold" style={{ color: rpeColor(s.rpe) }}>
-                          {s.rpe}
-                        </button>
+                        <NumberField kind="rpe" label={`Set ${si + 1} RPE`} value={s.rpe}
+                          onChange={rpe => updateSet(i, si, { rpe })}
+                          className="text-sm font-extrabold" style={{ color: rpeColor(s.rpe) }} />
                         <button onClick={() => removeSet(i, si)}
                           className="w-5 h-6 rounded-[7px] text-dark-400 text-[15px]
                                      flex items-center justify-center">×</button>

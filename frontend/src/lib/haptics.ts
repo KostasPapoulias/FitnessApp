@@ -87,3 +87,29 @@ export const hapticSwitchSide = async () => {
     vibrate([160, 90, 160])
   }
 }
+
+/**
+ * A value scrubber, held. iOS only delivers `selectionChanged` between a
+ * `selectionStart` and a `selectionEnd` — outside that pair the tick is
+ * silently dropped — so the three travel together.
+ */
+export const hapticSelectionStart = async () => {
+  try { await Haptics.selectionStart() } catch { /* best-effort, see above */ }
+}
+
+/**
+ * One notch on the scrubber. The lightest thing the device offers — it fires
+ * once per step while a finger slides, so anything heavier becomes a buzz
+ * rather than a click.
+ */
+export const hapticSelectionTick = async () => {
+  try {
+    await Haptics.selectionChanged()
+  } catch {
+    vibrate(8)
+  }
+}
+
+export const hapticSelectionEnd = async () => {
+  try { await Haptics.selectionEnd() } catch { /* best-effort, see above */ }
+}
