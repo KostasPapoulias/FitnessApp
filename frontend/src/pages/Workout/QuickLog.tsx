@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SelectedExercise, useWorkoutStore } from '../../store/useWorkoutStore'
 import SaveToCalendar from '../../components/workout/SaveToCalendar'
-import { rpeColor, rpeTint, rpeWord, summariseSession } from './helpers'
+import { rpeColor, rpeTint, rpeWord, summariseSession, nextLoad } from './helpers'
 import { ModalityIcon } from '../../components/icons'
 
 const IcCheck = () => (
@@ -395,7 +395,7 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
             <div className="grid grid-cols-2 gap-2">
               <Stepper label="REPS" value={set.reps} step={1} min={1} max={1000}
                 onChange={reps => onChange({ reps })} />
-              <Stepper label="KG" value={set.weight} step={2.5} min={0} max={1000} decimal
+              <Stepper label="KG" value={set.weight} step={2.5} next={nextLoad} min={0} max={1000} decimal
                 onChange={weight => onChange({ weight })} />
             </div>
 
@@ -462,10 +462,12 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
  * emptied field reverts instead, because `Number('')` is 0 and a stray zero
  * would be logged as a set done at nothing.
  */
-function Stepper({ label, value, step, min, max, decimal, onChange }: {
+function Stepper({ label, value, step, next, min, max, decimal, onChange }: {
   label: string
   value: number
   step: number
+  /** Replaces the flat `step` for the buttons — weight steps on the plate grid. */
+  next?: (value: number, dir: 1 | -1) => number
   min: number
   max: number
   decimal?: boolean
@@ -493,7 +495,7 @@ function Stepper({ label, value, step, min, max, decimal, onChange }: {
       <p className="text-center text-[10px] tracking-widest text-dark-300 mb-1.5">{label}</p>
       <div className="flex items-center gap-1">
         <button className={btn} disabled={value <= min}
-          onClick={() => onChange(clamp(value - step))}>−</button>
+          onClick={() => onChange(clamp(next ? next(value, -1) : value - step))}>−</button>
         <input
           value={draft ?? String(value)}
           inputMode={decimal ? 'decimal' : 'numeric'}
@@ -507,7 +509,7 @@ function Stepper({ label, value, step, min, max, decimal, onChange }: {
                      tabular-nums outline-none focus:text-brand-teal"
         />
         <button className={btn} disabled={value >= max}
-          onClick={() => onChange(clamp(value + step))}>+</button>
+          onClick={() => onChange(clamp(next ? next(value, 1) : value + step))}>+</button>
       </div>
     </div>
   )

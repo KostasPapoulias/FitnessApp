@@ -1,5 +1,29 @@
 import { Exercise } from '../../types'
 
+// ── weight steppers ───────────────────────────────────────────────────────
+/**
+ * The next loadable weight from `kg`, one step up or down.
+ *
+ * Mirrors the backend's `roundToPlates` grid — 1 kg steps under 10 kg, 2.5 kg
+ * from there — so a +/− tap lands on the same numbers a suggestion does. A
+ * flat ±2.5 did not: from a 7 kg dumbbell it offered 9.5, and from an
+ * off-grid 20.9 it walked 23.4, 25.9… forever. Stepping from off the grid
+ * snaps to the nearest grid value in that direction rather than keeping the
+ * odd fraction.
+ *
+ * Signed, for calisthenics assistance: stepping down through zero goes into
+ * negative load on the same grid. Callers that must not go below zero clamp.
+ */
+export function nextLoad(kg: number, dir: 1 | -1): number {
+  // Probe a hair past `kg` so a value already on the grid moves a full step,
+  // and so the step size is the one on the side being moved into — down from
+  // 10 is 9, not 7.5.
+  const probe = kg + dir * 1e-6
+  const step = Math.abs(probe) < 10 ? 1 : 2.5
+  const n = dir > 0 ? Math.ceil(probe / step) : Math.floor(probe / step)
+  return n * step + 0
+}
+
 // ── RPE → colour / tint / word ────────────────────────────────────────────
 // Mirrors the SomaTrack design tokens: green → yellow → orange → red.
 export function rpeColor(n: number): string {

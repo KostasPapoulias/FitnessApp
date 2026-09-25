@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore, WodFormat } from '../../store/useWorkoutStore'
+import { nextLoad } from './helpers'
 
 const FORMATS: { id: WodFormat; label: string; blurb: string }[] = [
   { id: 'amrap',   label: 'AMRAP',    blurb: 'As many rounds as possible within the cap' },
@@ -143,8 +144,8 @@ export default function WodPlan() {
                   style={{ color: load > 0 ? '#F97316' : '#888888' }}>
                   {load > 0 ? `${load} kg` : 'Bodyweight'}
                 </span>
-                <Step onClick={() => setLoad(load - 2.5)} disabled={load <= 0}>−</Step>
-                <Step onClick={() => setLoad(load + 2.5)}>+</Step>
+                <Step onClick={() => setLoad(Math.max(0, nextLoad(load, -1)))} disabled={load <= 0}>−</Step>
+                <Step onClick={() => setLoad(nextLoad(load, 1))}>+</Step>
               </div>
             </div>
           )

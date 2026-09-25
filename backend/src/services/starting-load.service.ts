@@ -88,6 +88,38 @@ export const roundToLoadable = (kg: number): number => {
   return Math.round(kg / 5) * 5
 }
 
+export type PlateRounding = 'nearest' | 'up' | 'down'
+
+/**
+ * Snap a computed weight onto the grid a gym actually offers: 1 kg under
+ * 10 kg (light dumbbells), 2.5 kg from there up (the smallest plate pair).
+ *
+ * Separate from `roundToLoadable`, which is deliberately coarse for a first
+ * guess. This one is for numbers derived from history — a progression, a
+ * deload, a repeat — where the athlete's last weight is the reference and
+ * rounding to 5 kg would throw away a real 2.5 kg step. It exists because the
+ * progression service used to round to the hundredth, and 10% off 23.25 kg
+ * was offered as 20.93.
+ *
+ * The direction is the caller's, because it carries meaning: a progression
+ * rounded to nearest can land back on the weight it was meant to beat, and a
+ * deload rounded to nearest can land on the weight it was meant to back off.
+ * Works on the signed value, so for assisted calisthenics (negative load)
+ * `up` means less assistance — harder — just as it means heavier otherwise.
+ */
+export const roundToPlates = (kg: number, mode: PlateRounding = 'nearest'): number => {
+  if (!Number.isFinite(kg) || kg === 0) return 0
+  const step = Math.abs(kg) < 10 ? 1 : 2.5
+  const units = kg / step
+  // The nudge stops float noise deciding the direction: 22.5 / 2.5 can come
+  // out as 9.000000000000002, which a bare ceil would take to 10.
+  const n = mode === 'up' ? Math.ceil(units - 1e-9)
+    : mode === 'down' ? Math.floor(units + 1e-9)
+    : Math.round(units)
+  // `+ 0` folds -0 into 0, so a zeroed assistance never prints as "-0".
+  return n * step + 0
+}
+
 export interface LoadProfile {
   weight?: number | null
   gender?: string | null

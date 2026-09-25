@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { rpeColor, cycleRpe } from './helpers'
+import { rpeColor, cycleRpe, nextLoad } from './helpers'
 import { ModalityIcon } from '../../components/icons'
 
 const STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
@@ -165,10 +165,10 @@ export default function WorkoutQueue() {
                               machine assistance, not an invalid weight. */}
                           <MiniStep onClick={() => updateSet(i, si, {
                             weight: (v => e.exercise.modality === 'Calisthenics' ? v : Math.max(0, v))(
-                              Math.round((s.weight - 2.5) * 10) / 10),
+                              nextLoad(s.weight, -1)),
                           })}>−</MiniStep>
                           <span className="flex-1 min-w-0 truncate text-center text-[13px] font-bold tabular-nums">{s.weight}</span>
-                          <MiniStep onClick={() => updateSet(i, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</MiniStep>
+                          <MiniStep onClick={() => updateSet(i, si, { weight: nextLoad(s.weight, 1) })}>+</MiniStep>
                         </div>
                         <button onClick={() => updateSet(i, si, { rpe: cycleRpe(s.rpe) })}
                           className="text-sm font-extrabold" style={{ color: rpeColor(s.rpe) }}>

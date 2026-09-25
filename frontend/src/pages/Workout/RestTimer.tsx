@@ -3,7 +3,7 @@ import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
 import { hapticCountdownTick } from '../../lib/haptics'
 import { announce } from '../../lib/speech'
-import { rpeColor } from './helpers'
+import { rpeColor, nextLoad } from './helpers'
 import { SpeakerIcon, VibrateIcon } from '../../components/icons'
 
 interface RestTimerProps {
@@ -189,8 +189,8 @@ export default function RestTimer({
               </p>
               <p className="text-[17px] font-extrabold tabular-nums mb-1.5">{nextSetObj.weight}</p>
               <div className="flex items-center justify-center gap-1.5">
-                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: loadFloor(Math.round((nextSetObj.weight - 2.5) * 10) / 10) })}>−</MiniStep>
-                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: Math.round((nextSetObj.weight + 2.5) * 10) / 10 })}>+</MiniStep>
+                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: loadFloor(nextLoad(nextSetObj.weight, -1)) })}>−</MiniStep>
+                <MiniStep onClick={() => updateSet(nEx, nSet, { weight: nextLoad(nextSetObj.weight, 1) })}>+</MiniStep>
               </div>
             </div>
             {/* rpe */}

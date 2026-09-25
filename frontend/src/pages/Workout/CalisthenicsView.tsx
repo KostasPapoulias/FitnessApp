@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
-import { rpeColor, rpeWord, fmtTime } from './helpers'
+import { rpeColor, rpeWord, fmtTime, nextLoad } from './helpers'
 import {
   ModalityViewProps, LiveHeader, SegmentBar, RpeRow, UpNext,
 } from './LiveShared'
@@ -47,7 +47,7 @@ const bigStep =
 /** The signed-load stepper. Shared by the rep and hold branches — a band-assisted
  *  front lever and a weighted plank are both ordinary. */
 function LoadBox({ load, onChange }: { load: number; onChange: (next: number) => void }) {
-  const step = (delta: number) => onChange(Math.round((load + delta) * 10) / 10)
+  const step = (dir: 1 | -1) => onChange(nextLoad(load, dir))
   return (
     <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3 text-center">
       <p className="text-[10px] tracking-wide text-dark-400 mb-1.5">LOAD / ASSIST</p>
@@ -58,8 +58,8 @@ function LoadBox({ load, onChange }: { load: number; onChange: (next: number) =>
         {loadLabel(load)}
       </p>
       <div className="flex items-center justify-center gap-3">
-        <button className={stepBtn} onClick={() => step(-2.5)}>−</button>
-        <button className={stepBtn} onClick={() => step(2.5)}>+</button>
+        <button className={stepBtn} onClick={() => step(-1)}>−</button>
+        <button className={stepBtn} onClick={() => step(1)}>+</button>
       </div>
     </div>
   )

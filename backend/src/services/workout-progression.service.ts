@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma'
+import { roundToPlates } from './starting-load.service'
 
 /**
  * What to put in front of the athlete when they plan an exercise.
@@ -27,13 +28,32 @@ const DELOAD_FRACTION = 0.9
 const STALE_DAYS = 14
 const STALE_FRACTION = 0.9
 
-/** Smallest jump worth making, by how heavy the lift already is. */
+/**
+ * Smallest jump worth making, by how heavy the lift already is.
+ *
+ * Kept on the grid `roundToPlates` snaps to. There used to be a 1.25 kg tier
+ * for 15–40 kg, which is not a load anyone can put on a bar or pick off a
+ * rack — it produced 21.25 kg suggestions. Below 10 kg the grid is 1 kg, so
+ * light isolation work still moves in small steps.
+ */
 const loadIncrement = (weight: number): number => {
   if (weight >= 100) return 5
-  if (weight >= 40) return 2.5
-  // Light isolation work: 2.5 kg on a 10 kg curl is a 25% jump
-  if (weight >= 15) return 1.25
+  if (weight >= 10) return 2.5
   return 1
+}
+
+/**
+ * Back a load off by `fraction`, rounded DOWN onto the plate grid.
+ *
+ * Down, because the point is to be lighter — rounding to nearest could land
+ * a 10% deload straight back on the weight it was backing off. Taken off the
+ * magnitude, so an assisted movement (negative load) gets more assistance
+ * rather than less. A positive load never rounds away to nothing: a 1 kg
+ * raise backed off is still a 1 kg raise, not an empty hand.
+ */
+const backOff = (weight: number, fraction: number): number => {
+  const lighter = roundToPlates(weight - Math.abs(weight) * (1 - fraction), 'down')
+  return weight > 0 ? Math.max(lighter, Math.min(weight, 1)) : lighter
 }
 
 export type ProgressionBasis =
@@ -183,7 +203,7 @@ export const suggestForExercise = async (
   if (history.length === 0) {
     if (e1rm && e1rm > 0 && (modality === 'Strength' || modality === 'Calisthenics')) {
       // A working set around 70% of a max is a normal hypertrophy load
-      const working = round(Math.max(1, e1rm * 0.7))
+      const working = Math.max(1, roundToPlates(e1rm * 0.7))
       return {
         ...base,
         basis: 'estimate',
@@ -195,7 +215,9 @@ export const suggestForExercise = async (
       ...base,
       basis: 'default',
       note: 'No history yet — adjust these and they’ll be remembered next time.',
-      sets: fallback,
+      // The fallback can come from the client, whose placeholder is not
+      // guaranteed to sit on the grid.
+      sets: fallback.map(set => ({ ...set, weight: roundToPlates(set.weight) })),
     }
   }
 
@@ -205,10 +227,13 @@ export const suggestForExercise = async (
   const rpe = avgRpe(lastSets)
   const idleDays = daysBetween(new Date(), last.date)
 
-  // Shape the next session on what was actually performed, not on a template
+  // Shape the next session on what was actually performed, not on a template.
+  // Snapped to the grid even when repeated as-is: a weight typed on the live
+  // screen can be anything, and "same as last time, 20.9 kg" is not a number
+  // anyone can load.
   const shape = lastSets.map(set => ({
     reps: set.reps,
-    weight: set.weight,
+    weight: roundToPlates(set.weight),
     rpe: set.rpe ?? 8,
     restSeconds: fallback[0]?.restSeconds ?? 90,
   }))
@@ -219,7 +244,7 @@ export const suggestForExercise = async (
       ...base,
       basis: 'return',
       note: `${idleDays} days since you last did this — starting ~10% under to ease back in.`,
-      sets: shape.map(set => ({ ...set, weight: round(set.weight * STALE_FRACTION) })),
+      sets: shape.map(set => ({ ...set, weight: backOff(set.weight, STALE_FRACTION) })),
     }
   }
 
@@ -230,7 +255,7 @@ export const suggestForExercise = async (
       ...base,
       basis: 'deload',
       note: `Two hard sessions in a row at ${heaviest} kg. Dropping 10% to rebuild.`,
-      sets: shape.map(set => ({ ...set, weight: round(set.weight * DELOAD_FRACTION) })),
+      sets: shape.map(set => ({ ...set, weight: backOff(set.weight, DELOAD_FRACTION) })),
     }
   }
 
@@ -252,7 +277,9 @@ export const suggestForExercise = async (
       ...base,
       basis: 'progression',
       note: `You hit this at RPE ${round(rpe)} — up ${bump} kg.`,
-      sets: shape.map(set => ({ ...set, weight: round(set.weight + bump) })),
+      // Up, so a set that sat between grid steps still ends up heavier than
+      // last time rather than rounding back onto it.
+      sets: shape.map(set => ({ ...set, weight: roundToPlates(set.weight + bump, 'up') })),
     }
   }
 

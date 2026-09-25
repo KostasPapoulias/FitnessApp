@@ -20,7 +20,7 @@ import CardioView from './CardioView'
 import WodView from './WodView'
 import type { LogPayload, ModalityVoiceHandler } from './LiveShared'
 import {
-  rpeColor, rpeTint, rpeLabel, fmtTime, RpeMode, summariseSession,
+  rpeColor, rpeTint, rpeLabel, fmtTime, RpeMode, summariseSession, nextLoad,
 } from './helpers'
 import { AlertTriangleIcon, ListIcon, MicIcon, MicOffIcon, NoteIcon, WifiOffIcon } from '../../components/icons'
 
@@ -512,7 +512,7 @@ export default function ActiveWorkout() {
   // Quick chips
   const wBase = cur.weight
   const weightChips = Array.from(new Set(
-    [wBase, wBase + 2.5, wBase + 5, Math.max(0, wBase - 2.5)]
+    [wBase, nextLoad(wBase, 1), nextLoad(nextLoad(wBase, 1), 1), Math.max(0, nextLoad(wBase, -1))]
       .map(w => Math.round(w * 10) / 10)))
   const repChips = Array.from(new Set(
     [Math.max(1, cur.reps - 2), cur.reps, cur.reps + 2, cur.reps + 4]))
@@ -626,12 +626,12 @@ export default function ActiveWorkout() {
             <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">WEIGHT (KG)</p>
             <div className="flex items-center justify-center gap-1.5">
               <button
-                onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.max(0, Math.round((cur.weight - 2.5) * 10) / 10) })}
+                onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.max(0, nextLoad(cur.weight, -1)) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
                            bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
               <span className="flex-1 min-w-0 text-center text-[22px] sm:text-[26px] font-extrabold tabular-nums">{cur.weight}</span>
               <button
-                onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.round((cur.weight + 2.5) * 10) / 10 })}
+                onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: nextLoad(cur.weight, 1) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
                            bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">+</button>
             </div>

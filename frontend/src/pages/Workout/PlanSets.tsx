@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { templateService } from '../../services/template.service'
-import { rpeColor, cycleRpe } from './helpers'
+import { rpeColor, cycleRpe, nextLoad } from './helpers'
 import { LightbulbIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
 
@@ -226,10 +226,10 @@ export default function PlanSets() {
                             like any other. Every other modality floors at 0. */}
                         <Step onClick={() => updateSet(ei, si, {
                           weight: (v => ex.modality === 'Calisthenics' ? v : Math.max(0, v))(
-                            Math.round((s.weight - 2.5) * 10) / 10),
+                            nextLoad(s.weight, -1)),
                         })}>−</Step>
                         <span className="flex-1 min-w-0 text-center text-[15px] font-bold tabular-nums">{s.weight}</span>
-                        <Step onClick={() => updateSet(ei, si, { weight: Math.round((s.weight + 2.5) * 10) / 10 })}>+</Step>
+                        <Step onClick={() => updateSet(ei, si, { weight: nextLoad(s.weight, 1) })}>+</Step>
                       </div>
                       {/* rpe */}
                       <button
