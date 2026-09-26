@@ -175,14 +175,15 @@ export const verifyPin = async (req: AuthRequest, res: Response) => {
       // Count failures server-side; lock after MAX_PIN_ATTEMPTS
       const attempts = settings.pinFailedAttempts + 1
       const lock = attempts >= MAX_PIN_ATTEMPTS
+      const lockedUntil = lock
+        ? new Date(now.getTime() + LOCKOUT_MINUTES * 60_000)
+        : null
 
       await prisma.settings.update({
         where: { userId: req.userId! },
         data: {
           pinFailedAttempts: lock ? 0 : attempts,
-          pinLockedUntil: lock
-            ? new Date(now.getTime() + LOCKOUT_MINUTES * 60_000)
-            : null,
+          pinLockedUntil: lockedUntil,
         },
       })
 
@@ -192,6 +193,10 @@ export const verifyPin = async (req: AuthRequest, res: Response) => {
           ? `Too many attempts. Locked for ${LOCKOUT_MINUTES} minutes.`
           : 'Incorrect PIN.',
         attemptsRemaining: lock ? 0 : MAX_PIN_ATTEMPTS - attempts,
+        // Returned on the response that *starts* the lock, not just on the 429s
+        // that follow it, so the lock screen can disable its keypad and count
+        // down instead of inviting attempts that can only come back rejected.
+        lockedUntil,
       })
       return
     }

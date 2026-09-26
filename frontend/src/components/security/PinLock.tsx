@@ -14,11 +14,39 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [shake, setShake] = useState(false)
+  /**
+   * Epoch ms the server's lockout ends, from `lockedUntil` on the 401 that
+   * starts it or the 429s that follow. Without it the pad stayed live through a
+   * lockout, so every further entry earned another rejected request, and the
+   * "try again in 286s" message never moved.
+   */
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const { t } = useT()
+
+  const lockedFor = lockedUntil ? Math.max(0, Math.ceil((lockedUntil - now) / 1000)) : 0
+  const locked = lockedFor > 0
+
+  // Re-render once a second while locked, so the countdown actually counts
+  useEffect(() => {
+    if (!locked) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [locked])
+
+  // Clear the entry and the message the moment the lock expires
+  useEffect(() => {
+    if (lockedUntil && !locked) {
+      setLockedUntil(null)
+      setError(null)
+      setPin('')
+    }
+  }, [locked, lockedUntil])
 
   // No submit button: verify from the 4th digit on, and again on each further digit
   useEffect(() => {
-    if (pin.length < 4 || busy) return
+    // No request while locked out — the server would only reject it
+    if (pin.length < 4 || busy || locked) return
 
     let cancelled = false
     const attempt = async () => {
@@ -28,7 +56,10 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
         if (!cancelled) onUnlock()
       } catch (err: any) {
         if (cancelled) return
-        setError(err?.response?.data?.error ?? t('pin.incorrect'))
+        const data = err?.response?.data
+        setError(data?.error ?? t('pin.incorrect'))
+        // Present on the 401 that starts the lock and on every 429 after it
+        if (data?.lockedUntil) setLockedUntil(new Date(data.lockedUntil).getTime())
         setShake(true)
         setPin('')
         setTimeout(() => setShake(false), 420)
@@ -45,6 +76,9 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
   // The length cap lives in the updater: the keyboard listener can land keys
   // faster than React re-renders
   const press = (key: string) => {
+    // Inert while locked out, so the countdown message is not wiped and no
+    // further doomed request is queued. Covers the hardware keyboard too.
+    if (locked) return
     setError(null)
     if (key === '⌫') return setPin(p => p.slice(0, -1))
     if (key === '') return
@@ -56,7 +90,10 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
 
   // Desktop keyboard entry, listened for on window (an input would raise the phone keyboard)
   useEffect(() => {
-    if (busy) return
+    // `locked` as well as `busy`: the listener closes over `press`, so without
+    // re-subscribing when the lock engages it would keep the stale closure and
+    // the hardware keyboard would still take digits through a lockout.
+    if (busy || locked) return
 
     const onKeyDown = (e: KeyboardEvent) => {
       // Leave browser and OS shortcuts alone
@@ -91,7 +128,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
       // The keyup may land while busy, with no listener
       setLitKey(null)
     }
-  }, [busy])
+  }, [busy, locked])
 
   // Scrolls instead of clipping when the pad is taller than the viewport
   return (
@@ -101,7 +138,11 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
       <LockIcon className="w-11 h-11 mb-4 text-brand-teal" />
       <h1 className="text-xl font-extrabold">{t('pin.title')}</h1>
       <p className="text-dark-300 text-[13px] mt-1.5 text-center max-w-[260px]">
-        {error ?? t('pin.locked')}
+        {/* While locked, the live remaining time replaces the server's fixed
+            wording, which was a snapshot from the moment of the response */}
+        {locked
+          ? `Too many attempts. Try again in ${Math.floor(lockedFor / 60)}:${String(lockedFor % 60).padStart(2, '0')}.`
+          : error ?? t('pin.locked')}
       </p>
 
       {/* Dots */}
@@ -119,7 +160,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
           <button
             key={i}
             onClick={() => press(key)}
-            disabled={busy || key === ''}
+            disabled={busy || locked || key === ''}
             className={`h-[62px] rounded-full text-[22px] font-semibold
                         active:scale-90 transition-transform disabled:opacity-30
                         ${key === '' ? 'invisible'
