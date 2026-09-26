@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
@@ -36,13 +36,18 @@ export default function ActiveWorkout() {
     currentExerciseIndex, currentSetIndex, completedSets,
     startSession, completeSet, updateSet, setCurrent, setExerciseNotes,
     startError, logError, clearErrors, queuedSetCount,
+    restEndsAt, setRestEndsAt,
   } = useWorkoutStore()
 
   // The finish request itself lives on the Finish screen
   const { notifyRestComplete } = useNotifications()
 
   const [isStarting, setIsStarting] = useState(false)
-  const [showRest, setShowRest] = useState(false)
+  // Seeded from the persisted deadline, so a refresh mid-rest lands back on the
+  // rest screen rather than skipping straight to the next set.
+  const [showRest, setShowRest] = useState(
+    () => (useWorkoutStore.getState().restEndsAt ?? 0) > Date.now()
+  )
   const [isFinishing, setIsFinishing] = useState(false)
   /** A set log is in flight — blocks a double tap on Set Done. */
   const [isLoggingSet, setIsLoggingSet] = useState(false)
@@ -129,6 +134,8 @@ export default function ActiveWorkout() {
       if (final) handleFinish()
       else {
         setRestPaused(false)
+        // Deadline first, so a refresh a second later can resume the countdown
+        setRestEndsAt(Date.now() + payload.restSeconds * 1000)
         setShowRest(true)
         if (audio) void announce(cues.restStarting(payload.restSeconds))
       }
@@ -183,9 +190,27 @@ export default function ActiveWorkout() {
     return next ? cues.nextExercise(next.exercise.name, next.sets.length) : null
   }
 
+  /**
+   * How long RestTimer should count. Taken from the persisted deadline, so
+   * resuming after a refresh continues the countdown rather than restarting it
+   * at full length.
+   *
+   * Memoised deliberately: RestTimer resets its countdown whenever `seconds`
+   * changes, and this component re-renders every second for the elapsed clock,
+   * so computing it inline from Date.now() would restart the rest every tick.
+   */
+  const restSecondsForTimer = useMemo(
+    () => (restEndsAt
+      ? Math.max(1, Math.round((restEndsAt - Date.now()) / 1000))
+      : currentSetPlan?.restSeconds ?? 90),
+    [restEndsAt, currentSetPlan?.restSeconds],
+  )
+
   const advance = () => {
     setShowRest(false)
     setRestPaused(false)
+    // Rest is over — drop the deadline so a later refresh does not re-enter it
+    setRestEndsAt(null)
     const ex = selectedExercises[currentExerciseIndex]
     if (!ex) return
     if (currentSetIndex + 1 < ex.sets.length) {
@@ -347,7 +372,7 @@ export default function ActiveWorkout() {
       <>
       {endArmedBanner}
       <RestTimer
-        seconds={currentSetPlan?.restSeconds ?? 90}
+        seconds={restSecondsForTimer}
         workoutTime={fmtTime(elapsed)}
         setInfo={{
           exercise: currentExercise.exercise.name,

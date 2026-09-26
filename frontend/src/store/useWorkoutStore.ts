@@ -132,6 +132,13 @@ interface WorkoutStore {
   currentExerciseIndex: number
   currentSetIndex: number
   completedSets: { exerciseId: string; setIndex: number }[]
+  /**
+   * Epoch ms when the current rest ends, or null when not resting. Kept in the
+   * store (and persisted) rather than in RestTimer, so a refresh mid-rest
+   * resumes the countdown instead of dropping straight into the next set.
+   */
+  restEndsAt: number | null
+  setRestEndsAt: (endsAt: number | null) => void
 
   /**
    * `registerExercises: false` opens the session with no exercises attached
@@ -197,6 +204,8 @@ export const useWorkoutStore = create<WorkoutStore>()(persist((set, get) => ({
   currentExerciseIndex: 0,
   currentSetIndex: 0,
   completedSets: [],
+  restEndsAt: null,
+  setRestEndsAt: (endsAt) => set({ restEndsAt: endsAt }),
   cardioTarget: null,
   wodConfig: null,
   startError: null,
@@ -314,6 +323,7 @@ export const useWorkoutStore = create<WorkoutStore>()(persist((set, get) => ({
     currentExerciseIndex: 0,
     currentSetIndex: 0,
     completedSets: [],
+    restEndsAt: null,
     cardioTarget: null,
     wodConfig: null,
     startError: null,
@@ -495,6 +505,7 @@ export const useWorkoutStore = create<WorkoutStore>()(persist((set, get) => ({
           currentExerciseIndex: firstLive < 0 ? 0 : firstLive,
           currentSetIndex: 0,
           completedSets: [],
+          restEndsAt: null,
         })
 
         // Only non-skipped exercises (skipped ones would become empty rows)
@@ -776,6 +787,7 @@ export const useWorkoutStore = create<WorkoutStore>()(persist((set, get) => ({
     currentExerciseIndex: state.currentExerciseIndex,
     currentSetIndex: state.currentSetIndex,
     completedSets: state.completedSets,
+    restEndsAt: state.restEndsAt,
     cardioTarget: state.cardioTarget,
     wodConfig: state.wodConfig,
     sourceTemplateId: state.sourceTemplateId,
@@ -827,6 +839,7 @@ async function doFinish(
     currentExerciseIndex: 0,
     currentSetIndex: 0,
     completedSets: [],
+    restEndsAt: null,
     cardioTarget: null,
     wodConfig: null,
     startError: null,
