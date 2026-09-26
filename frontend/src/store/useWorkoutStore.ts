@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { Exercise, WorkoutSession, WorkoutTemplate } from '../types'
 import { PlanSuggestion, workoutService } from '../services/workout.service'
 import { TemplateInput, templateService } from '../services/template.service'
@@ -186,7 +187,7 @@ const MODALITY_SET_TYPE: Record<string, string> = {
   Mobility: 'MOBILITY',
 }
 
-export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
+export const useWorkoutStore = create<WorkoutStore>()(persist((set, get) => ({
   activeSession: null,
   selectedExercises: [],
   suggestionsLoading: false,
@@ -752,6 +753,51 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
     return finishInFlight
   }
+}), {
+  name: 'somatrack_workout',
+
+  /**
+   * Only the in-progress session is kept. A hard refresh mid-workout used to
+   * drop `sessionId`, the planned sets and `completedSets`, so ActiveWorkout
+   * remounted empty ("No exercises selected") and `startSession` — seeing a
+   * null sessionId — opened a *second* server session, orphaning the first one
+   * along with the sets already logged against it. Restoring the id is what
+   * makes startSession's `if (get().sessionId) return` guard hold across a
+   * reload.
+   *
+   * Transient fields are deliberately excluded: errors and loading flags should
+   * not survive a reload, and queuedSetCount is derived from the retry queue.
+   */
+  partialize: (state) => ({
+    activeSession: state.activeSession,
+    selectedExercises: state.selectedExercises,
+    sessionId: state.sessionId,
+    sessionStartTime: state.sessionStartTime,
+    currentExerciseIndex: state.currentExerciseIndex,
+    currentSetIndex: state.currentSetIndex,
+    completedSets: state.completedSets,
+    cardioTarget: state.cardioTarget,
+    wodConfig: state.wodConfig,
+    sourceTemplateId: state.sourceTemplateId,
+    sourceScheduledId: state.sourceScheduledId,
+    quickLog: state.quickLog,
+  }) as unknown as WorkoutStore,
+
+  /**
+   * JSON has no Date. `sessionStartTime` comes back as a string, and the
+   * elapsed-time readers in ActiveWorkout and QuickLog call `.getTime()` on it
+   * directly, so it is revived here rather than defended against at each site.
+   */
+  merge: (persisted, current) => {
+    const saved = (persisted ?? {}) as Partial<WorkoutStore>
+    return {
+      ...current,
+      ...saved,
+      sessionStartTime: saved.sessionStartTime
+        ? new Date(saved.sessionStartTime as unknown as string)
+        : null,
+    }
+  },
 }))
 
 // Sends the finish request and clears the workout from the store.

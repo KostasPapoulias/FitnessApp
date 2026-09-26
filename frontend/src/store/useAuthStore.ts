@@ -91,6 +91,9 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         localStorage.removeItem('somatrack_token')
+        // The persisted in-progress workout belongs to this account, not to
+        // whoever signs in next on the same device.
+        localStorage.removeItem('somatrack_workout')
         set({ user: null, token: null, isAuthenticated: false, isBootstrapping: false })
       },
 
