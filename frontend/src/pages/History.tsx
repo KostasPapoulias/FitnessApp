@@ -17,10 +17,20 @@ const fmtDate = (iso: string) => {
   })
 }
 
-const fmtDuration = (minutes: number) =>
-  minutes >= 60
-    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-    : `${minutes}m`
+/**
+ * A session's length. `duration` arrives from the API in SECONDS — see the
+ * `HistoryRow.duration` doc comment in workout-history.service ("Seconds.
+ * Never null"). This read it as minutes, so a 3m19s run printed as "3h 19m"
+ * and a 36s session as "36m".
+ */
+const fmtDuration = (seconds: number) => {
+  const total = Math.max(0, Math.round(seconds))
+  // Sub-minute sessions are real (a single sprint), and "0m" reads as an error
+  if (total < 60) return `${total}s`
+  const minutes = Math.round(total / 60)
+  if (minutes < 60) return `${minutes}m`
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+}
 
 /** A session's one-line summary: distance, tonnage, or set count, by what it contains. */
 const summarise = (session: HistoryRow): string => {

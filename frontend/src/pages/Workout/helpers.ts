@@ -6,13 +6,27 @@ import { Exercise } from '../../types'
  * `roundToPlates` grid (1 kg below 10 kg, 2.5 kg above). Off-grid values snap
  * to the grid. Signed, for assisted calisthenics; callers clamp at zero.
  */
+/**
+ * Loadable-weight bounds, shared with NumberField's BOUNDS.weight so the
+ * stepper and the typed field cannot drift apart. Negative is calisthenics
+ * assistance.
+ */
+export const LOAD_MAX_KG = 1000
+export const LOAD_MIN_KG = -200
+
 export function nextLoad(kg: number, dir: 1 | -1): number {
   // Probe just past `kg`, so on-grid values move a full step and the step
   // size is the one on the side being entered (down from 10 is 9)
   const probe = kg + dir * 1e-6
   const step = Math.abs(probe) < 10 ? 1 : 2.5
   const n = dir > 0 ? Math.ceil(probe / step) : Math.floor(probe / step)
-  return n * step + 0
+  // Clamped here rather than at each call site. Every "+" in the app steps
+  // through this — ActiveWorkout's quick chips and stepper, PlanSets,
+  // WorkoutQueue, RestTimer, WodPlan, CalisthenicsView — and each clamped only
+  // the floor with Math.max(0, ...), so holding "+" walked straight past the
+  // 1000 kg ceiling that the typed field and the picker both enforce.
+  // The trailing + 0 normalises -0 to 0.
+  return Math.min(LOAD_MAX_KG, Math.max(LOAD_MIN_KG, n * step)) + 0
 }
 
 // ── RPE → colour / tint / word ────────────────────────────────────────────

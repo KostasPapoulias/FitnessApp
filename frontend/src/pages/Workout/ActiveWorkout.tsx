@@ -44,6 +44,10 @@ export default function ActiveWorkout() {
   const [isStarting, setIsStarting] = useState(false)
   const [showRest, setShowRest] = useState(false)
   const [isFinishing, setIsFinishing] = useState(false)
+  /** A set log is in flight — blocks a double tap on Set Done. */
+  const [isLoggingSet, setIsLoggingSet] = useState(false)
+  /** The authoritative guard; state lags a tick and two fast taps would pass it. */
+  const logInFlight = useRef(false)
   const [rpeMode, setRpeMode] = useState<RpeMode>('standard')
   const [elapsed, setElapsed] = useState(0)
   const [restPaused, setRestPaused] = useState(false)
@@ -109,21 +113,41 @@ export default function ActiveWorkout() {
   }
 
   const logAndRest = async (payload: LogPayload) => {
-    // Decide before awaiting — the indices can move meanwhile
-    const final = isFinalSet(currentExerciseIndex, currentSetIndex)
-    if (!(await completeSet(payload))) return
-    confirmLogged(payload)
-    // The last set ends the workout instead of starting a rest
-    if (final) handleFinish()
-    else {
-      setRestPaused(false)
-      setShowRest(true)
-      if (audio) void announce(cues.restStarting(payload.restSeconds))
+    // A second tap while the POST is open logged the set twice: the first
+    // request won and the second came back 500, silently. The ref is the real
+    // guard (two taps in one tick would both pass a state check); isLoggingSet
+    // only drives the button.
+    if (logInFlight.current) return
+    logInFlight.current = true
+    setIsLoggingSet(true)
+    try {
+      // Decide before awaiting — the indices can move meanwhile
+      const final = isFinalSet(currentExerciseIndex, currentSetIndex)
+      if (!(await completeSet(payload))) return
+      confirmLogged(payload)
+      // The last set ends the workout instead of starting a rest
+      if (final) handleFinish()
+      else {
+        setRestPaused(false)
+        setShowRest(true)
+        if (audio) void announce(cues.restStarting(payload.restSeconds))
+      }
+    } finally {
+      logInFlight.current = false
+      setIsLoggingSet(false)
     }
   }
   // Log a set and move on without rest (mobility)
   const logAndAdvance = async (payload: LogPayload) => {
-    if (await completeSet(payload)) { confirmLogged(payload); advance() }
+    if (logInFlight.current) return
+    logInFlight.current = true
+    setIsLoggingSet(true)
+    try {
+      if (await completeSet(payload)) { confirmLogged(payload); advance() }
+    } finally {
+      logInFlight.current = false
+      setIsLoggingSet(false)
+    }
   }
 
   /**
@@ -692,9 +716,11 @@ export default function ActiveWorkout() {
           />
           <button
             onClick={() => handleSetDone()}
+            disabled={isLoggingSet}
             className="w-full py-[17px] rounded-btn bg-brand-teal text-black
-                       text-[17px] font-extrabold active:scale-95 transition-transform">
-            ✓ Set Done — Start Rest
+                       text-[17px] font-extrabold active:scale-95 transition-transform
+                       disabled:opacity-60">
+            {isLoggingSet ? 'Logging…' : '✓ Set Done — Start Rest'}
           </button>
         </div>
       </div>

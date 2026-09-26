@@ -1,6 +1,6 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
-import { nextLoad } from '../../pages/Workout/helpers'
+import { nextLoad, LOAD_MAX_KG, LOAD_MIN_KG } from '../../pages/Workout/helpers'
 import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
 import {
   hapticSelectionEnd, hapticSelectionStart, hapticSelectionTick,
@@ -46,8 +46,9 @@ const SCROLL_MS = 110
 const EDGE_PX = 8
 
 const BOUNDS: Record<NumberKind, { min: number; max: number }> = {
-  // Physical bounds, like the server's schema scalars
-  weight: { min: 0, max: 1000 },
+  // Physical bounds, like the server's schema scalars. Weight shares its
+  // ceiling with nextLoad, so the stepper and this field stop at the same place.
+  weight: { min: 0, max: LOAD_MAX_KG },
   reps: { min: 1, max: 999 },
   rpe: { min: 1, max: 10 },
 }
@@ -75,7 +76,7 @@ interface PickerState {
 export default function NumberField({
   value, onChange, kind, label, signed, className = '', style,
 }: Props) {
-  const min = kind === 'weight' && signed ? -200 : BOUNDS[kind].min
+  const min = kind === 'weight' && signed ? LOAD_MIN_KG : BOUNDS[kind].min
   const max = BOUNDS[kind].max
   const clamp = (n: number) => Math.min(max, Math.max(min, n))
 

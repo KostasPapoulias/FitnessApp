@@ -22,6 +22,25 @@ interface Snapshot {
   elapsed: number
 }
 
+/**
+ * One exercise's summary line. Only strength-style sets carry a weight, so this
+ * used to render "1 sets · top 0kg × 0" for a run, a stretch or a metcon. The
+ * snapshot holds reps and weight only — a cardio set's distance, a mobility
+ * hold and a WOD's rounds are logged through completeSet and are not captured
+ * here — so the line states what it actually knows instead of printing zeros.
+ */
+const describeExercise = (e: SnapshotExercise): string => {
+  const sets = `${e.count} ${e.count === 1 ? 'set' : 'sets'}`
+  if (e.topWeight > 0) return `${sets} · top ${e.topWeight}kg × ${e.topReps}`
+  if (e.topReps > 0) {
+    // Mobility keeps its hold seconds in the reps field (see defaultSetsFor)
+    return e.modality === 'Mobility'
+      ? `${sets} · longest hold ${e.topReps}s`
+      : `${sets} · best ${e.topReps} reps`
+  }
+  return sets
+}
+
 export default function Finish() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -166,7 +185,7 @@ export default function Finish() {
               <div className="flex-1 min-w-0">
                 <p className="text-[14.5px] font-bold truncate">{e.name}</p>
                 <p className="text-xs text-dark-300 mt-0.5">
-                  {e.count} sets · top {e.topWeight}kg × {e.topReps}
+                  {describeExercise(e)}
                 </p>
               </div>
               <span className="text-brand-green text-base">✓</span>
