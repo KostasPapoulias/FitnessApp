@@ -121,7 +121,10 @@ export default function Finish() {
   const stats = [
     { value: fmtTime(durationSec), label: 'Duration' },
     { value: String(snapshot.setsLogged), label: 'Sets logged' },
-    { value: volumeLabel, label: 'Volume (kg)' },
+    // A run, a stretch or a bodyweight metcon moves no external load, and a
+    // "Volume (kg) 0" tile reads as a failure to record rather than as there
+    // being nothing to record.
+    ...(volume > 0 ? [{ value: volumeLabel, label: 'Volume (kg)' }] : []),
   ]
 
   const handleDone = () => {
@@ -152,7 +155,8 @@ export default function Finish() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-2.5 mt-6">
+      {/* Literal class names, so Tailwind keeps both in the build */}
+      <div className={`grid gap-2.5 mt-6 ${stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
         {stats.map(s => (
           <div key={s.label} className="bg-dark-800 border border-dark-600 rounded-card py-4 px-1.5">
             <p className="text-xl font-extrabold">{s.value}</p>

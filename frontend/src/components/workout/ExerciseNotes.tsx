@@ -70,7 +70,13 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
                    border border-dashed border-dark-600 active:scale-[0.99] transition-transform"
       >
         <NoteIcon className="w-4 h-4 text-dark-400 flex-shrink-0 mt-0.5" />
-        <span className={`flex-1 min-w-0 text-[13px] leading-5 ${has ? 'text-dark-200' : 'text-dark-400'}`}>
+        {/*
+          break-words as well as min-w-0: a long note with no spaces in it — a
+          pasted URL, say — has nowhere to wrap, so it ran out past the border
+          instead of breaking. min-w-0 alone only lets the flex child shrink.
+        */}
+        <span className={`flex-1 min-w-0 text-[13px] leading-5 whitespace-pre-wrap break-words
+                          ${has ? 'text-dark-200' : 'text-dark-400'}`}>
           {has ? value : 'Add a note'}
         </span>
         {status === 'saving' && (
