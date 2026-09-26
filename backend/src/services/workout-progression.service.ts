@@ -146,6 +146,29 @@ const daysBetween = (a: Date, b: Date) => Math.floor((a.getTime() - b.getTime())
  * easy, deload after two hard sessions in a row, ease back in after a layoff,
  * otherwise repeat.
  */
+/**
+ * Pads a set shape out to the length of the plan being shown, repeating the last
+ * set performed.
+ *
+ * The shape comes from what was logged last time, so a session cut short — one
+ * set in, then the workout abandoned — shrank the next plan to that single set.
+ * That shrunk plan then became the following session's history, so it stayed
+ * shrunk with no way back: the athlete watched a 3-set plan silently drop to 1
+ * the moment suggestions landed.
+ *
+ * A shape that is legitimately longer than the plan is returned untouched — the
+ * progression may well have reason to add sets.
+ */
+export const keepPlannedLength = <T>(performed: T[], plannedLength: number): T[] => {
+  if (performed.length === 0 || performed.length >= plannedLength) return performed
+  const last = performed[performed.length - 1]
+  return [
+    ...performed,
+    // Copies, so a later per-set map cannot alias one object across slots
+    ...Array.from({ length: plannedLength - performed.length }, () => ({ ...last })),
+  ]
+}
+
 export const suggestForExercise = async (
   userId: string,
   exerciseId: string,
@@ -194,12 +217,14 @@ export const suggestForExercise = async (
   const idleDays = daysBetween(new Date(), last.date)
 
   // Shape the next session on what was performed, snapped to the grid
-  const shape = lastSets.map(set => ({
+  const performed = lastSets.map(set => ({
     reps: set.reps,
     weight: roundToPlates(set.weight),
     rpe: set.rpe ?? 8,
     restSeconds: fallback[0]?.restSeconds ?? 90,
   }))
+
+  const shape = keepPlannedLength(performed, fallback.length)
 
   // ── coming back from a layoff ──
   if (idleDays >= STALE_DAYS) {
