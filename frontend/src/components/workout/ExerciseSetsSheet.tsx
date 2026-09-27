@@ -28,7 +28,7 @@ export default function ExerciseSetsSheet({
 }: Props) {
   // Tonnage follows the app's locale, not the browser's: a bare toLocaleString()
   // printed 5940 as "5.940" on a Greek system, which reads as 5.94
-  const { intl } = useT()
+  const { t, intl } = useT()
   const sets = exercise.sets ?? []
   const cardioSets = sets.filter((s: any) => s.cardio)
   const isCardio = cardioSets.length > 0
@@ -51,10 +51,8 @@ export default function ExerciseSetsSheet({
 
       {!isCardio && (
         <p className="text-dark-400 text-[11px] mb-3">
-          {editable
-            ? 'Tap a set to correct it, or swipe it. '
-            : 'Swipe a set to edit or remove it. '}
-          Fatigue and readiness are rebuilt from what you change.
+          {t(editable ? 'sets.tapToCorrect' : 'sets.swipeToEdit')}
+          {t('sets.rebuilt')}
         </p>
       )}
 
@@ -73,10 +71,10 @@ export default function ExerciseSetsSheet({
                 <div className="flex items-center gap-3">
                   {[
                     { v: `${(s.cardio?.distance ?? 0).toFixed(2)}`, u: 'km' },
-                    { v: fmtTime(s.cardio?.time ?? 0), u: 'time' },
-                    { v: fmtTime(paceSec), u: 'avg / km' },
+                    { v: fmtTime(s.cardio?.time ?? 0), u: t('sets.statTime') },
+                    { v: fmtTime(paceSec), u: t('sets.statAvgKm') },
                     ...(s.run?.elevationGainM
-                      ? [{ v: `${s.run.elevationGainM}`, u: 'm climb' }]
+                      ? [{ v: `${s.run.elevationGainM}`, u: t('sets.statClimb') }]
                       : []),
                   ].map(stat => (
                     <div key={stat.u} className="flex-1 min-w-0 text-center">
@@ -96,11 +94,11 @@ export default function ExerciseSetsSheet({
                                bg-[#0d2218] text-brand-teal text-xs font-bold
                                active:scale-[0.99] transition-transform"
                   >
-                    {s.run.source === 'manual' ? 'Splits →' : 'Route & splits →'}
+                    {t(s.run.source === 'manual' ? 'sets.splits' : 'sets.routeSplits')}
                   </button>
                 ) : (
                   <p className="text-dark-500 text-[11px] text-center mt-2">
-                    No route recorded for this one
+                    {t('sets.noRoute')}
                   </p>
                 )}
               </div>
@@ -112,8 +110,8 @@ export default function ExerciseSetsSheet({
       {!isCardio && (
         <>
           <div className="grid grid-cols-4 gap-1 pb-2">
-            {['Set', 'Reps', 'Weight', 'RPE'].map(h => (
-              <p key={h} className="text-dark-500 text-xs uppercase text-center">{h}</p>
+            {(['sets.colSet', 'sets.colReps', 'sets.colWeight', 'sets.colRpe'] as const).map(key => (
+              <p key={key} className="text-dark-500 text-xs uppercase text-center">{t(key)}</p>
             ))}
           </div>
 
@@ -168,7 +166,7 @@ export default function ExerciseSetsSheet({
           {totalVol > 0 && (
             <div className="mt-3 flex justify-between bg-[#0d2218] rounded-lg px-3 py-2
                             border border-brand-teal/20">
-              <span className="text-dark-400 text-xs">Total volume</span>
+              <span className="text-dark-400 text-xs">{t('sets.totalVolume')}</span>
               <span className="text-brand-teal text-xs font-bold">
                 {Math.round(totalVol).toLocaleString(intl)} kg
               </span>

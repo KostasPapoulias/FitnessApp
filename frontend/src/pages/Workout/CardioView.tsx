@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { fmtTime } from './helpers'
+import { useT, MessageKey } from '../../i18n'
 import { ModalityViewProps, LiveStartGate, EffortPrompt } from './LiveShared'
 import { useModalityVoice } from '../../hooks/useModalityVoice'
 import { useRunTracker, RunSummary } from '../../hooks/useRunTracker'
@@ -31,19 +32,19 @@ const stepBtn =
 const KCAL_PER_METRE = 0.058
 
 /** How each coaching zone reads on screen; 'idle' is the first minute, before the window can judge. */
-const ZONE: Record<CoachMode, Record<PaceZone | 'idle', { label: string; color: string }>> = {
+const ZONE: Record<CoachMode, Record<PaceZone | 'idle', { label: MessageKey; color: string }>> = {
   follow: {
-    on: { label: 'On target', color: '#00D4AA' },
-    slow: { label: 'Behind target', color: '#F97316' },
-    fast: { label: 'Ahead of target', color: '#FACC15' },
-    idle: { label: 'Finding your pace', color: '#AAAAAA' },
+    on: { label: 'cardio.zoneOn', color: '#00D4AA' },
+    slow: { label: 'cardio.zoneSlow', color: '#F97316' },
+    fast: { label: 'cardio.zoneFast', color: '#FACC15' },
+    idle: { label: 'cardio.zoneIdle', color: '#AAAAAA' },
   },
   // A dial is set from the first second; it's the setting that's off, not the athlete
   dial: {
-    on: { label: 'Dial matches target', color: '#00D4AA' },
-    slow: { label: 'Dial set too slow', color: '#F97316' },
-    fast: { label: 'Dial set too fast', color: '#FACC15' },
-    idle: { label: 'No target set', color: '#AAAAAA' },
+    on: { label: 'cardio.dialOn', color: '#00D4AA' },
+    slow: { label: 'cardio.dialSlow', color: '#F97316' },
+    fast: { label: 'cardio.dialFast', color: '#FACC15' },
+    idle: { label: 'cardio.dialIdle', color: '#AAAAAA' },
   },
 }
 
@@ -52,6 +53,7 @@ const MAP_BOX = 'w-full h-[190px]'
 
 /** Live cardio: GPS route and pace, a manual speed dial, or a rep counter, per the movement. */
 export default function CardioView({ onFinish, registerVoice }: ModalityViewProps) {
+  const { t } = useT()
   const { selectedExercises, currentExerciseIndex, cardioTarget, completeSet } = useWorkoutStore()
   const exercise = selectedExercises[currentExerciseIndex]?.exercise
   const activity = exercise?.name ?? 'Outdoor Run'
@@ -239,10 +241,10 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   // Relative to the movement's reference speed, so the effort label means something on any machine
   const effortRatio = referenceMps > 0 ? manualPace / referenceMps : 1
   const effortLabel =
-    effortRatio >= 1.15 ? 'Threshold'
-    : effortRatio >= 0.95 ? 'Tempo'
-    : effortRatio >= 0.75 ? 'Easy'
-    : 'Recovery'
+    t(effortRatio >= 1.15 ? 'cardio.effortThreshold'
+      : effortRatio >= 0.95 ? 'cardio.effortTempo'
+      : effortRatio >= 0.75 ? 'cardio.effortEasy'
+      : 'cardio.effortRecovery')
   const effort = (steps: number) =>
     setManualPace(v => Math.min(dial.max, Math.max(dial.min,
       Math.round((v + steps * dial.step) * 100) / 100)))
@@ -255,28 +257,28 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
   const gpsRefusal: { title: string; detail: string } | null =
     typeof window !== 'undefined' && !window.isSecureContext
       ? {
-          title: 'GPS needs a secure connection',
-          detail: 'This page is being served over http, and the browser will not report a location there. Open the app over https and GPS becomes available.',
+          title: t('cardio.gpsInsecureTitle'),
+          detail: t('cardio.gpsInsecureBody'),
         }
       : status === 'denied'
         ? {
-            title: 'Location is turned off for this app',
-            detail: 'Allow location in your browser or system settings, then tap again. Until then the dial is the only thing that can measure this session.',
+            title: t('cardio.gpsDeniedTitle'),
+            detail: t('cardio.gpsDeniedBody'),
           }
         : status === 'unavailable'
           ? {
-              title: 'This device reports no GPS',
-              detail: 'Nothing to switch back to — the dial is measuring the session.',
+              title: t('cardio.gpsNoneTitle'),
+              detail: t('cardio.gpsNoneBody'),
             }
           : null
 
   const gps = {
-    tracking: { ok: true, label: 'GPS locked · tracking' },
-    acquiring: { ok: false, label: 'Finding GPS…' },
-    weak: { ok: false, label: 'Weak GPS signal' },
-    denied: { ok: false, label: 'Location off · manual pace' },
-    unavailable: { ok: false, label: 'No GPS · manual pace' },
-    idle: { ok: false, label: 'GPS idle' },
+    tracking: { ok: true, label: t('cardio.gpsTracking') },
+    acquiring: { ok: false, label: t('cardio.gpsAcquiring') },
+    weak: { ok: false, label: t('cardio.gpsWeak') },
+    denied: { ok: false, label: t('cardio.gpsDenied') },
+    unavailable: { ok: false, label: t('cardio.gpsUnavailable') },
+    idle: { ok: false, label: t('cardio.gpsIdle') },
   }[status]
 
   // Kilometres and hand-marked laps merged for display, newest first
@@ -287,7 +289,9 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       key: `${sp.auto ? 'km' : 'lap'}-${sp.index}`,
       // A number for an automatic split, a flag for a marked lap
       badge: sp.auto ? String(sp.index) : <FlagIcon className="w-3.5 h-3.5" />,
-      label: sp.auto ? `Km ${sp.index}` : `Lap · ${(sp.meters / 1000).toFixed(2)} km`,
+      label: sp.auto
+        ? t('cardio.splitKm', { n: sp.index })
+        : t('cardio.splitLap', { km: (sp.meters / 1000).toFixed(2) }),
       pace: `${fmtTime(splitPace(sp))} /km`,
       time: fmtTime(sp.seconds),
     }))
@@ -327,19 +331,19 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
     return (
       <LiveStartGate
         icon={<ModalityIcon modality="Cardio" className="w-14 h-14" />}
-        label="LIVE · CARDIO"
+        label={t('cardio.header')}
         title={activity}
         detail={goalLabel
-          ? `Target: ${goalLabel}. Press start when you begin moving.`
-          : 'Free run. Press start when you begin moving.'}
+          ? t('cardio.targetIntro', { goal: goalLabel })
+          : t('cardio.freeIntro')}
         onStart={beginRun}
       >
         {/* Source chosen before the clock starts; it also decides which coach runs */}
         {tracking === 'gps' && (
           <div className="grid grid-cols-2 gap-2 mb-3">
             {([
-              { src: 'gps' as const, label: 'GPS', sub: 'Outdoors' },
-              { src: 'manual' as const, label: 'By hand', sub: 'Treadmill' },
+              { src: 'gps' as const, label: t('cardio.srcGps'), sub: t('cardio.srcGpsSub') },
+              { src: 'manual' as const, label: t('cardio.srcManual'), sub: t('cardio.srcManualSub') },
             ]).map(option => (
               <button
                 key={option.src}
@@ -399,12 +403,12 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       <EffortPrompt
         icon={<ModalityIcon modality="Cardio" className="w-14 h-14" />}
         label={`${activity.toUpperCase()} DONE`}
-        title="Rate the effort"
-        detail="Recovery is driven by how hard that felt, not just how long it took."
+        title={t('cardio.rateTitle')}
+        detail={t('cardio.rateDetail')}
         summary={[
           { value: ((summary?.meters ?? meters) / 1000).toFixed(2), label: 'km' },
-          { value: fmtTime(summary?.elapsedSec ?? elapsedSec), label: 'time' },
-          { value: fmtTime(avgPaceSecPerKm), label: 'avg / km' },
+          { value: fmtTime(summary?.elapsedSec ?? elapsedSec), label: t('sets.statTime') },
+          { value: fmtTime(avgPaceSecPerKm), label: t('sets.statAvgKm') },
         ]}
         initial={6}
         busy={ending}
@@ -426,7 +430,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         statusOk={gps.ok}
         screenAwake={wakeLock.held}
         coachTarget={coachOn && paced && coach.targetSec !== null ? fmtTime(coach.targetSec) : null}
-        coachLabel={ZONE[coachMode][coach.zone ?? 'idle'].label}
+        coachLabel={t(ZONE[coachMode][coach.zone ?? 'idle'].label)}
         coachColor={ZONE[coachMode][coach.zone ?? 'idle'].color}
         onKeepAwake={wakeLock.request}
         onUnlock={() => setLocked(false)}
@@ -444,7 +448,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-brand-red text-xs font-bold tracking-wide">
           <span className="w-2 h-2 rounded-full bg-brand-red animate-pulse" />
-          {running ? 'LIVE · RUNNING' : 'PAUSED · RUNNING'}
+          {t(running ? 'cardio.liveRunning' : 'cardio.pausedRunning')}
         </div>
         <div className="text-[13px] text-dark-300 font-semibold flex items-center justify-center gap-1.5">
           <ModalityIcon modality="Cardio" className="w-4 h-4" /> {activity}
@@ -455,11 +459,10 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           run isn't silently adopted */}
       {run.recovered && !keptRecovered && (
         <div className="w-full mt-3 rounded-btn border border-brand-teal/40 bg-[#0a2a22] px-3.5 py-2.5">
-          <p className="text-[12px] font-bold text-brand-teal">Run recovered</p>
+          <p className="text-[12px] font-bold text-brand-teal">{t('cardio.recoveredTitle')}</p>
           <p className="text-[11.5px] text-dark-200 mt-0.5 leading-snug">
-            {km.toFixed(2)} km and {fmtTime(elapsedSec)} carried over from a session that
-            was interrupted.
-            {!wakeLock.held && ' Keeping it also puts the screen lock back on.'}
+            {t('cardio.recoveredBody', { km: km.toFixed(2), time: fmtTime(elapsedSec) })}
+            {!wakeLock.held && t('cardio.recoveredWakeLock')}
           </p>
           <div className="flex gap-2 mt-2.5">
             <button
@@ -471,14 +474,14 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
               className="flex-1 py-2 rounded-btn bg-brand-teal text-black text-[12px] font-extrabold
                          active:scale-95 transition-transform"
             >
-              Keep it
+              {t('cardio.keepIt')}
             </button>
             <button
               onClick={run.discard}
               className="flex-1 py-2 rounded-btn border border-dark-600 bg-dark-800 text-dark-200
                          text-[12px] font-bold active:scale-95 transition-transform"
             >
-              Discard
+              {t('cardio.discard')}
             </button>
           </div>
         </div>
@@ -486,7 +489,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
 
       {/* big elapsed */}
       <div className="text-center mt-3.5">
-        <div className="text-[11px] tracking-[0.1em] text-dark-300">ELAPSED</div>
+        <div className="text-[11px] tracking-[0.1em] text-dark-300">{t('wod.elapsed')}</div>
         <div className="text-[66px] font-extrabold leading-[1.05] tracking-tight tabular-nums">
           {fmtTime(elapsedSec)}
         </div>
@@ -496,7 +499,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
       {goalLabel && (
         <div className="mt-2">
           <div className="flex justify-between text-[11px] text-dark-300 mb-1.5">
-            <span>Target · {goalLabel}</span>
+            <span>{t('cardio.targetChip', { goal: goalLabel })}</span>
             <span className="text-brand-teal font-bold">{Math.round(goalProgress * 100)}%</span>
           </div>
           <div className="h-1.5 rounded-full bg-dark-700 overflow-hidden">
@@ -512,13 +515,13 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           ? [
               { v: String(repCount), u: repUnit },
               { v: repRate === null ? '—' : String(repRate), u: `${repUnit} / min`, accent: true },
-              { v: fmtTime(elapsedSec), u: 'elapsed' },
+              { v: fmtTime(elapsedSec), u: t('cardio.statElapsed') },
               { v: String(Math.round(cals)), u: 'kcal' },
             ]
           : [
               { v: km.toFixed(2), u: 'km' },
-              { v: fmtTime(avgPaceSecPerKm), u: 'avg / km', accent: true },
-              { v: fmtTime(livePaceSecPerKm), u: 'now / km' },
+              { v: fmtTime(avgPaceSecPerKm), u: t('sets.statAvgKm'), accent: true },
+              { v: fmtTime(livePaceSecPerKm), u: t('cardio.statNowKm') },
               { v: String(Math.round(cals)), u: 'kcal' },
             ]
         ).map(s => (
@@ -557,11 +560,11 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         <div className="w-full mt-3.5 bg-dark-800 border border-dark-600 rounded-card px-4 py-4">
           <div className="flex items-baseline justify-between">
             <div className="text-[10px] tracking-wide text-dark-400">
-              {repUnit.toUpperCase()} COMPLETED
+              {t('cardio.completed', { unit: repUnit.toUpperCase() })}
             </div>
             {repRate !== null && (
               <div className="text-[10.5px] text-dark-400 tabular-nums">
-                {repRate} / min
+                {t('cardio.perMin', { n: repRate })}
               </div>
             )}
           </div>
@@ -603,9 +606,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
 
           {/* Said plainly, so nobody assumes the app is counting for them */}
           <p className="text-[11px] text-dark-500 mt-2.5 leading-snug">
-            Optional. Left at zero the set is scored on its duration — a count
-            only sharpens it, by separating a continuous ten minutes from a
-            broken one.
+            {t('cardio.countOptional')}
           </p>
         </div>
       ) : tracking === 'machine' ? null : (
@@ -619,10 +620,9 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
                 className={`${MAP_BOX} rounded-card border border-dark-600 bg-dark-800
                             flex flex-col items-center justify-center gap-1 text-center px-6`}
               >
-                <span className="text-[13px] font-bold text-dark-200">Map didn't load</span>
+                <span className="text-[13px] font-bold text-dark-200">{t('cardio.mapFailedTitle')}</span>
                 <span className="text-[11.5px] text-dark-400 leading-snug">
-                  Your run is still recording — distance, pace and splits are unaffected.
-                  Tap to try again.
+                  {t('cardio.mapFailed')}
                 </span>
               </button>
             )}
@@ -631,7 +631,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
             <div className={`${MAP_BOX} rounded-card border border-dark-600
                             bg-gradient-to-br from-dark-800 to-dark-700
                             flex items-center justify-center text-dark-500 text-sm`}>
-              Loading map…
+              {t('cardio.mapLoading')}
             </div>
           }>
             <RouteMap
@@ -648,7 +648,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           <div className={`${MAP_BOX} rounded-card border border-dark-600
                           bg-gradient-to-br from-dark-800 to-dark-700
                           flex items-center justify-center text-dark-500 text-sm`}>
-            No route — you're setting the speed by hand
+            {t('cardio.noRouteManual')}
           </div>
         )}
 
@@ -679,12 +679,12 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
         <div className="mt-3.5 bg-dark-800 border border-dark-600 rounded-card px-4 py-3.5">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] tracking-wide text-dark-400">SPEED YOU'RE SETTING BY HAND</div>
+              <div className="text-[10px] tracking-wide text-dark-400">{t('cardio.manualHeading')}</div>
               <div className="text-base font-bold mt-0.5">{effortLabel}</div>
             </div>
             {/* + is faster (follows the effort), even though the pace number goes down */}
             <div className="flex items-center gap-2">
-              <button className={stepBtn} aria-label="Slower" onClick={() => effort(-1)}>−</button>
+              <button className={stepBtn} aria-label={t('cardio.slower')} onClick={() => effort(-1)}>−</button>
               <div className="min-w-[68px] text-center">
                 <div className="text-[15px] font-extrabold tabular-nums">
                   {fmtTime(livePaceSecPerKm)}/km
@@ -694,7 +694,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
                   {(manualPace * 3.6).toFixed(1)} km/h
                 </div>
               </div>
-              <button className={stepBtn} aria-label="Faster" onClick={() => effort(1)}>+</button>
+              <button className={stepBtn} aria-label={t('cardio.faster')} onClick={() => effort(1)}>+</button>
             </div>
           </div>
 
@@ -731,24 +731,23 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           className="w-full mt-3.5 rounded-card border border-dark-600 bg-dark-800 px-4 py-3
                      text-left active:scale-[0.99] transition-transform"
         >
-          <div className="text-[10px] tracking-wide text-dark-400">TREADMILL, TRACK OR NO SIGNAL</div>
+          <div className="text-[10px] tracking-wide text-dark-400">{t('cardio.treadmillHint')}</div>
           <div className="text-[13px] font-semibold mt-0.5">
-            No GPS? Set your speed by hand →
+            {t('cardio.switchToManual')}
           </div>
           <div className="text-[11.5px] text-dark-400 mt-1 leading-snug">
-            You dial in how fast you're going and the app counts the distance from it.
-            No route is drawn.
+            {t('cardio.switchToManualBody')}
           </div>
         </button>
       )}
 
       {/* splits */}
       <div className="mt-3.5">
-        <div className="text-[10px] tracking-widest text-dark-400 mb-2">SPLITS</div>
+        <div className="text-[10px] tracking-widest text-dark-400 mb-2">{t('cardio.splits')}</div>
         <div className="flex flex-col gap-2">
           {shownSplits.length === 0 ? (
             <div className="text-center text-[12.5px] text-dark-400 py-2.5">
-              First split lands at 1 km — or tap Lap to mark one now.
+              {t('cardio.noSplits')}
             </div>
           ) : shownSplits.map(sp => (
             <div key={sp.key} className="flex items-center gap-3 bg-dark-800 border border-dark-600 rounded-btn px-3.5 py-2.5">
@@ -778,7 +777,7 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           style={running
             ? { background: '#2a1a1a', color: '#EF4444', border: '1px solid rgba(239,68,68,0.4)' }
             : { background: '#00D4AA', color: '#000' }}>
-          {running ? '‖ Pause' : '▶ Resume'}
+          {t(running ? 'rest.pause' : 'rest.resume')}
         </button>
         <button onClick={run.lap}
           className="py-4 rounded-btn border border-dark-600 bg-dark-800 text-white text-[15px] font-bold
@@ -798,14 +797,14 @@ export default function CardioView({ onFinish, registerVoice }: ModalityViewProp
           }}
           className="w-full mt-2.5 py-3.5 rounded-btn border border-dark-600 bg-dark-800
                      text-white text-sm font-bold active:scale-95 transition-transform">
-          <LockIcon className="w-4 h-4" /> Lock screen
+          <LockIcon className="w-4 h-4" /> {t('cardio.lockScreen')}
         </button>
       )}
 
       <button onClick={endRun}
         className="w-full mt-2.5 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
                    text-brand-red text-sm font-bold active:scale-95 transition-transform">
-        ■ End Session
+        {t('cardio.endSession')}
       </button>
 
       {paceSheet && (

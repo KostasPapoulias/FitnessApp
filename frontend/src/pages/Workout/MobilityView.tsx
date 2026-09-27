@@ -3,6 +3,7 @@ import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useLiveCues } from '../../hooks/useLiveCues'
 import { cues } from '../../lib/speech'
 import { fmtTime } from './helpers'
+import { useT } from '../../i18n'
 import { ModalityViewProps, UpNext, LiveStartGate } from './LiveShared'
 import { useModalityVoice } from '../../hooks/useModalityVoice'
 import { ModalityIcon } from '../../components/icons'
@@ -12,6 +13,7 @@ function isPerSide(name: string) {
 }
 
 export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoice }: ModalityViewProps) {
+  const { t } = useT()
   const { selectedExercises, currentExerciseIndex, currentSetIndex } = useWorkoutStore()
   const ex = selectedExercises[currentExerciseIndex]
   const set = ex?.sets[currentSetIndex]
@@ -111,9 +113,9 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
     return (
       <LiveStartGate
         icon={<ModalityIcon modality="Mobility" className="w-14 h-14" />}
-        label="MOBILITY FLOW"
+        label={t('mob.header')}
         title={ex.exercise.name}
-        detail={`${selectedExercises.length} poses · breathe slow and ease into each hold. Press start to begin the flow.`}
+        detail={t('mob.intro', { count: selectedExercises.length })}
         onStart={() => setStarted(true)}
       />
     )
@@ -125,10 +127,10 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
 
   const nextEx = currentExerciseIndex + 1 < selectedExercises.length
     ? selectedExercises[currentExerciseIndex + 1] : null
-  let poseCounter = `Pose ${currentExerciseIndex + 1} of ${selectedExercises.length}`
-  if (perSide) poseCounter += ` · ${side === 'left' ? 'Left side' : 'Right side'}`
+  let poseCounter = t('mob.poseCounter', { n: currentExerciseIndex + 1, total: selectedExercises.length })
+  if (perSide) poseCounter += ` · ${t(side === 'left' ? 'mob.leftSide' : 'mob.rightSide')}`
 
-  const nextLabel = perSide && !leftDone ? 'Switch Side →' : 'Next Pose →'
+  const nextLabel = t(perSide && !leftDone ? 'mob.switchSide' : 'mob.nextPose')
   // Manual advance goes through the same functions as the clock, so it speaks too
   const onNext = () => {
     if (perSide && !leftDone) switchSide()
@@ -136,7 +138,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
   }
 
   const coaching = ex.exercise.description
-    || 'Ease into end-range and let the breath do the work — never force a stretch. Aim for a 6–7/10 tension, not pain.'
+    || t('mob.cue')
 
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
@@ -150,7 +152,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
           <div className="text-[12.5px] text-dark-300 mt-0.5">{poseCounter}</div>
         </div>
         <div className="text-right ml-2.5">
-          <p className="text-dark-300 text-xs">Session</p>
+          <p className="text-dark-300 text-xs">{t('mob.session')}</p>
           <p className="text-xl font-extrabold mt-0.5">{fmtTime(elapsed)}</p>
         </div>
       </div>
@@ -167,7 +169,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
                   background: active ? 'rgba(0,212,170,0.14)' : '#1A1A1A',
                   color: active ? '#00D4AA' : done ? '#4ADE80' : '#888888',
                 }}>
-                {sd === 'left' ? 'Left' : 'Right'} {done ? '✓' : ''}
+                {t(sd === 'left' ? 'mob.left' : 'mob.right')} {done ? '✓' : ''}
               </div>
             )
           })}
@@ -188,7 +190,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
             <div className="text-sm text-dark-300 mt-0.5">seconds left</div>
             <div className="flex items-center gap-2 mt-3 text-brand-teal text-[12.5px] font-semibold">
               <span className="w-3.5 h-3.5 rounded-full bg-brand-teal animate-pulse" />
-              {paused ? 'Paused' : 'Breathe slow · in through the nose'}
+              {t(paused ? 'mob.paused' : 'mob.breathe')}
             </div>
           </div>
         </div>
@@ -215,7 +217,7 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
         <button onClick={() => setPaused(p => !p)}
           className="py-4 rounded-btn border border-dark-600 bg-dark-800 text-white text-[15px] font-bold
                      active:scale-95 transition-transform">
-          {paused ? '▶ Resume' : '‖ Pause'}
+          {t(paused ? 'rest.resume' : 'rest.pause')}
         </button>
         <button onClick={onNext}
           className="py-4 rounded-btn bg-brand-teal text-black text-[15px] font-extrabold
@@ -225,8 +227,14 @@ export default function MobilityView({ elapsed, onAdvance, onFinish, registerVoi
       </div>
 
       <UpNext
-        title={perSide && !leftDone ? `${ex.exercise.name} · Right side` : (nextEx ? nextEx.exercise.name : 'Flow complete')}
-        detail={perSide && !leftDone ? `Same pose, other side · ${target}s` : (nextEx ? `Hold · ${Math.max(5, nextEx.sets[0]?.reps || 30)}s` : 'Great work — you’ve moved every joint')}
+        title={perSide && !leftDone
+          ? t('mob.otherSideTitle', { name: ex.exercise.name })
+          : (nextEx ? nextEx.exercise.name : t('mob.flowComplete'))}
+        detail={perSide && !leftDone
+          ? t('mob.otherSideDetail', { sec: target })
+          : (nextEx
+              ? t('mob.holdDetail', { sec: Math.max(5, nextEx.sets[0]?.reps || 30) })
+              : t('mob.flowCompleteDetail'))}
       />
 
       <button onClick={onFinish}

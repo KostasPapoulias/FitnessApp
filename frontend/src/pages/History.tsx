@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { progressService } from '../services/progress.service'
 import { HistoryRow } from '../types'
-import { useT } from '../i18n'
+import { useT, MessageKey } from '../i18n'
 
 /** Workout history, newest first, cursor-paged with lean rows. */
 
-const fmtDate = (iso: string) => {
+const fmtDate = (iso: string, intl: string) => {
   const date = new Date(iso)
   const today = new Date()
   const sameYear = date.getFullYear() === today.getFullYear()
-  return date.toLocaleDateString('en-GB', {
+  return date.toLocaleDateString(intl, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -18,43 +18,58 @@ const fmtDate = (iso: string) => {
   })
 }
 
+type T = ReturnType<typeof useT>
+
 /**
  * A session's length. `duration` arrives from the API in SECONDS — see the
  * `HistoryRow.duration` doc comment in workout-history.service ("Seconds.
  * Never null"). This read it as minutes, so a 3m19s run printed as "3h 19m"
  * and a 36s session as "36m".
  */
-const fmtDuration = (seconds: number) => {
+const fmtDuration = (seconds: number, t: T['t']) => {
   const total = Math.max(0, Math.round(seconds))
   // Sub-minute sessions are real (a single sprint), and "0m" reads as an error
-  if (total < 60) return `${total}s`
+  if (total < 60) return t('unit.seconds', { n: total })
   const minutes = Math.round(total / 60)
-  if (minutes < 60) return `${minutes}m`
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+  if (minutes < 60) return t('unit.minutes', { n: minutes })
+  return t('unit.hoursMinutes', { h: Math.floor(minutes / 60), m: minutes % 60 })
 }
 
-/** A session's one-line summary: distance, tonnage, or set count, by what it contains. */
 /**
- * `intl` is passed in rather than defaulted: a bare toLocaleString() follows the
- * browser's locale, not the app's, so 5940 kg rendered as "5.940 kg" on a Greek
- * system — which reads as 5.94 next to this screen's English labels. Every other
- * call site in the app already passes it.
+ * A session's one-line summary: distance, tonnage, or set count, by what it
+ * contains.
+ *
+ * Numbers go through the locale: a bare toLocaleString() follows the browser's
+ * locale, not the app's, so 5940 kg rendered as "5.940 kg" — which reads as
+ * 5.94. `distanceKm` is an unrounded sum from the API, so it is fixed to two
+ * decimals here as well as localised.
  */
-const summarise = (session: HistoryRow, intl: string): string => {
-  const parts: string[] = [`${session.setCount} set${session.setCount === 1 ? '' : 's'}`]
-  if (session.distanceKm > 0) parts.unshift(`${session.distanceKm} km`)
+const summarise = (session: HistoryRow, { tn, num, intl }: T): string => {
+  const parts: string[] = [tn('calendar.sets', session.setCount)]
+  if (session.distanceKm > 0) parts.unshift(`${num(session.distanceKm, 2)} km`)
   if (session.totalVolume > 0) parts.push(`${session.totalVolume.toLocaleString(intl)} kg`)
+  // "RPE" is used untranslated in Greek gyms, like km and kg
   if (session.avgRpe != null) parts.push(`RPE ${session.avgRpe}`)
   return parts.join(' · ')
 }
 
-const MODALITY_FILTERS = ['All', 'Strength', 'Calisthenics', 'Cardio', 'Mobility', 'WOD']
+/**
+ * The value is what the API filters on and must stay in English; only the label
+ * is translated.
+ */
+const MODALITY_FILTERS: { value: string; label: MessageKey }[] = [
+  { value: 'All', label: 'history.filterAll' },
+  { value: 'Strength', label: 'modality.strength' },
+  { value: 'Calisthenics', label: 'modality.calisthenics' },
+  { value: 'Cardio', label: 'modality.cardio' },
+  { value: 'Mobility', label: 'modality.mobility' },
+  { value: 'WOD', label: 'modality.wod' },
+]
 
 export default function History() {
   const navigate = useNavigate()
-  // Only the number and date formats for now — this screen's copy is still
-  // untranslated, which is tracked separately
-  const { intl } = useT()
+  const translation = useT()
+  const { t, tn } = translation
 
   const [sessions, setSessions] = useState<HistoryRow[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
@@ -77,11 +92,13 @@ export default function History() {
         setCursor(page.nextCursor)
         setHasMore(page.nextCursor != null)
       })
-      .catch(() => { if (!cancelled) setError('Could not load your history.') })
+      .catch(() => { if (!cancelled) setError(t('history.loadError')) })
       .finally(() => { if (!cancelled) setIsLoading(false) })
 
     return () => { cancelled = true }
-  }, [filter])
+    // t is deliberately omitted: it only words the error, and including it would
+    // refetch the whole list on a language switch
+  }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = () => {
     if (!cursor || isLoadingMore) return
@@ -95,7 +112,7 @@ export default function History() {
         setCursor(page.nextCursor)
         setHasMore(page.nextCursor != null)
       })
-      .catch(() => setError('Could not load more.'))
+      .catch(() => setError(t('history.loadMoreError')))
       .finally(() => setIsLoadingMore(false))
   }
 
@@ -105,20 +122,20 @@ export default function History() {
         <button onClick={() => navigate(-1)}
           className="w-9 h-9 rounded-full bg-dark-800 border border-dark-600
                      flex items-center justify-center text-lg text-white">←</button>
-        <h1 className="text-xl font-extrabold text-white">History</h1>
+        <h1 className="text-xl font-extrabold text-white">{t('history.title')}</h1>
       </div>
 
       {/* Filter chips scroll horizontally rather than wrapping */}
       <div className="flex gap-2 mb-4 overflow-x-auto -mx-4 px-4 pb-1">
         {MODALITY_FILTERS.map(m => (
           <button
-            key={m}
-            onClick={() => setFilter(m)}
+            key={m.value}
+            onClick={() => setFilter(m.value)}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap
               transition-colors flex-shrink-0
-              ${filter === m ? 'bg-brand-teal text-black' : 'bg-dark-800 text-dark-300 border border-dark-600'}`}
+              ${filter === m.value ? 'bg-brand-teal text-black' : 'bg-dark-800 text-dark-300 border border-dark-600'}`}
           >
-            {m}
+            {t(m.label)}
           </button>
         ))}
       </div>
@@ -140,12 +157,10 @@ export default function History() {
       {!isLoading && sessions.length === 0 && !error && (
         <div className="bg-dark-800 rounded-card border border-dark-600 p-5">
           <p className="text-white text-sm font-semibold">
-            {filter === 'All' ? 'No finished sessions yet' : `No ${filter.toLowerCase()} sessions yet`}
+            {t(filter === 'All' ? 'history.emptyAll' : 'history.emptyFiltered')}
           </p>
           <p className="text-dark-300 text-xs mt-2 leading-relaxed">
-            {filter === 'All'
-              ? 'Sessions appear here once you finish them. An abandoned session is not kept.'
-              : 'Try another modality, or clear the filter.'}
+            {t(filter === 'All' ? 'history.emptyAllBody' : 'history.emptyFilteredBody')}
           </p>
         </div>
       )}
@@ -162,7 +177,7 @@ export default function History() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-white text-sm font-bold">{fmtDate(session.dateTime)}</p>
+                  <p className="text-white text-sm font-bold">{fmtDate(session.dateTime, translation.intl)}</p>
                   {session.templateName && (
                     <span className="text-brand-teal text-[10px] font-semibold px-1.5 py-0.5
                                      rounded-badge bg-brand-teal/10 truncate max-w-[120px]">
@@ -171,10 +186,10 @@ export default function History() {
                   )}
                 </div>
                 <p className="text-dark-300 text-xs mt-1 tabular-nums">
-                  {fmtDuration(session.duration)} · {summarise(session, intl)}
+                  {fmtDuration(session.duration, t)} · {summarise(session, translation)}
                 </p>
                 <p className="text-dark-400 text-[11px] mt-1.5 leading-relaxed line-clamp-2">
-                  {session.exercises.map(e => e.name).join(', ') || 'No exercises logged'}
+                  {session.exercises.map(e => e.name).join(', ') || t('history.noExercises')}
                 </p>
               </div>
               <span className="text-dark-400 text-lg leading-none flex-shrink-0">›</span>
@@ -190,13 +205,13 @@ export default function History() {
           className="w-full mt-3 py-3 rounded-btn bg-dark-800 border border-dark-600
                      text-dark-200 text-sm font-semibold active:bg-dark-700 disabled:opacity-50"
         >
-          {isLoadingMore ? 'Loading…' : 'Load more'}
+          {isLoadingMore ? t('common.loading') : t('history.loadMore')}
         </button>
       )}
 
       {!isLoading && !hasMore && sessions.length > 0 && (
         <p className="text-dark-400 text-xs text-center mt-4">
-          That's all {sessions.length} of them.
+          {tn('history.allShown', sessions.length)}
         </p>
       )}
     </div>

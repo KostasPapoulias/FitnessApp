@@ -5,6 +5,7 @@ import { E1rmPoint, MuscleFatigueHistory, ProgressSummary, StrengthEntry } from 
 import TrendChart from '../components/progress/TrendChart'
 import VolumeBars from '../components/progress/VolumeBars'
 import { StarFilledIcon } from '../components/icons'
+import { useT, MessageKey } from '../i18n'
 
 /**
  * Progress: strength estimates, session volume and per-muscle fatigue history,
@@ -13,15 +14,24 @@ import { StarFilledIcon } from '../components/icons'
 
 type Tab = 'Strength' | 'Volume' | 'Recovery'
 
-const fmtAgo = (iso: string | null) => {
-  if (!iso) return 'never'
+type T = ReturnType<typeof useT>
+
+const fmtAgo = (iso: string | null, t: T['t']) => {
+  if (!iso) return t('progress.agoNever')
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  if (days <= 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days < 14) return `${days} days ago`
-  if (days < 60) return `${Math.floor(days / 7)} weeks ago`
-  return `${Math.floor(days / 30)} months ago`
+  if (days <= 0) return t('progress.agoToday')
+  if (days === 1) return t('progress.agoYesterday')
+  if (days < 14) return t('progress.agoDays', { n: days })
+  if (days < 60) return t('progress.agoWeeks', { n: Math.floor(days / 7) })
+  return t('progress.agoMonths', { n: Math.floor(days / 30) })
 }
+
+/** Tab values stay in English (internal state); only the label is translated. */
+const TABS: { value: Tab; label: MessageKey }[] = [
+  { value: 'Strength', label: 'progress.tabStrength' },
+  { value: 'Volume', label: 'progress.tabVolume' },
+  { value: 'Recovery', label: 'progress.tabRecovery' },
+]
 
 const fatigueTone = (level: number) =>
   level >= 70 ? 'text-brand-red' : level >= 35 ? 'text-brand-yellow' : 'text-brand-green'
@@ -31,6 +41,7 @@ const fatigueColor = (level: number) =>
 
 export default function Progress() {
   const navigate = useNavigate()
+  const { t } = useT()
   const [tab, setTab] = useState<Tab>('Strength')
 
   const [summary, setSummary] = useState<ProgressSummary | null>(null)
@@ -40,9 +51,10 @@ export default function Progress() {
   useEffect(() => {
     progressService.getSummary()
       .then(setSummary)
-      .catch(() => setError('Could not load your progress. Check your connection and try again.'))
+      .catch(() => setError(t('progress.loadError')))
       .finally(() => setIsLoading(false))
-  }, [])
+    // t only words the error here; refetching on a language switch is not wanted
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="px-4 pt-4 pb-8">
@@ -50,19 +62,19 @@ export default function Progress() {
         <button onClick={() => navigate(-1)}
           className="w-9 h-9 rounded-full bg-dark-800 border border-dark-600
                      flex items-center justify-center text-lg text-white">←</button>
-        <h1 className="text-xl font-extrabold text-white">Progress</h1>
+        <h1 className="text-xl font-extrabold text-white">{t('progress.title')}</h1>
       </div>
 
       {/* Tabs, matching Calendar's control */}
       <div className="flex gap-2 mb-4">
-        {(['Strength', 'Volume', 'Recovery'] as Tab[]).map(t => (
+        {TABS.map(item => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={item.value}
+            onClick={() => setTab(item.value)}
             className={`flex-1 py-2 rounded-btn text-xs font-semibold transition-colors
-              ${tab === t ? 'bg-brand-teal text-black' : 'bg-dark-800 text-dark-300 border border-dark-600'}`}
+              ${tab === item.value ? 'bg-brand-teal text-black' : 'bg-dark-800 text-dark-300 border border-dark-600'}`}
           >
-            {t}
+            {t(item.label)}
           </button>
         ))}
       </div>
@@ -92,8 +104,11 @@ export default function Progress() {
               />
               <p className="text-dark-400 text-[11px] mt-3 px-1 leading-relaxed">
                 {summary.volume.activeWeeks === 0
-                  ? 'No finished sessions in the last 12 weeks yet.'
-                  : `You trained in ${summary.volume.activeWeeks} of the last ${summary.volume.weeks.length} weeks.`}
+                  ? t('progress.volumeEmpty')
+                  : t('progress.volumeActive', {
+                      active: summary.volume.activeWeeks,
+                      total: summary.volume.weeks.length,
+                    })}
               </p>
             </>
           )}
@@ -106,6 +121,7 @@ export default function Progress() {
 
 /** Exercises with a strength estimate, best first; each series is fetched when expanded. */
 function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
+  const { t, tn } = useT()
   const [openId, setOpenId] = useState<string | null>(null)
   const [series, setSeries] = useState<Record<string, E1rmPoint[]>>({})
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -125,10 +141,9 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
   if (entries.length === 0) {
     return (
       <div className="bg-dark-800 rounded-card border border-dark-600 p-5">
-        <p className="text-white text-sm font-semibold">No strength estimates yet</p>
+        <p className="text-white text-sm font-semibold">{t('progress.strengthEmptyTitle')}</p>
         <p className="text-dark-300 text-xs mt-2 leading-relaxed">
-          Finish a session with a weighted or bodyweight exercise and an estimated
-          one-rep max appears here. Cardio and mobility work does not produce one.
+          {t('progress.strengthEmptyBody')}
         </p>
       </div>
     )
@@ -137,9 +152,7 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
   return (
     <div className="space-y-2">
       <p className="text-dark-400 text-[11px] px-1 leading-relaxed">
-        Estimated one-rep max from your logged sets, best first. Calisthenics
-        includes your bodyweight, so it reads as a total load rather than
-        something on a bar.
+        {t('progress.strengthIntro')}
       </p>
 
       {entries.map(entry => {
@@ -157,7 +170,9 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
               <div className="min-w-0">
                 <p className="text-white text-sm font-semibold truncate">{entry.exerciseName}</p>
                 <p className="text-dark-400 text-xs mt-0.5">
-                  {entry.sessionCount} session{entry.sessionCount === 1 ? '' : 's'} · last {fmtAgo(entry.lastPerformedAt)}
+                  {tn('progress.sessionsAndLast', entry.sessionCount, {
+                    ago: fmtAgo(entry.lastPerformedAt, t),
+                  })}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -166,7 +181,7 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
                     {entry.e1rm}
                     <span className="text-dark-300 text-xs font-semibold ml-0.5">kg</span>
                   </p>
-                  <p className="text-dark-400 text-[10px] mt-0.5">est. 1RM</p>
+                  <p className="text-dark-400 text-[10px] mt-0.5">{t('progress.est1rmShort')}</p>
                 </div>
                 <span className={`text-dark-400 text-lg leading-none transition-transform
                                  ${isOpen ? 'rotate-90' : ''}`}>›</span>
@@ -192,17 +207,17 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
                       format={v => `${v}kg`}
                       baseline="auto"
                       minSpan={5}
-                      valueHeader="Est. 1RM"
-                      singleHint="log it once more and a trend appears here."
+                      valueHeader={t('progress.est1rmHeader')}
+                      singleHint={t('progress.trendSingleHint')}
                     />
                     <p className="px-4 pb-3 text-dark-400 text-[11px] leading-relaxed">
-                      <StarFilledIcon className="w-3 h-3 inline-block align-[-1px] text-brand-yellow" /> marks a new best. Estimated from weight, reps and RPE — it
-                      is not a tested max.
+                      <StarFilledIcon className="w-3 h-3 inline-block align-[-1px] text-brand-yellow" />{' '}
+                      {t('progress.prNote')}
                     </p>
                   </>
                 ) : (
                   <p className="px-4 py-3 text-dark-400 text-xs">
-                    No sets with a weight and rep count yet, so there is nothing to plot.
+                    {t('progress.noPlot')}
                   </p>
                 )}
               </div>
@@ -219,6 +234,7 @@ function StrengthTab({ entries }: { entries: StrengthEntry[] }) {
  * so the last point matches the body map.
  */
 function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
+  const { t, tn } = useT()
   const [openId, setOpenId] = useState<string | null>(null)
 
   const busiest = useMemo(() => muscles.slice(0, 3), [muscles])
@@ -226,9 +242,9 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
   if (muscles.length === 0) {
     return (
       <div className="bg-dark-800 rounded-card border border-dark-600 p-5">
-        <p className="text-white text-sm font-semibold">Nothing to show yet</p>
+        <p className="text-white text-sm font-semibold">{t('progress.recoveryEmptyTitle')}</p>
         <p className="text-dark-300 text-xs mt-2 leading-relaxed">
-          Finish a session and each muscle it loaded gets a recovery curve here.
+          {t('progress.recoveryEmptyBody')}
         </p>
       </div>
     )
@@ -237,14 +253,12 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
   return (
     <div className="space-y-2">
       <div className="bg-dark-800 rounded-card border border-dark-600 p-4">
-        <p className="text-dark-300 text-xs uppercase tracking-wider">Carrying the most</p>
+        <p className="text-dark-300 text-xs uppercase tracking-wider">{t('progress.carryingMost')}</p>
         <p className="text-white text-sm mt-1.5 leading-relaxed">
-          Over the last 30 days: {busiest.map(m => m.muscleName).join(', ')}.
+          {t('progress.last30', { muscles: busiest.map(m => m.muscleName).join(', ') })}
         </p>
         <p className="text-dark-400 text-[11px] mt-2 leading-relaxed">
-          Average fatigue across the window, not right now — a muscle high here is
-          one that rarely gets a clear day, which is different from one that is
-          sore today.
+          {t('progress.avgNote')}
         </p>
       </div>
 
@@ -263,8 +277,10 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
               <div className="min-w-0">
                 <p className="text-white text-sm font-semibold truncate">{muscle.muscleName}</p>
                 <p className="text-dark-400 text-xs mt-0.5">
-                  avg {muscle.averageLevel}% · peak {muscle.peakLevel}% · {muscle.hits.length} session
-                  {muscle.hits.length === 1 ? '' : 's'}
+                  {tn('progress.muscleStats', muscle.hits.length, {
+                    avg: muscle.averageLevel,
+                    peak: muscle.peakLevel,
+                  })}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -273,7 +289,7 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
                   <p className={`text-lg font-bold leading-none tabular-nums ${fatigueTone(current)}`}>
                     {current}%
                   </p>
-                  <p className="text-dark-400 text-[10px] mt-0.5">now</p>
+                  <p className="text-dark-400 text-[10px] mt-0.5">{t('progress.now')}</p>
                 </div>
                 <span className={`text-dark-400 text-lg leading-none transition-transform
                                  ${isOpen ? 'rotate-90' : ''}`}>›</span>
@@ -289,11 +305,10 @@ function RecoveryTab({ muscles }: { muscles: MuscleFatigueHistory[] }) {
                   color={fatigueColor(muscle.peakLevel)}
                   baseline="zero"
                   ceiling={100}
-                  valueHeader="Fatigue"
+                  valueHeader={t('progress.fatigueHeader')}
                 />
                 <p className="px-4 pb-3 text-dark-400 text-[11px] leading-relaxed">
-                  One point per day, recovery included — the dips are the curve
-                  clearing, not missing data.
+                  {t('progress.recoveryNote')}
                 </p>
               </div>
             )}

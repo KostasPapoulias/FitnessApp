@@ -3,18 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { templateService } from '../../services/template.service'
 import { rpeColor, nextLoad } from './helpers'
+import { useT, MessageKey } from '../../i18n'
 import NumberField from '../../components/workout/NumberField'
 import { LightbulbIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
 
 // Label and colour for how each suggestion was derived, shown with its reasoning.
-const BASIS_STYLE: Record<string, { label: string; color: string }> = {
-  progression: { label: 'PROGRESS',  color: '#4ADE80' },
-  repeat:      { label: 'REPEAT',    color: '#00D4AA' },
-  deload:      { label: 'BACK OFF',  color: '#FACC15' },
-  return:      { label: 'EASING IN', color: '#A78BFA' },
-  estimate:    { label: 'ESTIMATE',  color: '#888888' },
-  default:     { label: 'NEW',       color: '#888888' },
+const BASIS_STYLE: Record<string, { label: MessageKey; color: string }> = {
+  progression: { label: 'plan.basisProgress',  color: '#4ADE80' },
+  repeat:      { label: 'plan.basisRepeat',    color: '#00D4AA' },
+  deload:      { label: 'plan.basisBackOff',   color: '#FACC15' },
+  return:      { label: 'plan.basisEasingIn',  color: '#A78BFA' },
+  estimate:    { label: 'plan.basisEstimate',  color: '#888888' },
+  default:     { label: 'plan.basisNew',       color: '#888888' },
 }
 
 // ── small stepper button ──────────────────────────────────────────────────
@@ -38,6 +39,7 @@ function Step({ children, onClick, disabled }: {
 
 export default function PlanSets() {
   const navigate = useNavigate()
+  const { t, tn } = useT()
   const {
     selectedExercises, suggestionsLoading, loadSuggestions,
     updateSet, addSet, removeSet, setExerciseRest, removeExerciseAt, setQuickLog,
@@ -75,11 +77,11 @@ export default function PlanSets() {
     return (
       <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
-          <p className="text-white text-lg mb-4">No exercises selected</p>
+          <p className="text-white text-lg mb-4">{t('live.noExercises')}</p>
           <button
             onClick={() => navigate('/workout/browse')}
             className="bg-brand-teal text-black px-6 py-3 rounded-btn font-bold">
-            Browse Exercises
+            {t('live.browseExercises')}
           </button>
         </div>
       </div>
@@ -101,9 +103,9 @@ export default function PlanSets() {
             ←
           </button>
           <div>
-            <h1 className="text-2xl font-extrabold leading-tight">Plan Sets</h1>
+            <h1 className="text-2xl font-extrabold leading-tight">{t('plan.title')}</h1>
             <p className="text-dark-300 text-[13px] mt-0.5">
-              {selectedExercises.length} exercises · configure before starting
+              {t('plan.subtitle', { count: selectedExercises.length })}
             </p>
           </div>
         </div>
@@ -111,9 +113,9 @@ export default function PlanSets() {
         {/* Stat cards */}
         <div className="grid grid-cols-3 gap-2.5 mb-5">
           {[
-            { value: String(totalSets), label: 'Total sets' },
-            { value: String(selectedExercises.length), label: 'Exercises' },
-            { value: `~${estimatedMinutes}m`, label: 'Est. duration' },
+            { value: String(totalSets), label: t('plan.statTotalSets') },
+            { value: String(selectedExercises.length), label: t('plan.statExercises') },
+            { value: `~${t('unit.minutes', { n: estimatedMinutes })}`, label: t('plan.statDuration') },
           ].map(s => (
             <div key={s.label}
               className="bg-dark-800 border border-dark-600 rounded-card
@@ -130,10 +132,10 @@ export default function PlanSets() {
           <LightbulbIcon className="w-4 h-4 flex-shrink-0" />
           <p className="text-dark-200 text-[12.5px] leading-relaxed">
             {suggestionsLoading
-              ? 'Checking what you lifted last time…'
-              : <>Tap −/+ to adjust each value. Tap{' '}
-                  <span className="text-brand-teal">copy to remaining</span>{' '}
-                  to apply a set's numbers to the sets below it.</>}
+              ? t('plan.checkingLast')
+              : <>{t('plan.tipBefore')}{' '}
+                  <span className="text-brand-teal">{t('plan.tipLink')}</span>{' '}
+                  {t('plan.tipAfter')}</>}
           </p>
         </div>
 
@@ -158,7 +160,7 @@ export default function PlanSets() {
                     <p className="text-dark-300 text-xs mt-0.5">{ex.modality}</p>
                   </div>
                   <span className="text-dark-300 text-xs flex-shrink-0">
-                    {se.sets.length} set{se.sets.length > 1 ? 's' : ''}
+                    {tn('calendar.sets', se.sets.length)}
                   </span>
                 </div>
 
@@ -172,12 +174,12 @@ export default function PlanSets() {
                           color: BASIS_STYLE[se.suggestion.basis]?.color ?? '#888888',
                           background: `${BASIS_STYLE[se.suggestion.basis]?.color ?? '#888888'}1f`,
                         }}>
-                        {BASIS_STYLE[se.suggestion.basis]?.label ?? 'PLAN'}
+                        {t(BASIS_STYLE[se.suggestion.basis]?.label ?? 'plan.basisFallback')}
                       </span>
                       <p className="text-dark-300 text-[11.5px] leading-snug">
                         {se.suggestion.note}
                         {se.edited && (
-                          <span className="text-dark-400"> · you’ve edited these</span>
+                          <span className="text-dark-400">{t('plan.edited')}</span>
                         )}
                       </p>
                     </div>
@@ -187,9 +189,9 @@ export default function PlanSets() {
                 {/* Column headers — `minmax(0,1fr)` lets the columns shrink below their content */}
                 <div className="grid grid-cols-[22px_minmax(0,1fr)_minmax(0,1fr)_38px_24px] gap-1 px-4 py-1 items-center">
                   <div />
-                  <p className="text-[10px] tracking-wider text-dark-400 text-center">REPS</p>
+                  <p className="text-[10px] tracking-wider text-dark-400 text-center">{t('plan.colReps')}</p>
                   <p className="text-[10px] tracking-wider text-dark-400 text-center">
-                    {ex.modality === 'Calisthenics' ? 'LOAD' : 'WEIGHT'}
+                    {t(ex.modality === 'Calisthenics' ? 'plan.colLoad' : 'plan.colWeight')}
                   </p>
                   <p className="text-[10px] tracking-wider text-dark-400 text-center">RPE</p>
                   <div />
@@ -253,7 +255,7 @@ export default function PlanSets() {
                           })}
                           className="text-dark-400 hover:text-brand-teal text-[11px] transition-colors"
                         >
-                          ↓ copy to remaining
+                          {t('plan.copyToRemaining')}
                         </button>
                       </div>
                     )}
@@ -264,11 +266,11 @@ export default function PlanSets() {
                 <div className="flex items-center justify-between gap-2 py-3 mx-4 mt-2
                                 border-t border-dark-600">
                   <div className="flex items-center gap-2 min-w-0 text-dark-200 text-[13.5px]">
-                    <span>⏱️</span> Rest between sets
+                    <span>⏱️</span> {t('plan.restBetween')}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Step onClick={() => setExerciseRest(ei, rest - 15)}>−</Step>
-                    <span className="min-w-[42px] text-center text-[15px] font-bold">{rest}s</span>
+                    <span className="min-w-[42px] text-center text-[15px] font-bold">{t('unit.seconds', { n: rest })}</span>
                     <Step onClick={() => setExerciseRest(ei, rest + 15)}>+</Step>
                   </div>
                 </div>
@@ -282,7 +284,7 @@ export default function PlanSets() {
                                active:scale-95 transition-transform hover:text-brand-teal
                                hover:border-brand-teal/40"
                   >
-                    + Add Set
+                    {t('plan.addSet')}
                   </button>
                   <button
                     onClick={() => removeExerciseAt(ei)}
@@ -290,7 +292,7 @@ export default function PlanSets() {
                                text-brand-red text-[13px] font-semibold
                                active:scale-95 transition-transform"
                   >
-                    Remove
+                    {t('plan.removeExercise')}
                   </button>
                 </div>
               </div>
@@ -303,7 +305,7 @@ export default function PlanSets() {
                        bg-dark-800 text-dark-200 text-sm font-semibold
                        active:scale-95 transition-transform"
           >
-            + Add Exercise
+            {t('plan.addExercise')}
           </button>
 
           {/* Save this plan for later */}
@@ -321,7 +323,7 @@ export default function PlanSets() {
                        disabled:opacity-40"
             style={{ boxShadow: '0 8px 24px -6px rgba(0,212,170,0.4)' }}
           >
-            ▶ Start Workout — {totalSets} sets
+            {t('plan.start', { sets: totalSets })}
           </button>
           {canQuickLog && (
             <button
@@ -330,7 +332,7 @@ export default function PlanSets() {
                          text-dark-200 text-[13.5px] font-semibold
                          active:scale-95 transition-transform"
             >
-              Start without timer — tick exercises off
+              {t('plan.startNoTimer')}
             </button>
           )}
         </div>
@@ -342,6 +344,7 @@ export default function PlanSets() {
 /** Save the current plan, optionally on a date. Collapsed by default. */
 function SavePlanPanel() {
   const navigate = useNavigate()
+  const { t } = useT()
   const { selectedExercises, saveAsTemplate, sourceTemplateId } = useWorkoutStore()
 
   const [open, setOpen] = useState(false)
@@ -356,7 +359,7 @@ function SavePlanPanel() {
 
   const save = async () => {
     if (!name.trim()) {
-      setError('Give the plan a name so you can find it again.')
+      setError(t('plan.nameRequired'))
       return
     }
     setBusy(true)
@@ -376,7 +379,7 @@ function SavePlanPanel() {
 
       setSaved(true)
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Could not save that plan. Try again.')
+      setError(err?.response?.data?.error ?? t('plan.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -387,16 +390,16 @@ function SavePlanPanel() {
   if (saved) {
     return (
       <div className="rounded-card border border-brand-teal/40 bg-[#0a2a22] px-4 py-3.5">
-        <p className="text-[13px] font-bold text-brand-teal">Plan saved</p>
+        <p className="text-[13px] font-bold text-brand-teal">{t('plan.savedTitle')}</p>
         <p className="text-dark-200 text-[12px] mt-1 leading-snug">
-          {when ? 'It is on standby for the date you chose.' : 'You can load it again any time.'}
+          {t(when ? 'plan.savedScheduled' : 'plan.savedAnytime')}
         </p>
         <button
           onClick={() => navigate('/plans')}
           className="mt-3 px-4 py-2 rounded-btn border border-dark-600 bg-dark-800
                      text-white text-[12.5px] font-bold active:scale-95 transition-transform"
         >
-          View my plans →
+          {t('plan.viewPlans')}
         </button>
       </div>
     )
@@ -409,9 +412,9 @@ function SavePlanPanel() {
         className="w-full py-3.5 rounded-card border border-dark-600 bg-dark-800
                    text-left px-4 active:scale-[0.99] transition-transform"
       >
-        <p className="text-[10px] tracking-wide text-dark-400">KEEP THIS WORKOUT</p>
+        <p className="text-[10px] tracking-wide text-dark-400">{t('plan.keepHeading')}</p>
         <p className="text-[13px] font-semibold mt-0.5">
-          {sourceTemplateId ? 'Save as a new plan →' : 'Save as a plan · schedule it →'}
+          {t(sourceTemplateId ? 'plan.saveAsNew' : 'plan.saveAndSchedule')}
         </p>
       </button>
     )
@@ -419,19 +422,19 @@ function SavePlanPanel() {
 
   return (
     <div className="rounded-card border border-dark-600 bg-dark-800 px-4 py-4">
-      <p className="text-[10px] tracking-wide text-dark-400">SAVE THIS WORKOUT</p>
+      <p className="text-[10px] tracking-wide text-dark-400">{t('plan.saveHeading')}</p>
 
       <input
         value={name}
         onChange={e => setName(e.target.value)}
-        placeholder="Name it — e.g. Upper push A"
+        placeholder={t('plan.namePlaceholder')}
         className="w-full mt-2.5 bg-dark-700 border border-dark-600 rounded-btn px-3.5 py-2.5
                    text-white text-sm placeholder-dark-400 outline-none
                    focus:border-brand-teal/60 transition-colors"
       />
 
       <label className="block mt-3 text-[11.5px] text-dark-300">
-        Put it on a date (optional)
+        {t('plan.onADate')}
         <input
           type="datetime-local"
           value={when}
@@ -449,7 +452,7 @@ function SavePlanPanel() {
             onChange={e => setRemind(e.target.checked)}
             className="w-4 h-4 accent-[#00D4AA]"
           />
-          Remind me an hour before
+          {t('plan.remindHour')}
         </label>
       )}
 
@@ -462,14 +465,14 @@ function SavePlanPanel() {
           className="flex-1 py-3 rounded-btn bg-brand-teal text-black text-[13px] font-extrabold
                      active:scale-95 transition-transform disabled:opacity-40"
         >
-          {busy ? 'Saving…' : when ? 'Save & schedule' : 'Save plan'}
+          {busy ? t('common.saving') : t(when ? 'plan.saveSchedule' : 'plan.savePlan')}
         </button>
         <button
           onClick={() => setOpen(false)}
           className="px-4 py-3 rounded-btn border border-dark-600 bg-dark-700
                      text-white text-[13px] font-bold active:scale-95 transition-transform"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
       </div>
     </div>

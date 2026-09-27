@@ -40,6 +40,8 @@ import { Capacitor } from '@capacitor/core'
 import PinLock from './components/security/PinLock'
 import { useAppLock } from './hooks/useAppLock'
 import { dismissBoot } from './boot'
+import { useLocaleStore } from './store/useLocaleStore'
+import { useFatigueStore } from './store/useFatigueStore'
 // Protected route: signed-out users go to /login; users without completed
 // onboarding (existing accounts too) go to /onboarding.
 const Protected = ({ children }: { children: React.ReactNode }) => {
@@ -81,6 +83,19 @@ export default function App() {
     if (!isAuthenticated || Capacitor.isNativePlatform()) return
     ensurePushSubscription()
   }, [isAuthenticated])
+
+  /**
+   * Some copy is written by the server and localised from the request's
+   * Accept-Language — the sleep-readiness note is the visible one. Anything
+   * already sitting in a store was fetched in the previous language, so
+   * switching to Greek left an English sentence on a Greek screen until the
+   * next fetch happened to occur. Refetch on a switch instead.
+   */
+  const locale = useLocaleStore(s => s.locale)
+  useEffect(() => {
+    if (!isAuthenticated) return
+    void useFatigueStore.getState().fetchFatigue()
+  }, [locale, isAuthenticated])
 
   // Launch checks that decide the first screen: token validity and the PIN lock.
   const settling = isBootstrapping || (isAuthenticated && !lockChecked)

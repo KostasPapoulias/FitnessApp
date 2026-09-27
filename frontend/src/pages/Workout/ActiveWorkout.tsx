@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useT } from '../../i18n'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
@@ -38,6 +39,7 @@ export default function ActiveWorkout() {
     startError, logError, clearErrors, queuedSetCount,
     restEndsAt, setRestEndsAt,
   } = useWorkoutStore()
+  const { t, tn } = useT()
 
   // The finish request itself lives on the Finish screen
   const { notifyRestComplete } = useNotifications()
@@ -359,7 +361,8 @@ export default function ActiveWorkout() {
                     rounded-card border border-brand-yellow/50 bg-[#2a2410] shadow-lg">
       <MicIcon className="w-4 h-4" />
       <p className="flex-1 text-[13px] text-white leading-snug">
-        Say <span className="font-bold">"end workout"</span> again to finish, or ignore this to keep going.
+        {t('live.endArmedBefore')} <span className="font-bold">"end workout"</span>{' '}
+        {t('live.endArmedAfter')}
       </p>
       <button onClick={() => setEndArmed(false)} className="text-dark-300 text-lg leading-none px-1">×</button>
     </div>
@@ -408,7 +411,7 @@ export default function ActiveWorkout() {
       <SaveToCalendar
         pending
         onSettled={() => {}}
-        headline="Ending session"
+        headline={t('live.endingSession')}
       />
     )
   }
@@ -419,16 +422,16 @@ export default function ActiveWorkout() {
       <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center max-w-[320px]">
           <AlertTriangleIcon className="w-9 h-9 mb-4 mx-auto text-brand-yellow" />
-          <p className="text-white font-semibold mb-2">Couldn't start the workout</p>
+          <p className="text-white font-semibold mb-2">{t('live.startFailed')}</p>
           <p className="text-dark-300 text-[13px] mb-6">{startError}</p>
           <button
             onClick={() => { clearErrors(); beginSession() }}
             className="w-full bg-brand-teal text-black py-3.5 rounded-btn font-bold
                        active:scale-95 transition-transform">
-            Retry
+            {t('common.tryAgain')}
           </button>
           <button onClick={() => navigate('/workout/plan')}
-            className="mt-3 text-dark-400 text-sm">← Back to plan</button>
+            className="mt-3 text-dark-400 text-sm">{t('live.backToPlan')}</button>
         </div>
       </div>
     )
@@ -439,8 +442,8 @@ export default function ActiveWorkout() {
   if (isStarting || (!sessionId && selectedExercises.length > 0)) {
     return (
       <SessionStatus
-        headline="Starting workout…"
-        detail={`${selectedExercises.length} ${selectedExercises.length === 1 ? 'exercise' : 'exercises'}`}
+        headline={t('live.starting')}
+        detail={tn('live.exerciseCount', selectedExercises.length)}
         spin
       />
     )
@@ -451,10 +454,10 @@ export default function ActiveWorkout() {
     return (
       <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
-          <p className="text-white text-lg mb-4">No exercises selected</p>
+          <p className="text-white text-lg mb-4">{t('live.noExercises')}</p>
           <button onClick={() => navigate('/workout/browse')}
             className="bg-brand-teal text-black px-6 py-3 rounded-btn font-bold">
-            Browse Exercises
+            {t('live.browseExercises')}
           </button>
         </div>
       </div>
@@ -475,8 +478,7 @@ export default function ActiveWorkout() {
                     rounded-card border border-brand-orange/40 bg-[#2a2118] shadow-lg">
       <WifiOffIcon className="w-4 h-4" />
       <p className="flex-1 text-[13px] text-white leading-snug">
-        {queuedSetCount === 1 ? '1 set is' : `${queuedSetCount} sets are`} saved on this phone.
-        {' '}They will upload when you have a signal.
+        {tn('live.queued', queuedSetCount)}{' '}{t('live.queuedUpload')}
       </p>
     </div>
   ) : null
@@ -539,16 +541,26 @@ export default function ActiveWorkout() {
   let upNext: { title: string; detail: string }
   if (currentSetIndex + 1 < totalSets) {
     const n = currentExercise.sets[currentSetIndex + 1]
-    upNext = { title: `Set ${currentSetIndex + 2}`, detail: `${n.weight}kg · ${n.reps} reps · RPE ${n.rpe}` }
+    upNext = {
+      title: t('live.nextSetTitle', { n: currentSetIndex + 2 }),
+      detail: t('live.nextSetDetail', { kg: n.weight, reps: n.reps, rpe: n.rpe }),
+    }
   } else {
     let ni = currentExerciseIndex + 1
     while (ni < selectedExercises.length && selectedExercises[ni].skipped) ni++
     upNext = ni < selectedExercises.length
-      ? { title: selectedExercises[ni].exercise.name, detail: `Next exercise · ${selectedExercises[ni].sets.length} sets` }
-      : { title: 'Last set', detail: 'Finish line — give it everything' }
+      ? {
+          title: selectedExercises[ni].exercise.name,
+          detail: t('live.nextExerciseDetail', { sets: selectedExercises[ni].sets.length }),
+        }
+      : { title: t('live.lastSetTitle'), detail: t('live.lastSetDetail') }
   }
 
-  const rpeModeLabel = rpeMode === 'standard' ? 'Standard' : rpeMode === 'beginner' ? 'Beginner' : 'Pro'
+  const rpeModeLabel = t(
+    rpeMode === 'standard' ? 'live.rpeStandard'
+    : rpeMode === 'beginner' ? 'live.rpeBeginner'
+    : 'live.rpePro'
+  )
   const cycleMode = () => setRpeMode(m => m === 'standard' ? 'beginner' : m === 'beginner' ? 'pro' : 'standard')
 
   return (
@@ -558,13 +570,13 @@ export default function ActiveWorkout() {
       <div className="flex justify-between items-start pb-3.5 border-b border-dark-600">
         <div>
           <div className="flex items-center gap-1.5 text-brand-red text-xs font-bold tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-brand-red animate-pulse" /> LIVE
+            <span className="w-2 h-2 rounded-full bg-brand-red animate-pulse" /> {t('live.badge')}
           </div>
-          <p className="text-dark-300 text-xs mt-2">Workout time</p>
+          <p className="text-dark-300 text-xs mt-2">{t('live.workoutTime')}</p>
           <p className="text-[30px] font-extrabold leading-none mt-0.5">{fmtTime(elapsed)}</p>
         </div>
         <div className="text-right">
-          <p className="text-dark-300 text-xs">Exercise</p>
+          <p className="text-dark-300 text-xs">{t('live.exercise')}</p>
           <p className="text-[26px] font-extrabold mt-1">
             {currentExerciseIndex + 1}
             <span className="text-dark-500 text-base">/{selectedExercises.length}</span>
@@ -584,7 +596,7 @@ export default function ActiveWorkout() {
                      bg-dark-800 text-white text-[13px] font-semibold flex-shrink-0 ml-3
                      active:scale-95 transition-transform"
         >
-          <ListIcon className="w-4 h-4" /> All exercises
+          <ListIcon className="w-4 h-4" /> {t('live.allExercises')}
         </button>
       </div>
 
@@ -629,21 +641,21 @@ export default function ActiveWorkout() {
                           flex items-center justify-center text-base font-extrabold">
             {cur.reps}
           </div>
-          <span className="text-base font-bold">Current Set</span>
+          <span className="text-base font-bold">{t('live.currentSet')}</span>
         </div>
 
         {/* Weight + Reps */}
         <div className="p-3.5 grid grid-cols-2 gap-2.5">
           {/* Weight */}
           <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3.5 min-w-0">
-            <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">WEIGHT (KG)</p>
+            <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">{t('live.weightKg')}</p>
             <div className="flex items-center justify-center gap-1.5">
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { weight: Math.max(0, nextLoad(cur.weight, -1)) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
                            bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
               <div className="flex-1 min-w-0">
-                <NumberField kind="weight" label="Weight" value={cur.weight}
+                <NumberField kind="weight" label={t('live.weightKg')} value={cur.weight}
                   onChange={weight => updateSet(currentExerciseIndex, currentSetIndex, { weight })}
                   className="text-[22px] sm:text-[26px] font-extrabold" />
               </div>
@@ -667,14 +679,14 @@ export default function ActiveWorkout() {
           </div>
           {/* Reps */}
           <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3.5 min-w-0">
-            <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">REPS</p>
+            <p className="text-center text-[10px] tracking-widest text-dark-300 mb-2.5">{t('live.reps')}</p>
             <div className="flex items-center justify-center gap-1.5">
               <button
                 onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: Math.max(1, cur.reps - 1) })}
                 className="w-10 h-10 sm:w-[46px] sm:h-[46px] flex-shrink-0 rounded-btn border border-dark-600
                            bg-dark-700 text-xl sm:text-2xl font-bold active:scale-90 transition-transform">−</button>
               <div className="flex-1 min-w-0">
-                <NumberField kind="reps" label="Reps" value={cur.reps}
+                <NumberField kind="reps" label={t('live.reps')} value={cur.reps}
                   onChange={reps => updateSet(currentExerciseIndex, currentSetIndex, { reps })}
                   className="text-[22px] sm:text-[26px] font-extrabold" />
               </div>
@@ -745,14 +757,14 @@ export default function ActiveWorkout() {
             className="w-full py-[17px] rounded-btn bg-brand-teal text-black
                        text-[17px] font-extrabold active:scale-95 transition-transform
                        disabled:opacity-60">
-            {isLoggingSet ? 'Logging…' : '✓ Set Done — Start Rest'}
+            {isLoggingSet ? t('live.logging') : t('live.setDone')}
           </button>
         </div>
       </div>
 
       {/* Up next */}
       <div className="mt-4 bg-dark-800 border border-dark-600 rounded-card px-4 py-3.5">
-        <p className="text-[10px] tracking-widest text-dark-400 mb-1">UP NEXT</p>
+        <p className="text-[10px] tracking-widest text-dark-400 mb-1">{t('live.upNext')}</p>
         <p className="text-[15px] font-bold">{upNext.title}</p>
         <p className="text-[12.5px] text-dark-300 mt-0.5">{upNext.detail}</p>
       </div>
@@ -765,7 +777,7 @@ export default function ActiveWorkout() {
           className="py-3.5 rounded-btn border border-dark-600 bg-dark-800
                      text-sm font-semibold active:scale-95 transition-transform
                      flex items-center justify-center gap-1.5">
-          <NoteIcon className="w-4 h-4" /> Note
+          <NoteIcon className="w-4 h-4" /> {t('live.note')}
         </button>
         <button
           onClick={handleFinish}
@@ -773,7 +785,7 @@ export default function ActiveWorkout() {
           className="py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
                      text-brand-red text-sm font-bold active:scale-95 transition-transform
                      disabled:opacity-50">
-          {isFinishing ? 'Ending…' : '■ End'}
+          {isFinishing ? t('live.ending') : t('live.end')}
         </button>
       </div>
 
@@ -798,6 +810,7 @@ function VoiceStrip({
   enabled: boolean
   onOpenHelp: () => void
 }) {
+  const { t } = useT()
   const [exampleIndex, setExampleIndex] = useState(0)
   const listening = state === 'listening'
   const busy = Boolean(lastHeard || lastMiss)
@@ -823,17 +836,18 @@ function VoiceStrip({
   const color = { good: '#00D4AA', miss: '#FACC15', bad: '#EF4444', calm: '#888888' }[tone]
   const border = { good: 'rgba(0,212,170,0.4)', miss: 'rgba(250,204,21,0.4)', bad: 'rgba(239,68,68,0.35)', calm: '#2A2A2A' }[tone]
 
+  // The example phrases stay in English: the recogniser is pinned to en-GB
   const message = lastMiss
-    ? `Didn’t catch “${lastMiss}”`
+    ? t('live.voiceMissed', { phrase: lastMiss })
     : lastHeard
-    ? `Heard “${lastHeard}”`
+    ? t('live.voiceHeard', { phrase: lastHeard })
     : blocked
-    ? 'Microphone blocked — allow it to use voice'
+    ? t('live.voiceBlocked')
     : broken
-    ? 'Voice stopped. Use the buttons to log.'
+    ? t('live.voiceStopped')
     : listening
-    ? `Say “${ROTATING_EXAMPLES[exampleIndex]}”`
-    : 'Starting microphone…'
+    ? t('live.voiceSay', { example: ROTATING_EXAMPLES[exampleIndex] })
+    : t('live.voiceStarting')
 
   return (
     <button
@@ -850,7 +864,7 @@ function VoiceStrip({
         {/* After a miss: suggest a phrase that works */}
         {lastMiss && (
           <span className="block text-[11.5px] text-dark-400 mt-0.5">
-            Try “set done” · tap for all commands
+            {t('live.voiceTry')}
           </span>
         )}
       </span>

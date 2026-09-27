@@ -2,14 +2,15 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { rpeColor, nextLoad } from './helpers'
+import { useT, MessageKey } from '../../i18n'
 import NumberField from '../../components/workout/NumberField'
 import { ModalityIcon } from '../../components/icons'
 
-const STATUS_META: Record<string, { label: string; color: string; dot: string }> = {
-  done:     { label: 'Done',        color: '#4ADE80', dot: '#4ADE80' },
-  current:  { label: 'In progress', color: '#00D4AA', dot: '#00D4AA' },
-  upcoming: { label: 'Up next',     color: '#888888', dot: '#333333' },
-  skipped:  { label: 'Skipped',     color: '#555555', dot: '#333333' },
+const STATUS_META: Record<string, { label: MessageKey; color: string; dot: string }> = {
+  done:     { label: 'queue.statusDone',     color: '#4ADE80', dot: '#4ADE80' },
+  current:  { label: 'queue.statusCurrent',  color: '#00D4AA', dot: '#00D4AA' },
+  upcoming: { label: 'queue.statusUpcoming', color: '#888888', dot: '#333333' },
+  skipped:  { label: 'queue.statusSkipped',  color: '#555555', dot: '#333333' },
 }
 
 function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
@@ -25,6 +26,7 @@ function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: (
 
 export default function WorkoutQueue() {
   const navigate = useNavigate()
+  const { t } = useT()
   const {
     selectedExercises, currentExerciseIndex, completedSets,
     reorderExercises, updateSet, addSet, removeSet,
@@ -51,13 +53,13 @@ export default function WorkoutQueue() {
       {/* Header */}
       <div className="flex items-center justify-between pb-3.5 border-b border-dark-600">
         <div>
-          <h1 className="text-2xl font-extrabold leading-tight">Exercises</h1>
-          <p className="text-dark-300 text-[12.5px] mt-0.5">Drag to reorder · edit live</p>
+          <h1 className="text-2xl font-extrabold leading-tight">{t('queue.title')}</h1>
+          <p className="text-dark-300 text-[12.5px] mt-0.5">{t('queue.subtitle')}</p>
         </div>
         <button onClick={backToActive}
           className="px-4 py-2.5 rounded-[10px] bg-brand-teal text-black text-sm font-bold
                      active:scale-95 transition-transform">
-          Done
+          {t('common.done')}
         </button>
       </div>
 
@@ -108,7 +110,7 @@ export default function WorkoutQueue() {
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full" style={{ background: meta.dot }} />
-                    <span className="text-[11px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
+                    <span className="text-[11px] font-bold" style={{ color: meta.color }}>{t(meta.label)}</span>
                   </div>
                   <span className="text-[11px] text-dark-400">{doneCount}/{e.sets.length}</span>
                 </div>
@@ -133,7 +135,7 @@ export default function WorkoutQueue() {
                 <button onClick={() => setExpandIdx(expanded ? null : i)}
                   className="px-3 py-1.5 rounded-badge border border-dark-600 bg-dark-700
                              text-white text-xs font-semibold active:scale-95 transition-transform">
-                  {expanded ? 'Close' : 'Edit sets'}
+                  {t(expanded ? 'queue.close' : 'queue.editSets')}
                 </button>
               </div>
 
@@ -203,12 +205,12 @@ export default function WorkoutQueue() {
                     <button onClick={() => toggleSkip(i)}
                       className="flex-1 py-2 rounded-[10px] border border-dark-600 bg-dark-700
                                  text-dark-200 text-xs font-semibold active:scale-95 transition-transform">
-                      {e.skipped ? 'Unskip' : 'Skip'}
+                      {t(e.skipped ? 'queue.unskip' : 'queue.skip')}
                     </button>
                     <button onClick={() => { removeExerciseAt(i); setExpandIdx(null) }}
                       className="flex-1 py-2 rounded-[10px] border border-brand-red/40 bg-[#2a1a1a]
                                  text-brand-red text-xs font-bold active:scale-95 transition-transform">
-                      Remove
+                      {t('plan.removeExercise')}
                     </button>
                   </div>
                 </div>

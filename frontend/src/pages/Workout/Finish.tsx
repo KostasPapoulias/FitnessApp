@@ -7,6 +7,7 @@ import SaveToCalendar from '../../components/workout/SaveToCalendar'
 import { fmtTime } from './helpers'
 import { AlertTriangleIcon, TrophyIcon } from '../../components/icons'
 import { ModalityIcon } from '../../components/icons'
+import { useT } from '../../i18n'
 
 interface SnapshotExercise {
   name: string
@@ -29,8 +30,8 @@ interface Snapshot {
  * hold and a WOD's rounds are logged through completeSet and are not captured
  * here — so the line states what it actually knows instead of printing zeros.
  */
-const describeExercise = (e: SnapshotExercise): string => {
-  const sets = `${e.count} ${e.count === 1 ? 'set' : 'sets'}`
+const describeExercise = (e: SnapshotExercise, { t, tn }: ReturnType<typeof useT>): string => {
+  const sets = tn('calendar.sets', e.count)
 
   /*
    * A metcon logs one set against every movement, which is bookkeeping rather
@@ -40,16 +41,18 @@ const describeExercise = (e: SnapshotExercise): string => {
    * repeating per movement is the work prescribed each round.
    */
   if (e.modality === 'WOD') {
-    const perRound = `${e.topReps} reps/round`
+    const perRound = t('finish.perRound', { reps: e.topReps })
     return e.topWeight > 0 ? `${perRound} · ${e.topWeight}kg` : perRound
   }
 
-  if (e.topWeight > 0) return `${sets} · top ${e.topWeight}kg × ${e.topReps}`
+  if (e.topWeight > 0) {
+    return `${sets} · ${t('finish.topSet', { kg: e.topWeight, reps: e.topReps })}`
+  }
   if (e.topReps > 0) {
     // Mobility keeps its hold seconds in the reps field (see defaultSetsFor)
     return e.modality === 'Mobility'
-      ? `${sets} · longest hold ${e.topReps}s`
-      : `${sets} · best ${e.topReps} reps`
+      ? `${sets} · ${t('finish.longestHold', { n: e.topReps })}`
+      : `${sets} · ${t('finish.bestSet', { n: e.topReps })}`
   }
   // Cardio carries its distance and pace elsewhere; a bare set count says
   // nothing, so the name and its tick stand alone.
@@ -58,6 +61,8 @@ const describeExercise = (e: SnapshotExercise): string => {
 
 export default function Finish() {
   const navigate = useNavigate()
+  const translation = useT()
+  const { t } = translation
   const location = useLocation()
   const clearExercises = useWorkoutStore(s => s.clearExercises)
   const finishSession = useWorkoutStore(s => s.finishSession)
@@ -95,7 +100,7 @@ export default function Finish() {
       .catch(err => {
         console.error('finish error:', err)
         startedRef.current = false   // allow a retry
-        setSaveError('Your sets are saved, but the workout summary could not be completed.')
+        setSaveError(t('finish.saveError'))
       })
       .finally(() => setSaving(false))
   }
@@ -144,13 +149,13 @@ export default function Finish() {
    * finish response, so that is the honest third tile when there is no tonnage.
    */
   const stats: { value: string; label: string }[] = [
-    { value: fmtTime(durationSec), label: 'Duration' },
-    { value: String(snapshot.setsLogged), label: 'Sets logged' },
+    { value: fmtTime(durationSec), label: t('finish.statDuration') },
+    { value: String(snapshot.setsLogged), label: t('finish.statSets') },
   ]
   if (volume > 0) {
-    stats.push({ value: volumeLabel, label: 'Volume (kg)' })
+    stats.push({ value: volumeLabel, label: t('finish.statVolume') })
   } else if (typeof result?.systemicLoad === 'number') {
-    stats.push({ value: String(result.systemicLoad), label: 'Session load' })
+    stats.push({ value: String(result.systemicLoad), label: t('finish.statLoad') })
   }
 
   const handleDone = () => {
@@ -161,8 +166,8 @@ export default function Finish() {
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-14 pb-8 text-center">
       <TrophyIcon className="w-14 h-14 mx-auto text-brand-teal" />
-      <h1 className="text-[26px] font-extrabold mt-3">Workout Complete</h1>
-      <p className="text-dark-300 text-sm mt-1">Nice work. Here's how today went.</p>
+      <h1 className="text-[26px] font-extrabold mt-3">{t('finish.title')}</h1>
+      <p className="text-dark-300 text-sm mt-1">{t('finish.subtitle')}</p>
 
       {saveError && (
         <div className="mt-4 text-left flex flex-col gap-2.5 rounded-card border
@@ -175,7 +180,7 @@ export default function Finish() {
             onClick={save}
             className="w-full py-2.5 rounded-btn bg-brand-teal text-black text-[13px]
                        font-bold active:scale-95 transition-transform">
-            Retry
+            {t('common.tryAgain')}
           </button>
         </div>
       )}
@@ -207,22 +212,23 @@ export default function Finish() {
       {/* Per-exercise summary */}
       {snapshot.exercises.length > 0 && (
         <div className="text-left mt-5 flex flex-col gap-2.5">
-          {snapshot.exercises.map((e, i) => (
+          {snapshot.exercises.map((e, i) => {
+            const detail = describeExercise(e, translation)
+            return (
             <div key={i}
               className="flex items-center gap-3 bg-dark-800 border border-dark-600
                          rounded-card px-4 py-3.5">
               <ModalityIcon modality={e.modality} className="w-5 h-5 text-brand-teal" />
               <div className="flex-1 min-w-0">
                 <p className="text-[14.5px] font-bold truncate">{e.name}</p>
-                {describeExercise(e) && (
-                  <p className="text-xs text-dark-300 mt-0.5">
-                    {describeExercise(e)}
-                  </p>
+                {detail && (
+                  <p className="text-xs text-dark-300 mt-0.5">{detail}</p>
                 )}
               </div>
               <span className="text-brand-green text-base">✓</span>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -230,7 +236,7 @@ export default function Finish() {
         onClick={handleDone}
         className="w-full mt-6 py-[17px] rounded-card bg-brand-teal text-black
                    text-base font-extrabold active:scale-95 transition-transform">
-        Save &amp; Finish
+        {t('finish.done')}
       </button>
     </div>
   )

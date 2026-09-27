@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { VoiceCommand } from '../../lib/voiceGrammar'
 import { rpeColor, rpeTint, rpeLabel } from './helpers'
+import { useT } from '../../i18n'
 
 // Payload logged when a set or hold completes.
 export interface LogPayload {
@@ -109,7 +110,7 @@ export function RpeRow({ value, onPick }: { value: number; onPick: (n: number) =
 // ── end-of-effort RPE prompt ──
 // Asks how hard a cardio or metcon effort was — the fatigue model's intensity input.
 export function EffortPrompt({
-  icon, label, title, detail, summary, initial = 7, confirmLabel = 'Save & Finish',
+  icon, label, title, detail, summary, initial = 7, confirmLabel,
   busy, onConfirm,
 }: {
   /** The modality's mark, drawn by the caller. */
@@ -123,6 +124,7 @@ export function EffortPrompt({
   busy?: boolean
   onConfirm: (rpe: number) => void
 }) {
+  const { t } = useT()
   const [rpe, setRpe] = useState(initial)
 
   return (
@@ -158,8 +160,7 @@ export function EffortPrompt({
         </div>
         <RpeRow value={rpe} onPick={setRpe} />
         <p className="text-[12px] text-dark-400 mt-3 leading-relaxed">
-          1 is barely moving, 10 is everything you had. This is what tells the app
-          how much recovery the session actually earned.
+          {t('liveShared.effortScale')}
         </p>
       </div>
 
@@ -169,7 +170,7 @@ export function EffortPrompt({
         className="w-full mt-8 py-[17px] rounded-card bg-brand-teal text-black
                    text-[17px] font-extrabold active:scale-95 transition-transform
                    disabled:opacity-50">
-        {busy ? 'Saving…' : confirmLabel}
+        {busy ? t('common.saving') : confirmLabel ?? t('finish.done')}
       </button>
     </div>
   )

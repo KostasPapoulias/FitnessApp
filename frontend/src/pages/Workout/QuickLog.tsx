@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { SelectedExercise, useWorkoutStore } from '../../store/useWorkoutStore'
 import SaveToCalendar from '../../components/workout/SaveToCalendar'
 import { rpeColor, rpeTint, rpeWord, summariseSession, nextLoad } from './helpers'
+import { useT } from '../../i18n'
 import { ModalityIcon } from '../../components/icons'
 
 const IcCheck = () => (
@@ -19,6 +20,7 @@ const IcCheck = () => (
  */
 export default function QuickLog() {
   const navigate = useNavigate()
+  const { t, tn } = useT()
   const {
     selectedExercises, sessionId, completedSets, suggestionsLoading,
     startSession, loadSuggestions, updateSet, addSet, removeSet, toggleDone, completeSet,
@@ -67,7 +69,7 @@ export default function QuickLog() {
         const { reps, weight, rpe } = sets[setIdx]
         // No restSeconds: rest wasn't timed
         if (!(await completeSet({ reps, weight, rpe }, { exIdx, setIdx }))) {
-          failure ??= useWorkoutStore.getState().logError ?? 'Some sets could not be saved.'
+          failure ??= useWorkoutStore.getState().logError ?? t('quick.someFailed')
           return
         }
       }
@@ -100,11 +102,11 @@ export default function QuickLog() {
     return (
       <div className="flex-1 bg-dark-900 flex items-center justify-center px-5">
         <div className="text-center">
-          <p className="text-white text-lg mb-4">No exercises selected</p>
+          <p className="text-white text-lg mb-4">{t('live.noExercises')}</p>
           <button
             onClick={() => navigate('/workout/browse', { state: { modality: 'Strength' } })}
             className="bg-brand-teal text-black px-6 py-3 rounded-btn font-bold">
-            Browse Exercises
+            {t('live.browseExercises')}
           </button>
         </div>
       </div>
@@ -126,11 +128,13 @@ export default function QuickLog() {
             ←
           </button>
           <div className="min-w-0">
-            <h1 className="text-2xl font-extrabold leading-tight">Quick Log</h1>
+            <h1 className="text-2xl font-extrabold leading-tight">{t('quick.title')}</h1>
             <p className="text-dark-300 text-[13px] mt-0.5">
               {suggestionsLoading
-                ? 'Filling in your last numbers…'
-                : `${ticked.length} of ${selectedExercises.length} done · tick each one as you finish it`}
+                ? t('quick.filling')
+                : t('quick.progress', {
+                    done: ticked.length, total: selectedExercises.length,
+                  })}
             </p>
           </div>
         </div>
@@ -142,7 +146,7 @@ export default function QuickLog() {
               onClick={() => { clearErrors(); beginSession() }}
               className="w-full mt-2.5 py-2.5 rounded-btn bg-brand-teal text-black text-[13px]
                          font-bold active:scale-95 transition-transform">
-              Retry
+              {t('common.tryAgain')}
             </button>
           </div>
         )}
@@ -167,7 +171,7 @@ export default function QuickLog() {
                        bg-dark-800 text-dark-200 text-sm font-semibold
                        active:scale-95 transition-transform"
           >
-            + Add Exercise
+            {t('plan.addExercise')}
           </button>
         </div>
 
@@ -188,8 +192,8 @@ export default function QuickLog() {
             style={{ boxShadow: '0 8px 24px -6px rgba(0,212,170,0.4)' }}
           >
             {ticked.length === 0
-              ? 'Tick an exercise to finish'
-              : `✓ Finish & Log — ${tickedSets} set${tickedSets === 1 ? '' : 's'}`}
+              ? t('quick.tickToFinish')
+              : tn('quick.finish', tickedSets)}
           </button>
         </div>
       </div>
@@ -208,6 +212,7 @@ function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
   onRemove: (setIdx: number) => void
   onToggle: () => void
 }) {
+  const { t } = useT()
   const ex = se.exercise
   const done = Boolean(se.done)
 
@@ -239,7 +244,7 @@ function ExerciseCard({ se, locked, onUpdate, onAdd, onRemove, onToggle }: {
         <div className="flex-1 min-w-0">
           <p className="text-base font-bold leading-tight truncate">{ex.name}</p>
           <p className="text-dark-300 text-xs mt-0.5 truncate">
-            {locked ? 'Saved' : ex.muscles.map(m => m.name).slice(0, 3).join(' · ')}
+            {locked ? t('quick.saved') : ex.muscles.map(m => m.name).slice(0, 3).join(' · ')}
           </p>
         </div>
         <button
@@ -323,6 +328,7 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
   onCopyDown: () => void
   onRemove: () => void
 }) {
+  const { t } = useT()
   return (
     <div className={`rounded-btn border transition-colors
                      ${open ? 'border-brand-teal/40 bg-dark-900' : 'border-dark-600 bg-dark-900/40'}`}>
@@ -370,9 +376,9 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
         <div className="min-h-0 overflow-hidden">
           <div className="px-3 pb-3 pt-0.5">
             <div className="grid grid-cols-2 gap-2">
-              <Stepper label="REPS" value={set.reps} step={1} min={1} max={1000}
+              <Stepper label={t('quick.stepperReps')} value={set.reps} step={1} min={1} max={1000}
                 onChange={reps => onChange({ reps })} />
-              <Stepper label="KG" value={set.weight} step={2.5} next={nextLoad} min={0} max={1000} decimal
+              <Stepper label={t('quick.stepperKg')} value={set.weight} step={2.5} next={nextLoad} min={0} max={1000} decimal
                 onChange={weight => onChange({ weight })} />
             </div>
 
@@ -419,7 +425,7 @@ function SetRow({ n, set, open, locked, canRemove, hasBelow, onOpen, onChange, o
                            text-brand-red text-[12.5px] font-semibold
                            active:scale-95 transition-transform disabled:opacity-30"
               >
-                Remove set
+                {t('quick.removeSet')}
               </button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { NoteIcon } from '../icons'
+import { useT } from '../../i18n'
 
 /**
  * The athlete's note on one exercise — on the live screen, and in the
@@ -24,6 +25,7 @@ export interface ExerciseNotesHandle {
 const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNotes(
   { value, onSave }, ref
 ) {
+  const { t } = useT()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const [status, setStatus] = useState<'idle' | 'saving' | 'failed'>('idle')
@@ -77,14 +79,14 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
         */}
         <span className={`flex-1 min-w-0 text-[13px] leading-5 whitespace-pre-wrap break-words
                           ${has ? 'text-dark-200' : 'text-dark-400'}`}>
-          {has ? value : 'Add a note'}
+          {has ? value : t('note.add')}
         </span>
         {status === 'saving' && (
-          <span className="text-dark-400 text-[11px] flex-shrink-0 leading-5">Saving…</span>
+          <span className="text-dark-400 text-[11px] flex-shrink-0 leading-5">{t('common.saving')}</span>
         )}
         {status === 'failed' && (
           // Not an error colour: the text is kept and sent with the next edit
-          <span className="text-brand-yellow text-[11px] flex-shrink-0 leading-5">Not synced</span>
+          <span className="text-brand-yellow text-[11px] flex-shrink-0 leading-5">{t('note.notSynced')}</span>
         )}
       </button>
     )
@@ -100,7 +102,7 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
         rows={3}
         // Matches the server's `notes` limit
         maxLength={2000}
-        placeholder="Felt heavy, dropped to 60 on the last set…"
+        placeholder={t('note.placeholder')}
         className="w-full bg-transparent text-white text-[13px] leading-5 p-3
                    placeholder-dark-400 outline-none resize-none"
       />
@@ -111,7 +113,7 @@ const ExerciseNotes = forwardRef<ExerciseNotesHandle, Props>(function ExerciseNo
           onClick={commit}
           className="text-brand-teal text-[12.5px] font-bold px-2 py-1"
         >
-          Done
+          {t('common.done')}
         </button>
       </div>
     </div>

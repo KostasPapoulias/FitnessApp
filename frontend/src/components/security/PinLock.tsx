@@ -141,7 +141,9 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
         {/* While locked, the live remaining time replaces the server's fixed
             wording, which was a snapshot from the moment of the response */}
         {locked
-          ? `Too many attempts. Try again in ${Math.floor(lockedFor / 60)}:${String(lockedFor % 60).padStart(2, '0')}.`
+          ? t('pin.lockedFor', {
+              mmss: `${Math.floor(lockedFor / 60)}:${String(lockedFor % 60).padStart(2, '0')}`,
+            })
           : error ?? t('pin.locked')}
       </p>
 

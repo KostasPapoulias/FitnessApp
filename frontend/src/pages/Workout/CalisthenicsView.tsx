@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { rpeColor, rpeWord, fmtTime, nextLoad } from './helpers'
+import { useT, MessageKey } from '../../i18n'
 import {
   ModalityViewProps, LiveHeader, SegmentBar, RpeRow, UpNext,
 } from './LiveShared'
@@ -19,11 +20,15 @@ function isHold(name: string) {
  * is added weight. The mode label is derived from its sign.
  */
 const loadMode = (load: number) => load < 0 ? 0 : load > 0 ? 2 : 1
-const MODES = ['Assisted', 'Bodyweight', 'Weighted']
+const MODES: MessageKey[] = ['cal.modeAssisted', 'cal.modeBodyweight', 'cal.modeWeighted']
 
-/** A signed load in words. */
-const loadLabel = (load: number) =>
-  load > 0 ? `+${load} kg` : load < 0 ? `${Math.abs(load)} kg assist` : 'Bodyweight'
+type T = ReturnType<typeof useT>
+
+/** A signed load in words. Bodyweight and assistance are translated; kg is not. */
+const loadLabel = (load: number, t: T['t']) =>
+  load > 0 ? `+${load} kg`
+  : load < 0 ? t('cal.assist', { kg: Math.abs(load) })
+  : t('cal.modeBodyweight')
 
 const loadColor = (load: number) =>
   load > 0 ? '#F97316' : load < 0 ? '#4ADE80' : '#FFFFFF'
@@ -37,13 +42,14 @@ const bigStep =
 
 /** The signed-load stepper, for reps and holds alike. */
 function LoadBox({ load, onChange }: { load: number; onChange: (next: number) => void }) {
+  const { t } = useT()
   const step = (dir: 1 | -1) => onChange(nextLoad(load, dir))
   return (
     <div className="bg-dark-800 border border-dark-600 rounded-btn px-2 py-3 text-center">
-      <p className="text-[10px] tracking-wide text-dark-400 mb-1.5">LOAD / ASSIST</p>
+      <p className="text-[10px] tracking-wide text-dark-400 mb-1.5">{t('cal.loadAssist')}</p>
       {/* Value above the buttons; "Bodyweight" needs the full width */}
       <p className="text-sm font-extrabold truncate mb-2" style={{ color: loadColor(load) }}>
-        {loadLabel(load)}
+        {loadLabel(load, t)}
       </p>
       <div className="flex items-center justify-center gap-3">
         <button className={stepBtn} onClick={() => step(-1)}>−</button>
@@ -55,6 +61,7 @@ function LoadBox({ load, onChange }: { load: number; onChange: (next: number) =>
 
 export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVoice }: ModalityViewProps) {
   const navigate = useNavigate()
+  const { t } = useT()
   const { selectedExercises, currentExerciseIndex, currentSetIndex, completedSets, updateSet, setCurrent } =
     useWorkoutStore()
 
@@ -109,16 +116,16 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
   if (currentSetIndex + 1 < ex.sets.length) {
     const nextSet = ex.sets[currentSetIndex + 1]
     un = {
-      t: `Set ${currentSetIndex + 2}`,
+      t: t('live.nextSetTitle', { n: currentSetIndex + 2 }),
       d: hold
-        ? `Hold · target ${nextSet.reps}s · ${loadLabel(nextSet.weight)}`
-        : `${nextSet.reps} reps · ${loadLabel(nextSet.weight)}`,
+        ? t('cal.nextHoldDetail', { sec: nextSet.reps, load: loadLabel(nextSet.weight, t) })
+        : t('cal.nextRepsDetail', { reps: nextSet.reps, load: loadLabel(nextSet.weight, t) }),
     }
   } else if (currentExerciseIndex + 1 < selectedExercises.length) {
     const nx = selectedExercises[currentExerciseIndex + 1]
-    un = { t: nx.exercise.name, d: `Next · ${nx.sets.length} sets` }
+    un = { t: nx.exercise.name, d: t('cal.nextExerciseDetail', { sets: nx.sets.length }) }
   } else {
-    un = { t: 'Last set', d: 'Own the full range of motion' }
+    un = { t: t('cal.lastSetTitle'), d: t('cal.lastSetDetail') }
   }
 
   const restSeconds = set.restSeconds ?? 90
@@ -132,7 +139,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
 
   return (
     <div className="flex-1 bg-dark-900 text-white px-5 pt-4 pb-4">
-      <LiveHeader label="LIVE · CALISTHENICS" time={fmtTime(elapsed)}
+      <LiveHeader label={t('cal.header')} time={fmtTime(elapsed)}
         counter={`${currentExerciseIndex + 1}/${selectedExercises.length}`} />
 
       {/* name + queue */}
@@ -157,7 +164,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
 
       {/* Progression mode — always consistent with the load */}
       <div className="mt-3.5">
-        <p className="text-[10px] tracking-widest text-dark-400 mb-2">PROGRESSION</p>
+        <p className="text-[10px] tracking-widest text-dark-400 mb-2">{t('cal.progression')}</p>
         <div className="flex gap-1.5 overflow-x-auto">
           {MODES.map((l, i) => {
             const on = i === mode
@@ -168,7 +175,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
                   borderColor: on ? '#00D4AA' : '#2A2A2A',
                   background: on ? 'rgba(0,212,170,0.14)' : '#1A1A1A',
                   color: on ? '#00D4AA' : '#AAAAAA',
-                }}>{l}</button>
+                }}>{t(l)}</button>
             )
           })}
         </div>
@@ -190,11 +197,11 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
           <>
             {/* HOLD */}
             <div className="px-4 pt-6 pb-2 text-center">
-              <p className="text-[10px] tracking-widest text-dark-300 mb-1.5">HOLD TIME</p>
+              <p className="text-[10px] tracking-widest text-dark-300 mb-1.5">{t('cal.holdTime')}</p>
               <div className="text-[66px] font-extrabold leading-none"
                 style={{ color: holdRunning ? '#00D4AA' : '#FFFFFF' }}>{fmtTime(holdSec)}</div>
               <p className="text-[13px] text-dark-300 mt-1.5">
-                {holdRunning ? 'Timer running — stay tight' : holdSec > 0 ? 'Paused' : 'Press Start when you break the floor'}
+                {t(holdRunning ? 'cal.holdRunning' : holdSec > 0 ? 'cal.holdPaused' : 'cal.holdIdle')}
               </p>
             </div>
             <div className="px-4 pt-3 pb-1">
@@ -202,7 +209,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
             </div>
             <div className="px-4 pt-3.5 pb-1.5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] tracking-wide text-dark-300">RPE · EFFORT</span>
+                <span className="text-[11px] tracking-wide text-dark-300">{t('cal.rpeEffort')}</span>
                 <span className="text-[13px] font-bold" style={{ color: rpeColor(set.rpe) }}>{set.rpe} — {rpeWord(set.rpe)}</span>
               </div>
               <RpeRow value={set.rpe} onPick={n => updateSet(currentExerciseIndex, currentSetIndex, { rpe: n })} />
@@ -215,12 +222,12 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
                   background: holdRunning ? '#2a1a1a' : '#1E1E1E',
                   color: holdRunning ? '#EF4444' : '#FFFFFF',
                 }}>
-                {holdRunning ? '‖ Stop' : holdSec > 0 ? '▶ Resume' : '▶ Start'}
+                {t(holdRunning ? 'cal.holdStop' : holdSec > 0 ? 'cal.holdResume' : 'cal.holdStart')}
               </button>
               <button onClick={logHold} disabled={holdSec <= 0}
                 className="py-4 rounded-btn bg-brand-teal text-black text-base font-extrabold
                            active:scale-95 transition-transform disabled:opacity-40">
-                ✓ Log Hold
+                {t('cal.logHold')}
               </button>
             </div>
           </>
@@ -228,7 +235,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
           <>
             {/* REPS */}
             <div className="px-4 pt-4 pb-1.5 text-center">
-              <p className="text-[10px] tracking-widest text-dark-300 mb-3">REPS THIS SET</p>
+              <p className="text-[10px] tracking-widest text-dark-300 mb-3">{t('cal.repsThisSet')}</p>
               <div className="flex items-center justify-center gap-4">
                 <button className={bigStep} onClick={() => updateSet(currentExerciseIndex, currentSetIndex, { reps: Math.max(0, set.reps - 1) })}>−</button>
                 <span className="flex-1 min-w-0 text-center text-[58px] font-extrabold leading-none tabular-nums">{set.reps}</span>
@@ -240,7 +247,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
             </div>
             <div className="px-4 pt-3 pb-1.5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] tracking-wide text-dark-300">RPE · EFFORT</span>
+                <span className="text-[11px] tracking-wide text-dark-300">{t('cal.rpeEffort')}</span>
                 <span className="text-[13px] font-bold" style={{ color: rpeColor(set.rpe) }}>{set.rpe} — {rpeWord(set.rpe)}</span>
               </div>
               <RpeRow value={set.rpe} onPick={n => updateSet(currentExerciseIndex, currentSetIndex, { rpe: n })} />
@@ -248,7 +255,7 @@ export default function CalisthenicsView({ elapsed, onRest, onFinish, registerVo
             <div className="px-4 pt-3 pb-4">
               <button onClick={logReps}
                 className="w-full py-[17px] rounded-btn bg-brand-teal text-black text-[17px] font-extrabold active:scale-95 transition-transform">
-                ✓ Set Done — Log Set
+                {t('cal.logSet')}
               </button>
             </div>
           </>

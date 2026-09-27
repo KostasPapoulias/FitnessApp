@@ -4,6 +4,7 @@ import { useSessionPrefsStore } from '../../store/useSessionPrefsStore'
 import { hapticCountdownTick } from '../../lib/haptics'
 import { announce } from '../../lib/speech'
 import { rpeColor, nextLoad } from './helpers'
+import { useT } from '../../i18n'
 import NumberField from '../../components/workout/NumberField'
 import { SpeakerIcon, VibrateIcon } from '../../components/icons'
 
@@ -33,6 +34,7 @@ function MiniStep({ children, onClick }: { children: React.ReactNode; onClick: (
 export default function RestTimer({
   seconds, setInfo, workoutTime, onDone, onSkip, paused, onPausedChange,
 }: RestTimerProps) {
+  const { t } = useT()
   const [remaining, setRemaining] = useState(seconds)
   const [target, setTarget] = useState(seconds)
   const doneRef = useRef(false)
@@ -114,11 +116,14 @@ export default function RestTimer({
         <div className="min-w-0 flex-1">
           <p className="text-xl font-extrabold leading-tight truncate">{setInfo.exercise}</p>
           <p className="text-brand-green text-[12.5px] mt-1">
-            ✓ Set {setInfo.setNumber} logged · {setInfo.reps} reps @ {setInfo.weight}kg · RPE {setInfo.rpe}
+            {t('rest.setLogged', {
+              n: setInfo.setNumber, reps: setInfo.reps,
+              kg: setInfo.weight, rpe: setInfo.rpe,
+            })}
           </p>
         </div>
         <div className="text-right ml-3">
-          <p className="text-dark-300 text-xs">Workout</p>
+          <p className="text-dark-300 text-xs">{t('rest.workout')}</p>
           <p className="text-xl font-extrabold mt-0.5">{workoutTime}</p>
         </div>
       </div>
@@ -135,13 +140,13 @@ export default function RestTimer({
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-[68px] font-extrabold leading-none">{Math.max(0, remaining)}</span>
-            <span className="text-dark-300 text-[15px] mt-0.5">seconds</span>
+            <span className="text-dark-300 text-[15px] mt-0.5">{t('rest.seconds')}</span>
           </div>
         </div>
       </div>
 
       <p className="text-center text-sm text-dark-300 mt-3">
-        Rest target: <span className="text-white font-bold">{target}s</span>
+        {t('rest.target')} <span className="text-white font-bold">{t('unit.seconds', { n: target })}</span>
       </p>
 
       {/* Adjust */}
@@ -159,16 +164,16 @@ export default function RestTimer({
       {hasNext && nextSetObj && (
         <div className="mt-4 bg-dark-800 border border-dark-600 rounded-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[10px] tracking-widest text-dark-400">NEXT SET · ADJUST NOW</p>
+            <p className="text-[10px] tracking-widest text-dark-400">{t('rest.nextSetAdjust')}</p>
             <p className="text-xs text-dark-300 max-w-[55%] truncate text-right">{nextName}</p>
           </div>
           {/* Value on its own line above the buttons, to fit three columns at 320px */}
           <div className="grid grid-cols-3 gap-1.5">
             {/* reps */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
-              <p className="text-[10px] tracking-wide text-dark-400 mb-1">REPS</p>
+              <p className="text-[10px] tracking-wide text-dark-400 mb-1">{t('plan.colReps')}</p>
               <div className="mb-1.5 px-1">
-                <NumberField kind="reps" label="Next set reps" value={nextSetObj.reps}
+                <NumberField kind="reps" label={t('rest.nextSetReps')} value={nextSetObj.reps}
                   onChange={reps => updateSet(nEx, nSet, { reps })}
                   className="text-[17px] font-extrabold" />
               </div>
@@ -180,10 +185,10 @@ export default function RestTimer({
             {/* weight */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
               <p className="text-[10px] tracking-wide text-dark-400 mb-1">
-                {nextIsCalisthenics ? 'LOAD' : 'WEIGHT'}
+                {t(nextIsCalisthenics ? 'plan.colLoad' : 'plan.colWeight')}
               </p>
               <div className="mb-1.5 px-1">
-                <NumberField kind="weight" label="Next set weight" value={nextSetObj.weight}
+                <NumberField kind="weight" label={t('rest.nextSetWeight')} value={nextSetObj.weight}
                   signed={nextIsCalisthenics}
                   onChange={weight => updateSet(nEx, nSet, { weight })}
                   className="text-[17px] font-extrabold" />
@@ -195,9 +200,9 @@ export default function RestTimer({
             </div>
             {/* rpe */}
             <div className="bg-dark-700 border border-dark-600 rounded-btn px-1 py-2.5 text-center">
-              <p className="text-[10px] tracking-wide text-dark-400 mb-1">RPE</p>
+              <p className="text-[10px] tracking-wide text-dark-400 mb-1">{t('sets.colRpe')}</p>
               <div className="px-1">
-                <NumberField kind="rpe" label="Next set RPE" value={nextSetObj.rpe}
+                <NumberField kind="rpe" label={t('rest.nextSetRpe')} value={nextSetObj.rpe}
                   onChange={rpe => updateSet(nEx, nSet, { rpe })}
                   className="text-xl font-extrabold py-1.5"
                   style={{ color: rpeColor(nextSetObj.rpe) }} />
@@ -214,9 +219,9 @@ export default function RestTimer({
             ? <VibrateIcon className="w-4 h-4" />
             : <SpeakerIcon className="w-4 h-4" />}
           <span className="text-[12.5px] text-dark-300">
-            {haptic && audio ? 'Phone will vibrate and call the next set'
-              : haptic ? 'Phone will vibrate when rest ends'
-              : 'Next set will be called out loud'}
+            {t(haptic && audio ? 'rest.willVibrateAndCall'
+              : haptic ? 'rest.willVibrate'
+              : 'rest.willCall')}
           </span>
         </div>
       )}
@@ -227,13 +232,13 @@ export default function RestTimer({
           onClick={() => onPausedChange(!paused)}
           className="py-4 rounded-btn border border-dark-600 bg-dark-800
                      text-[15px] font-bold active:scale-95 transition-transform">
-          {paused ? '▶ Resume' : '‖ Pause'}
+          {t(paused ? 'rest.resume' : 'rest.pause')}
         </button>
         <button
           onClick={onSkip}
           className="py-4 rounded-btn bg-brand-teal text-black
                      text-[15px] font-extrabold active:scale-95 transition-transform">
-          Skip Rest → Next Set
+          {t('rest.skip')}
         </button>
       </div>
     </div>

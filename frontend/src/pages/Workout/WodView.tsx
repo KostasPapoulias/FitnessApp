@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useT, MessageKey } from '../../i18n'
 import { useWorkoutStore, WodFormat } from '../../store/useWorkoutStore'
 import { useLiveCues } from '../../hooks/useLiveCues'
 import { cues } from '../../lib/speech'
@@ -7,7 +8,10 @@ import { ModalityViewProps, LiveStartGate, EffortPrompt } from './LiveShared'
 import { useModalityVoice } from '../../hooks/useModalityVoice'
 import { AlertTriangleIcon, ModalityIcon } from '../../components/icons'
 
-const FORMATS: [WodFormat, string][] = [['amrap', 'AMRAP'], ['fortime', 'For Time'], ['emom', 'EMOM'], ['rounds', 'Rounds']]
+const FORMATS: [WodFormat, MessageKey][] = [
+  ['amrap', 'wod.fmtAmrap'], ['fortime', 'wod.fmtForTime'],
+  ['emom', 'wod.fmtEmom'], ['rounds', 'wod.fmtRounds'],
+]
 // exIdx -1 marks a demo movement with no WorkoutExercise behind it — nothing to log
 const DEFAULT_MOVES = [
   { exIdx: -1, reps: 5, weight: 0, name: 'Pull-Ups' },
@@ -16,6 +20,7 @@ const DEFAULT_MOVES = [
 ]
 
 export default function WodView({ onFinish, registerVoice }: ModalityViewProps) {
+  const { t } = useT()
   const { wodConfig, selectedExercises, completeSet } = useWorkoutStore()
 
   // Planned movements with their store index, so every movement is logged
@@ -155,9 +160,11 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
     return (
       <LiveStartGate
         icon={<ModalityIcon modality="WOD" className="w-14 h-14" />}
-        label="LIVE · WOD"
-        title={FORMATS.find(f => f[0] === format)?.[1] ?? 'WOD'}
-        detail={`${moves.length} movements${format === 'amrap' || format === 'emom' ? ` · ${fmtTime(CAP)} cap` : ` · ${TARGET} rounds`}. 3… 2… 1… press start.`}
+        label={t('wod.header')}
+        title={t(FORMATS.find(f => f[0] === format)?.[1] ?? 'wod.header')}
+        detail={format === 'amrap' || format === 'emom'
+          ? t('wod.introCap', { count: moves.length, cap: fmtTime(CAP) })
+          : t('wod.introRounds', { count: moves.length, rounds: TARGET })}
         onStart={() => setStarted(true)}
       />
     )
@@ -168,13 +175,13 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
     return (
       <EffortPrompt
         icon={<ModalityIcon modality="WOD" className="w-14 h-14" />}
-        label="METCON DONE"
-        title="Rate the effort"
-        detail="Work density and effort are what make a metcon cost what it does — the clock alone can't tell."
+        label={t('wod.doneLabel')}
+        title={t('wod.rateTitle')}
+        detail={t('wod.rateDetail')}
         summary={[
-          { value: fmtTime(finishSec ?? sec), label: 'time' },
-          { value: String(rounds), label: 'rounds' },
-          { value: String(rounds * roundReps + partialReps), label: 'total reps' },
+          { value: fmtTime(finishSec ?? sec), label: t('sets.statTime') },
+          { value: String(rounds), label: t('wod.statRounds') },
+          { value: String(rounds * roundReps + partialReps), label: t('wod.statTotalReps') },
         ]}
         initial={8}
         busy={ending}
@@ -185,32 +192,41 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
 
   // Clock display
   let clock = '', clockLabel = '', clockSub = '', clockColor = '#FFFFFF', clockBg = '#1A1A1A', clockBorder = '#2A2A2A'
-  let roundsValue = String(rounds), roundsLabel = 'Rounds done', scoreValue = '', scoreLabel = ''
+  let roundsValue = String(rounds), roundsLabel = t('wod.roundsDone'), scoreValue = '', scoreLabel = ''
   if (format === 'amrap') {
     const rem = Math.max(0, CAP - sec)
-    clock = fmtTime(rem); clockLabel = 'TIME CAP REMAINING'
-    clockSub = running ? `AMRAP ${fmtTime(CAP)} · as many rounds as possible` : (rem === 0 ? 'Time! Log your score.' : 'Paused')
+    clock = fmtTime(rem); clockLabel = t('wod.capRemaining')
+    clockSub = running
+      ? t('wod.amrapSub', { cap: fmtTime(CAP) })
+      : (rem === 0 ? t('wod.timeUp') : t('wod.paused'))
     if (rem <= 30 && rem > 0) { clockColor = '#EF4444'; clockBg = '#1a0d0d'; clockBorder = 'rgba(239,68,68,0.4)' }
     scoreValue = `${rounds}+${partialReps}`; scoreLabel = 'Score (rounds + reps)'
   } else if (format === 'fortime') {
-    clock = fmtTime(finished ? finishSec! : sec); clockLabel = finished ? 'FINISH TIME' : 'ELAPSED'
-    clockSub = finished ? `Done — ${TARGET} rounds complete` : (running ? `${TARGET} rounds for time` : 'Paused')
+    clock = fmtTime(finished ? finishSec! : sec)
+    clockLabel = t(finished ? 'wod.finishTime' : 'wod.elapsed')
+    clockSub = finished
+      ? t('wod.forTimeDone', { rounds: TARGET })
+      : (running ? t('wod.forTimeSub', { rounds: TARGET }) : t('wod.paused'))
     if (finished) { clockColor = '#00D4AA'; clockBg = '#0a2a22'; clockBorder = 'rgba(0,212,170,0.4)' }
-    roundsValue = `${rounds}/${TARGET}`; roundsLabel = 'Rounds'
-    scoreValue = finished ? fmtTime(finishSec!) : String(TARGET - rounds); scoreLabel = finished ? 'Final time' : 'Rounds to go'
+    roundsValue = `${rounds}/${TARGET}`; roundsLabel = t('wod.roundsLabel')
+    scoreValue = finished ? fmtTime(finishSec!) : String(TARGET - rounds)
+    scoreLabel = t(finished ? 'wod.finalTime' : 'wod.roundsToGo')
   } else if (format === 'emom') {
     const minute = Math.floor(sec / 60) + 1; const secLeft = 60 - (sec % 60)
     clock = ':' + String(secLeft).padStart(2, '0'); clockLabel = `MINUTE ${minute}`
-    clockSub = running ? 'Every minute on the minute · finish, then rest' : 'Paused'
+    clockSub = running ? t('wod.emomSub') : t('wod.paused')
     if (secLeft <= 10) clockColor = '#FACC15'
-    roundsValue = String(minute); roundsLabel = 'Current minute'
-    scoreValue = String(rounds); scoreLabel = 'Minutes cleared'
+    roundsValue = String(minute); roundsLabel = t('wod.currentMinute')
+    scoreValue = String(rounds); scoreLabel = t('wod.minutesCleared')
   } else {
-    clock = fmtTime(finished ? finishSec! : sec); clockLabel = finished ? 'FINISH TIME' : 'ELAPSED'
-    clockSub = finished ? `All ${TARGET} rounds done` : (running ? `${TARGET} rounds for reps` : 'Paused')
+    clock = fmtTime(finished ? finishSec! : sec)
+    clockLabel = t(finished ? 'wod.finishTime' : 'wod.elapsed')
+    clockSub = finished
+      ? t('wod.roundsAllDone', { rounds: TARGET })
+      : (running ? t('wod.roundsSub', { rounds: TARGET }) : t('wod.paused'))
     if (finished) { clockColor = '#00D4AA'; clockBg = '#0a2a22'; clockBorder = 'rgba(0,212,170,0.4)' }
-    roundsValue = `${rounds}/${TARGET}`; roundsLabel = 'Rounds done'
-    scoreValue = String(rounds * roundReps); scoreLabel = 'Total reps'
+    roundsValue = `${rounds}/${TARGET}`; roundsLabel = t('wod.roundsDone')
+    scoreValue = String(rounds * roundReps); scoreLabel = t('wod.totalReps')
   }
 
   return (
@@ -236,7 +252,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
                 borderColor: on ? '#00D4AA' : '#2A2A2A',
                 background: on ? 'rgba(0,212,170,0.14)' : '#1A1A1A',
                 color: on ? '#00D4AA' : '#AAAAAA',
-              }}>{label}</button>
+              }}>{t(label)}</button>
           )
         })}
       </div>
@@ -265,8 +281,8 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
         <div className="mt-3.5 flex gap-2.5 px-4 py-3 rounded-card border border-brand-yellow/40 bg-[#2a2410]">
           <AlertTriangleIcon className="w-4 h-4" />
           <p className="flex-1 text-[12.5px] text-white leading-snug">
-            Every movement was skipped, so this is a demo board — the clock works but
-            <span className="font-bold"> nothing will be recorded</span>. Go back and add a movement to log it.
+            {t('wod.demoBefore')}
+            <span className="font-bold">{t('wod.demoBold')}</span>{t('wod.demoAfter')}
           </p>
         </div>
       )}
@@ -274,7 +290,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
       {/* movements */}
       <div className="mt-4">
         <div className="flex items-center justify-between mb-2.5">
-          <div className="text-[10px] tracking-widest text-dark-400">EACH ROUND</div>
+          <div className="text-[10px] tracking-widest text-dark-400">{t('wod.eachRound')}</div>
           <div className="text-xs text-dark-300">{moves.map(m => m.reps).join(' · ')}</div>
         </div>
         <div className="flex flex-col gap-2">
@@ -312,19 +328,19 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
       <button onClick={finished ? () => reset() : registerRound}
         className="w-full mt-3.5 py-[17px] rounded-btn text-base font-extrabold active:scale-95 transition-transform"
         style={finished ? { background: '#1E1E1E', color: '#888888' } : { background: '#00D4AA', color: '#000' }}>
-        {finished ? 'Workout complete — tap Reset' : '✓ Complete Round'}
+        {t(finished ? 'wod.allDone' : 'wod.completeRound')}
       </button>
 
       <div className="grid grid-cols-2 gap-2.5 mt-2.5">
         <button onClick={() => setRunning(r => !r)}
           className="py-3.5 rounded-btn border border-dark-600 bg-dark-800 text-white text-sm font-bold
                      active:scale-95 transition-transform">
-          {running ? '‖ Pause' : '▶ Resume'}
+          {t(running ? 'rest.pause' : 'rest.resume')}
         </button>
         <button onClick={() => reset()}
           className="py-3.5 rounded-btn border border-dark-600 bg-dark-800 text-dark-200 text-sm font-semibold
                      active:scale-95 transition-transform">
-          ↻ Reset
+          {t('wod.reset')}
         </button>
       </div>
 
@@ -332,7 +348,7 @@ export default function WodView({ onFinish, registerVoice }: ModalityViewProps) 
       <button onClick={() => setRating(true)}
         className="w-full mt-3 py-3.5 rounded-btn border border-brand-red/40 bg-[#2a1a1a]
                    text-brand-red text-sm font-bold active:scale-95 transition-transform">
-        ■ End Session
+        {t('cardio.endSession')}
       </button>
     </div>
   )
