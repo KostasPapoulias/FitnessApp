@@ -508,6 +508,7 @@ export const el: Record<MessageKey, string> = {
   'ai.emptyTitle': 'Τι σε απασχολεί;',
   'ai.emptyBody': 'Ρώτα με οτιδήποτε για προπόνηση, αποκατάσταση ή διατροφή.',
   'ai.placeholder': 'Ρώτα τον AI coach σου…',
+  'ai.send': 'Αποστολή μηνύματος',
   'ai.limitReached': 'Έφτασες το σημερινό όριο AI.',
   'ai.error': 'Κάτι πήγε στραβά. Δοκίμασε ξανά.',
 

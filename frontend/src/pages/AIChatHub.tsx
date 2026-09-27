@@ -115,14 +115,19 @@ export default function AIChatHub() {
         ) : (
           <div className="bg-[#0a2a22] border border-brand-teal/30
                           rounded-card p-4 mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CoachAvatar className="w-6 h-6" />
-                <span className="text-brand-teal text-sm font-semibold">
+            {/*
+              The readiness figure keeps one line and the label yields instead:
+              Greek's "{score}% ετοιμότητα" is far longer than "{score}% ready"
+              and wrapped onto two lines at phone width.
+            */}
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <CoachAvatar className="w-6 h-6 flex-shrink-0" />
+                <span className="text-brand-teal text-sm font-semibold truncate">
                   {t('ai.knowsState')}
                 </span>
               </div>
-              <div className={`text-lg font-bold ${readinessColor}`}>
+              <div className={`text-lg font-bold flex-shrink-0 whitespace-nowrap ${readinessColor}`}>
                 {t('ai.readyPct', { score: readinessScore })}
               </div>
             </div>

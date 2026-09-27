@@ -503,7 +503,13 @@ export default function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   // 'done' carries the filename, so the row can name it
   const [exportState, setExportState] =
-    useState<{ status: 'idle' | 'busy' | 'error' } | { status: 'done'; file: string }>({ status: 'idle' })
+    useState<
+      // `message` carries the server's own reason when it gave one — the export
+      // limiter's 429 says to wait, which is not a connection problem
+      | { status: 'idle' | 'busy' }
+      | { status: 'error'; message?: string }
+      | { status: 'done'; file: string }
+    >({ status: 'idle' })
   const [pushEnabled, setPushEnabled]       = useState(false)
   const [prefs, setPrefs]                   = useState<NotificationPreferences | null>(null)
 
@@ -604,8 +610,14 @@ export default function Profile() {
       const file = report.exportFileName(data)
       await report.saveExportFile(file, html)
       setExportState({ status: 'done', file })
-    } catch {
-      setExportState({ status: 'error' })
+    } catch (err: any) {
+      // Prefer the server's reason. Swallowing it told the athlete to check a
+      // connection that was fine, when the real answer was "wait a minute".
+      const serverMessage = err?.response?.data?.error
+      setExportState({
+        status: 'error',
+        message: typeof serverMessage === 'string' ? serverMessage : undefined,
+      })
     }
   }
 
@@ -976,7 +988,8 @@ export default function Profile() {
             label={t('profile.export')}
             sublabel={
               exportState.status === 'busy' ? t('profile.exporting')
-              : exportState.status === 'error' ? t('profile.exportFailed')
+              : exportState.status === 'error'
+                ? exportState.message ?? t('profile.exportFailed')
               : exportState.status === 'done' ? t('profile.exportDone', { file: exportState.file })
               : t('profile.exportSub')
             }

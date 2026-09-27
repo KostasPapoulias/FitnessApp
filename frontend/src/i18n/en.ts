@@ -502,6 +502,8 @@ export const en = {
   'ai.emptyTitle': 'What’s on your mind?',
   'ai.emptyBody': 'Ask me anything about training, recovery, or nutrition.',
   'ai.placeholder': 'Ask your AI coach…',
+  // Accessible name for the icon-only send button
+  'ai.send': 'Send message',
   'ai.limitReached': 'You have reached today’s AI limit.',
   'ai.error': 'Sorry, I ran into an error. Please try again.',
 

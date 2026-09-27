@@ -3,6 +3,7 @@ import SwipeActions from '../SwipeActions'
 import ExerciseNotes from './ExerciseNotes'
 import { fmtTime } from '../../pages/Workout/helpers'
 import { PencilIcon, TrashIcon } from '../icons'
+import { useT } from '../../i18n'
 
 /**
  * One exercise from a recorded session, in a bottom sheet: a set table, or
@@ -25,6 +26,9 @@ interface Props {
 export default function ExerciseSetsSheet({
   exercise, editable, onPickSet, onDeleteSet, onOpenRun, onSaveNotes, onClose,
 }: Props) {
+  // Tonnage follows the app's locale, not the browser's: a bare toLocaleString()
+  // printed 5940 as "5.940" on a Greek system, which reads as 5.94
+  const { intl } = useT()
   const sets = exercise.sets ?? []
   const cardioSets = sets.filter((s: any) => s.cardio)
   const isCardio = cardioSets.length > 0
@@ -40,7 +44,7 @@ export default function ExerciseSetsSheet({
     ? `${cardioKm.toFixed(2)} km · ${fmtTime(cardioSec)}${
         cardioKm > 0 && cardioSec > 0 ? ` · ${fmtTime(cardioSec / cardioKm)} /km` : ''}`
     : `${sets.length} set${sets.length === 1 ? '' : 's'}${
-        totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString()} kg` : ''}`
+        totalVol > 0 ? ` · ${Math.round(totalVol).toLocaleString(intl)} kg` : ''}`
 
   return (
     <BottomSheet title={exercise.name} subtitle={subtitle} onClose={onClose}>
@@ -166,7 +170,7 @@ export default function ExerciseSetsSheet({
                             border border-brand-teal/20">
               <span className="text-dark-400 text-xs">Total volume</span>
               <span className="text-brand-teal text-xs font-bold">
-                {Math.round(totalVol).toLocaleString()} kg
+                {Math.round(totalVol).toLocaleString(intl)} kg
               </span>
             </div>
           )}

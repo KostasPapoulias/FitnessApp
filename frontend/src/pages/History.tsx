@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { progressService } from '../services/progress.service'
 import { HistoryRow } from '../types'
+import { useT } from '../i18n'
 
 /** Workout history, newest first, cursor-paged with lean rows. */
 
@@ -33,10 +34,16 @@ const fmtDuration = (seconds: number) => {
 }
 
 /** A session's one-line summary: distance, tonnage, or set count, by what it contains. */
-const summarise = (session: HistoryRow): string => {
+/**
+ * `intl` is passed in rather than defaulted: a bare toLocaleString() follows the
+ * browser's locale, not the app's, so 5940 kg rendered as "5.940 kg" on a Greek
+ * system — which reads as 5.94 next to this screen's English labels. Every other
+ * call site in the app already passes it.
+ */
+const summarise = (session: HistoryRow, intl: string): string => {
   const parts: string[] = [`${session.setCount} set${session.setCount === 1 ? '' : 's'}`]
   if (session.distanceKm > 0) parts.unshift(`${session.distanceKm} km`)
-  if (session.totalVolume > 0) parts.push(`${session.totalVolume.toLocaleString()} kg`)
+  if (session.totalVolume > 0) parts.push(`${session.totalVolume.toLocaleString(intl)} kg`)
   if (session.avgRpe != null) parts.push(`RPE ${session.avgRpe}`)
   return parts.join(' · ')
 }
@@ -45,6 +52,9 @@ const MODALITY_FILTERS = ['All', 'Strength', 'Calisthenics', 'Cardio', 'Mobility
 
 export default function History() {
   const navigate = useNavigate()
+  // Only the number and date formats for now — this screen's copy is still
+  // untranslated, which is tracked separately
+  const { intl } = useT()
 
   const [sessions, setSessions] = useState<HistoryRow[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
@@ -161,7 +171,7 @@ export default function History() {
                   )}
                 </div>
                 <p className="text-dark-300 text-xs mt-1 tabular-nums">
-                  {fmtDuration(session.duration)} · {summarise(session)}
+                  {fmtDuration(session.duration)} · {summarise(session, intl)}
                 </p>
                 <p className="text-dark-400 text-[11px] mt-1.5 leading-relaxed line-clamp-2">
                   {session.exercises.map(e => e.name).join(', ') || 'No exercises logged'}

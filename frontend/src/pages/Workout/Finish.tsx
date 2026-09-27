@@ -31,6 +31,19 @@ interface Snapshot {
  */
 const describeExercise = (e: SnapshotExercise): string => {
   const sets = `${e.count} ${e.count === 1 ? 'set' : 'sets'}`
+
+  /*
+   * A metcon logs one set against every movement, which is bookkeeping rather
+   * than a score — "1 set" after two rounds is true and useless. The metcon's
+   * result is its rounds and its time, and those belong to the WOD screen,
+   * which already reports them (including partial rounds). What is worth
+   * repeating per movement is the work prescribed each round.
+   */
+  if (e.modality === 'WOD') {
+    const perRound = `${e.topReps} reps/round`
+    return e.topWeight > 0 ? `${perRound} · ${e.topWeight}kg` : perRound
+  }
+
   if (e.topWeight > 0) return `${sets} · top ${e.topWeight}kg × ${e.topReps}`
   if (e.topReps > 0) {
     // Mobility keeps its hold seconds in the reps field (see defaultSetsFor)
@@ -38,7 +51,9 @@ const describeExercise = (e: SnapshotExercise): string => {
       ? `${sets} · longest hold ${e.topReps}s`
       : `${sets} · best ${e.topReps} reps`
   }
-  return sets
+  // Cardio carries its distance and pace elsewhere; a bare set count says
+  // nothing, so the name and its tick stand alone.
+  return e.modality === 'Cardio' ? '' : sets
 }
 
 export default function Finish() {
@@ -118,14 +133,25 @@ export default function Finish() {
     ? `${Math.round(volume / 100) / 10}k`
     : String(Math.round(volume))
 
-  const stats = [
+  /*
+   * Tonnage only means something where external load moves. A metcon, a run or
+   * a stretch reports 0 kg, which reads as a failure to record rather than as
+   * nothing to record — and for a metcon it is actively misleading, since the
+   * work was real.
+   *
+   * The model already scores every modality in one unit (hard-set equivalents;
+   * see fatigue-model.service) and returns the session's systemic load with the
+   * finish response, so that is the honest third tile when there is no tonnage.
+   */
+  const stats: { value: string; label: string }[] = [
     { value: fmtTime(durationSec), label: 'Duration' },
     { value: String(snapshot.setsLogged), label: 'Sets logged' },
-    // A run, a stretch or a bodyweight metcon moves no external load, and a
-    // "Volume (kg) 0" tile reads as a failure to record rather than as there
-    // being nothing to record.
-    ...(volume > 0 ? [{ value: volumeLabel, label: 'Volume (kg)' }] : []),
   ]
+  if (volume > 0) {
+    stats.push({ value: volumeLabel, label: 'Volume (kg)' })
+  } else if (typeof result?.systemicLoad === 'number') {
+    stats.push({ value: String(result.systemicLoad), label: 'Session load' })
+  }
 
   const handleDone = () => {
     clearExercises()
@@ -188,9 +214,11 @@ export default function Finish() {
               <ModalityIcon modality={e.modality} className="w-5 h-5 text-brand-teal" />
               <div className="flex-1 min-w-0">
                 <p className="text-[14.5px] font-bold truncate">{e.name}</p>
-                <p className="text-xs text-dark-300 mt-0.5">
-                  {describeExercise(e)}
-                </p>
+                {describeExercise(e) && (
+                  <p className="text-xs text-dark-300 mt-0.5">
+                    {describeExercise(e)}
+                  </p>
+                )}
               </div>
               <span className="text-brand-green text-base">✓</span>
             </div>

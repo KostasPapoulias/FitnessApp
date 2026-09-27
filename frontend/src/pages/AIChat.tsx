@@ -290,11 +290,13 @@ export default function AIChat() {
           <button
             onClick={() => sendMessage(input)}
             disabled={!input.trim() || isLoading}
+            // The only child is an icon, so the button had no accessible name
+            aria-label={t('ai.send')}
             className="w-11 h-11 bg-brand-teal rounded-full flex items-center
                        justify-center active:scale-90 transition-transform
                        disabled:opacity-40 flex-shrink-0"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24"
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"
               fill="none" stroke="#000" strokeWidth="2.5">
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -305,6 +307,32 @@ export default function AIChat() {
     </div>
   )
 }
+
+/**
+ * The coach writes light Markdown, which used to surface as literal `**bold**`.
+ *
+ * Only bold and inline code are rendered, and as React nodes rather than
+ * injected HTML — a model reply is untrusted text and must never become markup.
+ * Single-asterisk italics are deliberately left alone: the model also writes
+ * `* item` bullets, and treating those as emphasis mangles every list. Any
+ * unmatched delimiter stays as the literal character the model typed.
+ */
+const INLINE_MARKDOWN = /(\*\*[^*\n]+\*\*|`[^`\n]+`)/g
+
+const renderInlineMarkdown = (text: string): (string | JSX.Element)[] =>
+  text.split(INLINE_MARKDOWN).map((part, i) => {
+    if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="font-bold text-white">{part.slice(2, -2)}</strong>
+    }
+    if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={i} className="bg-dark-700 rounded px-1 text-[12.5px]">
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    return part
+  })
 
 function MessageBubble({ message, intl }: { message: Message; intl: string }) {
   const isUser = message.sender === 'user'
@@ -331,7 +359,7 @@ function MessageBubble({ message, intl }: { message: Message; intl: string }) {
         <div className="bg-dark-800 border border-dark-600 rounded-2xl
                         rounded-tl-none px-4 py-3">
           <p className="text-dark-100 text-sm leading-relaxed whitespace-pre-wrap">
-            {message.messageText}
+            {renderInlineMarkdown(message.messageText)}
           </p>
         </div>
         <p className="text-dark-500 text-xs mt-1">{time}</p>
