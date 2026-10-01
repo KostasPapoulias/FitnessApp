@@ -25,8 +25,9 @@ import {
 import { LANGUAGE_NAMES, LOCALES, useT } from '../i18n'
 import CoachAvatar from '../components/chat/CoachAvatar'
 import {
-  BellIcon, DownloadIcon, DumbbellIcon, GlobeIcon, HistoryListIcon, LockIcon,
-  MoonIcon, NutritionIcon, RulerIcon, TrashIcon, TrendingUpIcon, UserIcon,
+  BellIcon, DownloadIcon, GlobeIcon, HistoryListIcon, LockIcon,
+  MoonIcon, NutritionIcon, RulerIcon, TrainingSetupIcon, TrashIcon,
+  TrendingUpIcon, UserIcon,
 } from '../components/icons'
 import { useLocaleStore } from '../store/useLocaleStore'
 
@@ -871,7 +872,7 @@ export default function Profile() {
           <div className="h-px bg-dark-700 mx-4" />
 
           <SettingsRow
-            icon={<DumbbellIcon />}
+            icon={<TrainingSetupIcon />}
             label={t('profile.trainingSetup')}
             sublabel={equipmentIds.length > 0 || injuries.length > 0
               ? `${tn('profile.trainingSetupEquipment', equipmentIds.length)} · ${tn('profile.trainingSetupInjuries', injuries.length)}`

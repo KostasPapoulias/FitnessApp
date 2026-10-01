@@ -7,7 +7,7 @@ import VoiceCommandSheet from '../../components/workout/VoiceCommandSheet'
 import { ScheduledWorkout } from '../../types'
 import { workoutService, ActiveSession } from '../../services/workout.service'
 import { MessageKey, useT } from '../../i18n'
-import { MicIcon, TargetIcon } from '../../components/icons'
+import { MicIcon, ModalityIcon, TargetIcon } from '../../components/icons'
 
 // ── modality catalogue (id → dictionary keys) ──
 type ModId = 'strength' | 'calisthenics' | 'cardio' | 'mobility' | 'wod'
@@ -24,18 +24,12 @@ const MOD_LABEL: Record<ModId, string> = {
   mobility: 'Mobility', wod: 'WOD',
 }
 
-// ── modality icons ──
+// ── local icons ──
+// The modality glyphs are NOT redefined here: this file used to carry its own
+// copy of all five, and its strength case kept the broken dumbbell after the
+// shared one was fixed. Shared set only — MOD_LABEL already holds the
+// capitalised names ModalityIcon switches on.
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
-const ModIcon = ({ id }: { id: ModId }) => {
-  const common = { width: 22, height: 22, viewBox: '0 0 24 24', ...S }
-  switch (id) {
-    case 'strength': return <svg {...common}><path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4" /></svg>
-    case 'calisthenics': return <svg {...common}><circle cx="12" cy="5" r="2" /><path d="M12 7v6M6 10h12M12 13l-4 6M12 13l4 6" /></svg>
-    case 'cardio': return <svg {...common}><path d="M3 12h4l2-6 3.5 12L15 9l2 3h4" /></svg>
-    case 'mobility': return <svg {...common}><circle cx="12" cy="4" r="2" /><path d="M12 6v5M12 11l-6 3M12 11l6 3M6 14l1 6M18 14l-1 6" /></svg>
-    case 'wod': return <svg {...common}><path d="M13 2L5 13h6l-1 9 9-12h-6l1-8z" /></svg>
-  }
-}
 const IcMic = () => <svg width="20" height="20" viewBox="0 0 24 24" {...S}><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /></svg>
 const IcVibrate = () => <svg width="20" height="20" viewBox="0 0 24 24" {...S}><path d="M8 4h8v16H8z" /><path d="M4 8v8M20 8v8" /></svg>
 const IcSpeaker = () => <svg width="20" height="20" viewBox="0 0 24 24" {...S}><path d="M4 9v6h4l5 4V5L8 9H4z" /><path d="M17 8a5 5 0 0 1 0 8" /></svg>
@@ -123,7 +117,7 @@ export default function StartWorkout() {
                          border border-dark-600 rounded-card text-left active:scale-[0.99] transition-transform">
               <span className="w-[42px] h-[42px] rounded-[11px] bg-[#0a2a22] text-brand-teal
                                flex items-center justify-center flex-shrink-0">
-                <ModIcon id={m.id} />
+                <ModalityIcon modality={MOD_LABEL[m.id]} className="w-[22px] h-[22px]" />
               </span>
               <span className="flex-1">
                 <span className="block text-[15px] font-bold">{t(m.label)}</span>

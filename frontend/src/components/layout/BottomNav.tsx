@@ -3,6 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useWorkoutStore } from '../../store/useWorkoutStore'
 import { useDeviceType } from '../../hooks/useDeviceType'
 import { useT } from '../../i18n'
+// The centre button's dumbbell comes from the shared set. It was a local copy
+// here, which is why a fix to icons.tsx left this button unchanged.
+import { DumbbellIcon } from '../icons'
 
 export default function BottomNav() {
   const navigate = useNavigate()
@@ -220,13 +223,6 @@ const CalendarIcon = () => (
     <line x1="16" y1="2" x2="16" y2="6"/>
     <line x1="8" y1="2" x2="8" y2="6"/>
     <line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-)
-
-const DumbbellIcon = ({ className }: { className?: string }) => (
-  <svg className={className} width="22" height="22" viewBox="0 0 24 24"
-    fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4"/>
   </svg>
 )
 

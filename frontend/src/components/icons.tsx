@@ -44,10 +44,45 @@ export const UserIcon = (props: IconProps) => (
   </Svg>
 )
 
-/** Matches the bottom nav's centre button. */
+/**
+ * A dumbbell, drawn end-on: outer plates, inner collars, and the grip bar
+ * between them. Drawn once here and imported by the nav's centre button — it
+ * used to carry a "matches the bottom nav" note while BottomNav kept its own
+ * private copy, and the two silently drifted apart.
+ *
+ * The grip is the whole point. Without it the two plate stacks read as a pause
+ * glyph — a pair of vertical bars — which is exactly what the old icon did on
+ * the nav's centre button. Plates run taller than the collars so the silhouette
+ * still reads as a dumbbell at 20px, where the 1.8 stroke is only ~1.5 device
+ * pixels and fine detail closes up.
+ */
 export const DumbbellIcon = (props: IconProps) => (
   <Svg {...props}>
-    <path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4" />
+    {/* outer plates */}
+    <path d="M4 7v10M20 7v10" />
+    {/* collars, shorter so the plates stay the silhouette */}
+    <path d="M8 9.5v5M16 9.5v5" />
+    {/* the grip — what makes it a dumbbell and not two bars */}
+    <path d="M8 12h8" />
+  </Svg>
+)
+
+/**
+ * Training setup: the gear you have and the injuries to train around.
+ *
+ * Faders rather than a dumbbell — the row opens a screen where you *configure*
+ * your equipment, and a dumbbell there both said "do a workout" and collided
+ * with the CrossFit-box option inside that very screen. The two handles sit at
+ * different positions, which is what makes a fader row legible instead of a
+ * grid, and they are drawn with the same short vertical stroke as the dumbbell's
+ * plates so the two icons read as a family.
+ */
+export const TrainingSetupIcon = (props: IconProps) => (
+  <Svg {...props}>
+    {/* the two tracks */}
+    <path d="M4 8.5h16M4 15.5h16" />
+    {/* handles, offset from each other and centred on their track */}
+    <path d="M9.5 5.5v6M15 12.5v6" />
   </Svg>
 )
 
