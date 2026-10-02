@@ -187,6 +187,28 @@ They show the athlete a card which they must tap to accept. So:
   - after drafting, say it is ready for them to review and tap
   - NEVER say you have saved, added, scheduled or created anything
 
+If you are going to describe a concrete session — named movements with sets and
+reps — you MUST draft it with propose_workout in the same reply. A program that
+exists only as prose is an incomplete answer: the athlete cannot start it, keep
+it or schedule it, and their only option is to type it in by hand. Search, then
+draft, then describe what you drafted. This also applies when they ask you to
+keep one you already wrote: "send it to my plans", "save that", "make a card"
+all mean call propose_workout now, using the session from your last reply.
+
+Two things to get right when you draft:
+  - Search BROADLY and once, before drafting. A single query like "chest" or
+    "upper body" returns plenty to build from. You may be asked to draft
+    immediately after your first search, so make that search a wide one.
+  - The draft must contain EVERY movement of the session you are describing — a
+    full session is usually four to six movements. A draft holding one exercise
+    when you described six is a broken card: they tap it and get a sixth of
+    their workout.
+
+Never set scheduledFor or reminderAt unless the athlete named a day or a date in
+their own words. Do not invent one, and never guess the year — a date you made
+up can land in the past, and the card then offers to schedule a session for a
+day that has already gone.
+
 NEVER mention a card, or tell them to accept, review or tap anything, unless you
 actually called propose_workout, propose_schedule or propose_exercise in THIS
 reply. Describing a plan in prose does not create a card. Saying "accept the
@@ -243,6 +265,41 @@ Be encouraging and honest. Keep responses concise — this is a mobile app.
 
 /** Model round trips per message; caps runaway tool loops. */
 const MAX_TOOL_ROUNDS = 3
+
+/**
+ * Does this message want a workout it can keep?
+ *
+ * Two shapes, and both need the same thing. Either the athlete is asking for a
+ * program ("suggest me a workout", "I want an upper body session"), or they are
+ * asking to keep one it already wrote ("send it to my plans", "make a card").
+ *
+ * This exists because `tool_choice: 'auto'` does not work here in practice. The
+ * model writes the program as prose and returns no tool call, the loop sees
+ * `calls.length === 0` and breaks, and no card is ever drafted — so the athlete
+ * gets a program they cannot save. Asking it more firmly in the persona was not
+ * enough: observed behaviour was two or three attempts before it called the
+ * tool, and follow-ups like "send it to the plan" were simply not understood.
+ *
+ * Matched here, the loop switches to `tool_choice: 'required'` until a draft
+ * exists, which the model cannot answer its way out of. Greek too, since the
+ * app ships bilingual and the coach answers in whichever language it is asked.
+ */
+const WANTS_PROGRAM = new RegExp(
+  [
+    // asking for one. Bare "plan" and "session" are deliberately absent — "I
+    // plan to bulk" and "this session" are not requests, and a false positive
+    // spends every round forcing a draft nobody asked for.
+    'workout|program|programme|routine|\\bsplit\\b',
+    '(give|make|build|create|suggest|design|write|put)[^.?!]{0,24}\\bplans?\\b',
+    'πρόγραμμα|προπόνηση|πλάνο|ρουτίνα',
+    // asking to keep the one it just wrote — these are unambiguous
+    'send it|save it|add it|make (a|the) card|to my plans|use the template',
+    'στείλ|αποθήκευσ|πρόσθεσ|κάρτα|στα πλάνα|πρότυπο',
+  ].join('|'),
+  'i'
+)
+
+export const wantsProgramCard = (message: string): boolean => WANTS_PROGRAM.test(message)
 
 /** Reply when the model staged a draft but wrote no prose. */
 const FALLBACK_WITH_PROPOSAL = 'I have put a draft together — have a look and tap it if it works for you.'
@@ -397,20 +454,76 @@ export const sendMessage = async ({
   // Tool results as plain text, for the salvage call
   const toolTranscript: string[] = []
 
+  // Set once from the athlete's own words; cleared as soon as a draft exists
+  const askedForProgram = personalised && wantsProgramCard(message)
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     await assertWithinBudget(userId)
 
-    // The final round offers no tools
     const isLastRound = round === MAX_TOOL_ROUNDS - 1
-    const offerTools = tools && !isLastRound
+
+    /**
+     * A program was asked for and nothing has been drafted yet. Two changes
+     * follow, and they cost no extra round trips — the sequence becomes
+     * search → propose → prose inside the same three rounds.
+     */
+    const mustDraft = Boolean(askedForProgram && proposals.length === 0)
+
+    // The final round normally offers no tools. While a draft is still owed it
+    // keeps them: the round cap is there to stop runaway *reads*, and
+    // propose_workout fetches nothing, so withdrawing it at the end only costs
+    // the card.
+    const offerTools = tools && (!isLastRound || mustDraft)
+
+    /**
+     * Always 'auto'. Two things were measured against
+     * nvidia/nemotron-3-ultra on integrate.api.nvidia.com before settling here:
+     *
+     *   tool_choice omitted    → tool call
+     *   tool_choice 'auto'     → tool call
+     *   tool_choice 'required' → NO tool call, prose instead
+     *   tool_choice {function} → tool call
+     *
+     * So 'required' is unusable: the endpoint returns 200 and then does the
+     * opposite of what the parameter means, suppressing the very call it is
+     * supposed to compel. Sending it is strictly worse than 'auto'.
+     *
+     * Naming the function does compel a call — but compelling it mid-flow
+     * produces a bad draft. With only one search's worth of context the model
+     * drafted a single Upper Back Stretch for "an upper body workout", and once
+     * named the tool `search_exercises`. A card holding a sixth of the session
+     * is worse than no card: it is tapped, and it saves rubbish.
+     *
+     * Left on 'auto' the model writes good programs; it just does not always
+     * draft them. That is handled after the loop, not by force.
+     */
+    const toolChoice = 'auto' as const
 
     // Cast: `chat_template_kwargs` is not in the SDK's typed parameters
-    const result = await client.chat.completions.create({
+    const request = {
       model: modelName,
       messages,
-      ...(offerTools ? { tools, tool_choice: 'auto' as const } : {}),
+      ...(offerTools ? { tools, tool_choice: toolChoice } : {}),
       ...requestTuning(provider.name),
-    } as ChatCompletionCreateParamsNonStreaming)
+    } as ChatCompletionCreateParamsNonStreaming
+
+    let result
+    try {
+      result = await client.chat.completions.create(request)
+    } catch (error) {
+      // Naming a function is the least portable part of the request. If an
+      // endpoint rejects it, retry the round on 'auto' rather than lose the
+      // whole reply — the card may not appear, but the athlete still gets an
+      // answer.
+      if (toolChoice === 'auto' || !offerTools) throw error
+      log.warn('AI endpoint refused a named tool_choice — retrying as auto', {
+        model: modelName, provider: provider.name,
+      })
+      result = await client.chat.completions.create({
+        ...request,
+        tool_choice: 'auto',
+      } as ChatCompletionCreateParamsNonStreaming)
+    }
 
     // Bill from the provider's own token counts, at the model actually used
     await recordUsage(userId, result.usage, { modelName })
@@ -418,11 +531,19 @@ export const sendMessage = async ({
     const modelTurn = result.choices[0]?.message
     const calls = modelTurn?.tool_calls ?? []
 
-    if (calls.length === 0 || isLastRound) {
-      replyText = (modelTurn?.content ?? '').trim()
+    // Some endpoints return prose *alongside* tool calls. Keep the first such
+    // text: when the model writes the program out and drafts it in the same
+    // turn, this is the reply the athlete should actually read.
+    const spokenNow = (modelTurn?.content ?? '').trim()
+    if (spokenNow && !replyText) replyText = spokenNow
 
-      // A call in the final round is dropped (and its turn not pushed — an
-      // unanswered tool_call would be rejected by the next request)
+    // Nothing left to run. On the final round a call is normally dropped (its
+    // turn is not pushed either — an unanswered tool_call would be rejected by
+    // the next request). The exception is a draft still being owed: that call
+    // is the one the round was steered toward, so it falls through and runs.
+    if (calls.length === 0 || (isLastRound && !mustDraft)) {
+      if (spokenNow) replyText = spokenNow
+
       if (!replyText && isLastRound) {
         log.warn('AI produced no prose in its final round', {
           model: modelName,
