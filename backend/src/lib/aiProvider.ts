@@ -123,6 +123,26 @@ export const isAiConfigured = (): boolean => {
   }
 }
 
+/**
+ * NVIDIA's hosted endpoint answers a large share of requests with an instant
+ * 500 (5 of 12 measured, each in under 600 ms), and the same request succeeds
+ * moments later. Those are retried here, quickly, before the SDK sees them.
+ * The SDK's own retries stay for timeouts and rate limits, where waiting is
+ * the point. Its timeout spans these attempts, so they cannot multiply it.
+ */
+const FAST_5XX_RETRIES = 3
+
+const retryServerErrors = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(input, init)
+    if (response.status < 500 || attempt >= FAST_5XX_RETRIES) return response
+
+    // Release the connection before trying again
+    await response.body?.cancel()
+    await new Promise(resolve => setTimeout(resolve, 250 * 2 ** attempt))
+  }
+}
+
 let cached: { key: string; client: OpenAI } | null = null
 
 /** Shared client, cached per resolved config (the SDK holds a connection pool). */
@@ -137,6 +157,7 @@ export const getAiClient = (config: AiProviderConfig): OpenAI => {
     // them and their retries — keep each short so a stuck call surfaces fast.
     timeout: Number(process.env.AI_TIMEOUT_MS) || 45_000,
     maxRetries: Number(process.env.AI_MAX_RETRIES ?? 1),
+    fetch: retryServerErrors,
   })
 
   cached = { key, client }

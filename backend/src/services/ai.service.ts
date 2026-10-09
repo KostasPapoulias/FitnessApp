@@ -1,6 +1,6 @@
 import type OpenAI from 'openai'
 import type {
-  ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam,
+  ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam, ChatCompletionToolChoiceOption,
 } from 'openai/resources/chat/completions'
 import prisma from '../lib/prisma'
 import { getAiClient, resolveAiProvider } from '../lib/aiProvider'
@@ -267,6 +267,13 @@ Be encouraging and honest. Keep responses concise — this is a mobile app.
 const MAX_TOOL_ROUNDS = 3
 
 /**
+ * Round trips when a program was asked for: search, perhaps a second search,
+ * draft, then the reply. Three ran out mid-search and never reached the draft.
+ * MAX_TOOL_CALLS_PER_MESSAGE still caps the lookups.
+ */
+const DRAFT_TOOL_ROUNDS = 5
+
+/**
  * Does this message want a workout it can keep?
  *
  * Two shapes, and both need the same thing. Either the athlete is asking for a
@@ -280,9 +287,9 @@ const MAX_TOOL_ROUNDS = 3
  * enough: observed behaviour was two or three attempts before it called the
  * tool, and follow-ups like "send it to the plan" were simply not understood.
  *
- * Matched here, the loop switches to `tool_choice: 'required'` until a draft
- * exists, which the model cannot answer its way out of. Greek too, since the
- * app ships bilingual and the coach answers in whichever language it is asked.
+ * Matched here, the loop allows DRAFT_TOOL_ROUNDS and keeps the tools on its
+ * final round until a draft exists. Greek too, since the app ships bilingual
+ * and the coach answers in whichever language it is asked.
  */
 const WANTS_PROGRAM = new RegExp(
   [
@@ -314,6 +321,16 @@ const SAMPLING = {
   top_p: Number(process.env.AI_TOP_P ?? 0.9),
   max_tokens: Number(process.env.AI_MAX_TOKENS ?? 1024),
 }
+
+/**
+ * Token ceiling for rounds that offer tools. A propose_workout call for a
+ * six-movement session runs 800–1000 tokens of arguments; at the default 1024
+ * it was cut off mid-JSON, the endpoint returned no tool call, and the card
+ * silently never appeared. A ceiling, not a spend: short replies cost the same.
+ */
+const TOOL_ROUND_MAX_TOKENS = Math.max(
+  SAMPLING.max_tokens, Number(process.env.AI_TOOL_MAX_TOKENS ?? 4096)
+)
 
 /** Thinking stays off unless explicitly enabled. */
 const ENABLE_THINKING = process.env.AI_ENABLE_THINKING === 'true'
@@ -456,17 +473,20 @@ export const sendMessage = async ({
 
   // Set once from the athlete's own words; cleared as soon as a draft exists
   const askedForProgram = personalised && wantsProgramCard(message)
+  const maxRounds = askedForProgram ? DRAFT_TOOL_ROUNDS : MAX_TOOL_ROUNDS
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+  // A search has returned movements, so there is something to draft from
+  let foundExercises = false
+
+  // A provider error after the first round, rethrown only if nothing is salvaged
+  let roundError: unknown = null
+
+  for (let round = 0; round < maxRounds; round++) {
     await assertWithinBudget(userId)
 
-    const isLastRound = round === MAX_TOOL_ROUNDS - 1
+    const isLastRound = round === maxRounds - 1
 
-    /**
-     * A program was asked for and nothing has been drafted yet. Two changes
-     * follow, and they cost no extra round trips — the sequence becomes
-     * search → propose → prose inside the same three rounds.
-     */
+    // A program was asked for and nothing has been drafted yet
     const mustDraft = Boolean(askedForProgram && proposals.length === 0)
 
     // The final round normally offers no tools. While a draft is still owed it
@@ -476,8 +496,8 @@ export const sendMessage = async ({
     const offerTools = tools && (!isLastRound || mustDraft)
 
     /**
-     * Always 'auto'. Two things were measured against
-     * nvidia/nemotron-3-ultra on integrate.api.nvidia.com before settling here:
+     * 'auto', except in the round before the last while a draft is still owed.
+     * Measured against nvidia/nemotron-3-ultra on integrate.api.nvidia.com:
      *
      *   tool_choice omitted    → tool call
      *   tool_choice 'auto'     → tool call
@@ -488,41 +508,56 @@ export const sendMessage = async ({
      * opposite of what the parameter means, suppressing the very call it is
      * supposed to compel. Sending it is strictly worse than 'auto'.
      *
-     * Naming the function does compel a call — but compelling it mid-flow
-     * produces a bad draft. With only one search's worth of context the model
-     * drafted a single Upper Back Stretch for "an upper body workout", and once
-     * named the tool `search_exercises`. A card holding a sixth of the session
-     * is worse than no card: it is tapped, and it saves rubbish.
+     * Naming the function does compel a call, but compelling it early produces
+     * a bad draft. With only one narrow search's worth of context the model
+     * drafted a single Upper Back Stretch for "an upper body workout". A card
+     * holding a sixth of the session is worse than no card: it is tapped, and
+     * it saves rubbish.
      *
-     * Left on 'auto' the model writes good programs; it just does not always
-     * draft them. That is handled after the loop, not by force.
+     * On 'auto' a vague request ("suggest a plan for me") can still spend every
+     * round searching region after region and never draft. So once searches
+     * have returned movements, the second-to-last round names propose_workout,
+     * leaving the last round to describe the draft in prose.
      */
-    const toolChoice = 'auto' as const
+    const forceDraft = mustDraft && foundExercises && round === maxRounds - 2
+    const toolChoice: ChatCompletionToolChoiceOption = forceDraft
+      ? { type: 'function', function: { name: 'propose_workout' } }
+      : 'auto'
 
     // Cast: `chat_template_kwargs` is not in the SDK's typed parameters
     const request = {
       model: modelName,
       messages,
-      ...(offerTools ? { tools, tool_choice: toolChoice } : {}),
       ...requestTuning(provider.name),
+      ...(offerTools ? { tools, tool_choice: toolChoice, max_tokens: TOOL_ROUND_MAX_TOKENS } : {}),
     } as ChatCompletionCreateParamsNonStreaming
 
     let result
     try {
-      result = await client.chat.completions.create(request)
-    } catch (error) {
-      // Naming a function is the least portable part of the request. If an
-      // endpoint rejects it, retry the round on 'auto' rather than lose the
-      // whole reply — the card may not appear, but the athlete still gets an
-      // answer.
-      if (toolChoice === 'auto' || !offerTools) throw error
-      log.warn('AI endpoint refused a named tool_choice — retrying as auto', {
-        model: modelName, provider: provider.name,
+      result = await client.chat.completions.create(request).catch(error => {
+        // Naming a function is the least portable part of the request. If an
+        // endpoint rejects it, retry the round on 'auto' rather than lose the
+        // whole reply — the card may not appear, but the athlete still gets an
+        // answer.
+        if (toolChoice === 'auto' || !offerTools) throw error
+        log.warn('AI endpoint refused a named tool_choice — retrying as auto', {
+          model: modelName, provider: provider.name,
+        })
+        return client.chat.completions.create({
+          ...request,
+          tool_choice: 'auto',
+        } as ChatCompletionCreateParamsNonStreaming)
       })
-      result = await client.chat.completions.create({
-        ...request,
-        tool_choice: 'auto',
-      } as ChatCompletionCreateParamsNonStreaming)
+    } catch (error) {
+      // The first round has nothing to fall back on
+      if (round === 0) throw error
+      // Later, a provider error (NVIDIA returns intermittent 500s) costs only
+      // this round: the salvage reply below answers from the lookups so far
+      log.warn('AI round failed mid-message — salvaging', {
+        model: modelName, round, reason: error instanceof Error ? error.message : String(error),
+      })
+      roundError = error
+      break
     }
 
     // Bill from the provider's own token counts, at the model actually used
@@ -530,6 +565,13 @@ export const sendMessage = async ({
 
     const modelTurn = result.choices[0]?.message
     const calls = modelTurn?.tool_calls ?? []
+
+    // A cut-off turn loses any tool call it was writing, without an error
+    if (result.choices[0]?.finish_reason === 'length') {
+      log.warn('AI turn hit max_tokens', {
+        model: modelName, round, maxTokens: request.max_tokens, strandedCalls: calls.length,
+      })
+    }
 
     // Some endpoints return prose *alongside* tool calls. Keep the first such
     // text: when the model writes the program out and drafts it in the same
@@ -593,6 +635,9 @@ export const sendMessage = async ({
       } else {
         try {
           response = await executeReadTool(userId, name, args)
+          if (name === 'search_exercises' && (response as { count?: number }).count) {
+            foundExercises = true
+          }
         } catch (error) {
           // A failed lookup is reported to the model, not thrown
           log.error('AI tool failed', error, { tool: name })
@@ -630,6 +675,10 @@ export const sendMessage = async ({
       userId, client, modelName, providerName: provider.name, questionTurn, toolTranscript,
     })
   }
+
+  // The provider failed and the salvage did too: report the failure rather
+  // than save a canned apology into the thread
+  if (!replyText && proposals.length === 0 && roundError) throw roundError
 
   if (!replyText) {
     replyText = proposals.length > 0

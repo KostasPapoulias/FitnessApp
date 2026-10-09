@@ -76,7 +76,10 @@ export const TOOL_DECLARATIONS: ToolDeclaration[] = [
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Name or part of a name, e.g. "romanian deadlift".' },
+        query: {
+          type: 'string',
+          description: 'Name or part of a name, e.g. "romanian deadlift". Or a body region or muscle — "upper body", "legs", "push", "chest" — for the movements that train it.',
+        },
         modality: { type: 'string', description: 'One of Strength, Calisthenics, Cardio, WOD, Mobility.' },
         muscle: { type: 'string', description: 'Muscle name, e.g. "Hamstrings".' },
         limit: { type: 'integer', description: 'Max results, default 15.' },
@@ -259,6 +262,120 @@ const describeSet = (set: {
   return parts.join(' · ')
 }
 
+/**
+ * Body regions and shorthand the model searches by. No exercise is named
+ * "upper body" or "legs", so a name search finds nothing and the model spends
+ * every round narrowing down one movement at a time, never reaching a draft.
+ */
+const REGION_MUSCLES: Record<string, string[]> = {
+  'upper body': ['Chest', 'Back', 'Lats', 'Shoulders', 'Traps', 'Biceps', 'Triceps'],
+  'lower body': ['Quadriceps', 'Hamstrings', 'Glutes', 'Calves'],
+  'full body': ['Chest', 'Back', 'Shoulders', 'Quadriceps', 'Hamstrings', 'Glutes', 'Abs'],
+  'upper back': ['Back', 'Lats', 'Traps'],
+  legs: ['Quadriceps', 'Hamstrings', 'Glutes', 'Calves'],
+  leg: ['Quadriceps', 'Hamstrings', 'Glutes', 'Calves'],
+  push: ['Chest', 'Shoulders', 'Triceps'],
+  pull: ['Back', 'Lats', 'Traps', 'Biceps'],
+  arms: ['Biceps', 'Triceps', 'Forearms'],
+  core: ['Abs', 'Obliques', 'Lower Back'],
+  quads: ['Quadriceps'],
+  hams: ['Hamstrings'],
+  delts: ['Shoulders'],
+  pecs: ['Chest'],
+  calf: ['Calves'],
+}
+
+/** Words that name no movement: "upper body exercises", "leg day". */
+const FILLER_WORDS = new Set([
+  'and', 'for', 'body', 'day', 'workout', 'workouts', 'exercise', 'exercises',
+  'training', 'session', 'movement', 'movements', 'muscle', 'muscles',
+])
+
+/**
+ * The muscles a query names when it names nothing else — "upper body", "chest
+ * and triceps", "leg day". Null for a movement such as "chest press", which the
+ * name search handles.
+ */
+export const muscleQueryTargets = (query: string, muscleNames: string[]): string[] | null => {
+  let rest = query.toLowerCase().replace(/[^a-z]+/g, ' ')
+  const targets = new Set<string>()
+
+  const phrases: [string, string[]][] = [
+    ...Object.entries(REGION_MUSCLES),
+    // "Biceps" is also searched as "bicep"
+    ...muscleNames.flatMap(name => {
+      const lower = name.toLowerCase()
+      const forms = lower.endsWith('s') ? [lower, lower.slice(0, -1)] : [lower]
+      return forms.map(form => [form, [name]] as [string, string[]])
+    }),
+  ]
+
+  // Longest first, so "lower back" is not read as "back"
+  for (const [phrase, muscles] of phrases.sort((a, b) => b[0].length - a[0].length)) {
+    const remaining = rest.replace(new RegExp(`\\b${phrase}\\b`, 'g'), ' ')
+    if (remaining === rest) continue
+    rest = remaining
+    muscles.forEach(muscle => targets.add(muscle))
+  }
+
+  const leftover = rest.split(' ').filter(word => word && !FILLER_WORDS.has(word))
+  return targets.size > 0 && leftover.length === 0 ? [...targets] : null
+}
+
+/** Impact at or above which a muscle counts as a movement's prime mover. */
+const PRIMARY_IMPACT = 0.7
+
+/** What a session is built from; stretches and cardio rank after these. */
+const LIFTING_MODALITIES = new Set(['Strength', 'Calisthenics'])
+
+type FoundExercise = Prisma.ExerciseGetPayload<{
+  include: { modality: true; muscleLinks: { include: { muscle: true } } }
+}>
+
+/**
+ * Up to `limit` movements taken in turn from each target muscle, so "upper
+ * body" is not fifteen chest presses. Strongest prime movers first, and lifts
+ * before stretches unless the model asked for a modality.
+ */
+const spreadAcrossMuscles = (
+  found: FoundExercise[], targets: string[], limit: number, liftsFirst: boolean
+): FoundExercise[] => {
+  const impactOn = (exercise: FoundExercise, muscle: string) =>
+    exercise.muscleLinks.find(link => link.muscle.name === muscle)?.impactFactor ?? 0
+  const tierOf = (exercise: FoundExercise) =>
+    liftsFirst && !LIFTING_MODALITIES.has(exercise.modality.name) ? 1 : 0
+
+  // Each movement is listed once, under the target it works hardest
+  const byMuscle = new Map(targets.map(muscle => [muscle, [] as FoundExercise[]]))
+  for (const exercise of found) {
+    const main = targets.reduce((best, muscle) =>
+      impactOn(exercise, muscle) > impactOn(exercise, best) ? muscle : best)
+    byMuscle.get(main)!.push(exercise)
+  }
+  for (const [muscle, list] of byMuscle) {
+    list.sort((a, b) => impactOn(b, muscle) - impactOn(a, muscle) || a.name.localeCompare(b.name))
+  }
+
+  const picked: FoundExercise[] = []
+  for (const tier of [0, 1]) {
+    const queues = [...byMuscle.values()].map(list => list.filter(e => tierOf(e) === tier))
+    while (picked.length < limit && queues.some(queue => queue.length > 0)) {
+      for (const queue of queues) {
+        const next = queue.shift()
+        if (next && picked.length < limit) picked.push(next)
+      }
+    }
+  }
+  return picked
+}
+
+const describeExercise = (exercise: FoundExercise) => ({
+  exerciseId: exercise.id,
+  name: exercise.name,
+  modality: exercise.modality.name,
+  muscles: exercise.muscleLinks.map(m => m.muscle.name),
+})
+
 // ── read execution ────────────────────────────────────────────────────────
 
 /** Run a read tool, scoped to `userId` from the verified token. */
@@ -271,6 +388,36 @@ export const executeReadTool = async (
     case 'search_exercises': {
       const limit = intArg(args.limit, 15, 40)
       const query = typeof args.query === 'string' ? args.query.trim() : ''
+      const modalityFilter = args.modality
+        ? { modality: { name: { equals: String(args.modality), mode: 'insensitive' as const } } }
+        : {}
+
+      // A region or muscle ("upper body", "legs", "chest") is answered with the
+      // movements that train it. An explicit muscle filter takes precedence.
+      const muscleNames = query && !args.muscle
+        ? (await prisma.muscle.findMany({ select: { name: true } })).map(m => m.name)
+        : []
+      const targets = muscleNames.length > 0 ? muscleQueryTargets(query, muscleNames) : null
+
+      if (targets) {
+        const found = await prisma.exercise.findMany({
+          where: {
+            muscleLinks: {
+              some: { impactFactor: { gte: PRIMARY_IMPACT }, muscle: { name: { in: targets } } },
+            },
+            ...modalityFilter,
+            OR: [{ createdByUserId: null }, { createdByUserId: userId }],
+          },
+          include: { modality: true, muscleLinks: { include: { muscle: true } } },
+        })
+        const exercises = spreadAcrossMuscles(found, targets, limit, !args.modality)
+
+        return {
+          count: exercises.length,
+          note: `"${query}" was matched by muscle (${targets.join(', ')}): these are movements that work them, enough to build a session from.`,
+          exercises: exercises.map(describeExercise),
+        }
+      }
 
       // Each word matched independently, so word order and extra words don't matter
       const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -280,7 +427,7 @@ export const executeReadTool = async (
           ...(words.length > 0
             ? { AND: words.map(word => ({ name: { contains: word, mode: 'insensitive' as const } })) }
             : {}),
-          ...(args.modality ? { modality: { name: { equals: String(args.modality), mode: 'insensitive' as const } } } : {}),
+          ...modalityFilter,
           ...(args.muscle
             ? { muscleLinks: { some: { muscle: { name: { equals: String(args.muscle), mode: 'insensitive' as const } } } } }
             : {}),
@@ -317,12 +464,7 @@ export const executeReadTool = async (
         ...(exercises.length === 0
           ? { hint: `Nothing matched "${query}". Search again with one distinctive word (e.g. "squat" rather than "barbell squat"), or use the muscle filter. Do not invent an exerciseId.` }
           : {}),
-        exercises: exercises.map(e => ({
-          exerciseId: e.id,
-          name: e.name,
-          modality: e.modality.name,
-          muscles: e.muscleLinks.map(m => m.muscle.name),
-        })),
+        exercises: exercises.map(describeExercise),
       }
     }
 
