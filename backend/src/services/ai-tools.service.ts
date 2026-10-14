@@ -1,8 +1,8 @@
 import { Prisma } from '@prisma/client'
 import prisma from '../lib/prisma'
 import {
-  LIMITS, TemplateValidationError, createTemplate, listScheduled, listTemplates,
-  scheduleTemplate, validateTemplateInput,
+  LIMITS, TemplateExerciseInput, TemplateValidationError, createTemplate, listScheduled,
+  listTemplates, scheduleTemplate, validateTemplateInput,
 } from './template.service'
 import {
   CustomExerciseError, createCustomExercise, prepareCustomExercise,
@@ -687,6 +687,33 @@ export interface ProposalSummary {
   expiresAt: string
 }
 
+/** A drafted workout's card: one line per movement, summarised by its first set. */
+const workoutCardLines = (exercises: TemplateExerciseInput[], nameById: Map<string, string>) =>
+  exercises.map(exercise => {
+    const label = nameById.get(exercise.exerciseId) ?? 'Exercise'
+    const summary = exercise.sets.map(s => describeSet({
+      reps: s.reps ?? null, weight: s.weight ?? null, rpe: s.rpe ?? null,
+      restSeconds: s.restSeconds ?? null, distance: s.distance ?? null,
+      time: s.time ?? null, rounds: s.rounds ?? null,
+    })).filter(Boolean)
+    return `${label} — ${exercise.sets.length} × (${summary[0] ?? 'as planned'})`
+  })
+
+/** A drafted exercise's card, from the payload that would be saved. */
+const exerciseCardLines = (draft: {
+  name: string; modality: string; description: string | null
+  muscles: { muscle: string; role: string }[]
+}) => {
+  const primary = draft.muscles.filter(m => m.role === 'primary').map(m => m.muscle)
+  const secondary = draft.muscles.filter(m => m.role === 'secondary').map(m => m.muscle)
+  return [
+    `${draft.modality} · ${draft.name}`,
+    `Primary: ${primary.join(', ')}`,
+    ...(secondary.length ? [`Secondary: ${secondary.join(', ')}`] : []),
+    ...(draft.description ? [draft.description] : []),
+  ]
+}
+
 /**
  * Validate a draft and stage it as a proposal card. Returns what to tell the
  * model (explicitly "not saved", or it claims the work is done) and the card.
@@ -725,15 +752,7 @@ export const createProposal = async (
         data: { userId, threadId, kind: 'create_template', payload: payload as unknown as Prisma.InputJsonObject, expiresAt },
       })
 
-      const lines = clean.exercises.map(exercise => {
-        const label = nameById.get(exercise.exerciseId) ?? 'Exercise'
-        const summary = exercise.sets.map(s => describeSet({
-          reps: s.reps ?? null, weight: s.weight ?? null, rpe: s.rpe ?? null,
-          restSeconds: s.restSeconds ?? null, distance: s.distance ?? null,
-          time: s.time ?? null, rounds: s.rounds ?? null,
-        })).filter(Boolean)
-        return `${label} — ${exercise.sets.length} × (${summary[0] ?? 'as planned'})`
-      })
+      const lines = workoutCardLines(clean.exercises, nameById)
 
       return {
         toModel: {
@@ -831,15 +850,7 @@ export const createProposal = async (
         },
       })
 
-      const primary = prepared.muscleLinks.filter(l => l.role === 'primary').map(l => l.muscleName)
-      const secondary = prepared.muscleLinks.filter(l => l.role === 'secondary').map(l => l.muscleName)
-
-      const lines = [
-        `${prepared.modalityName} · ${prepared.name}`,
-        `Primary: ${primary.join(', ')}`,
-        ...(secondary.length ? [`Secondary: ${secondary.join(', ')}`] : []),
-        ...(prepared.description ? [prepared.description] : []),
-      ]
+      const lines = exerciseCardLines(payload)
 
       return {
         toModel: {
@@ -976,6 +987,43 @@ export const rejectProposal = async (userId: string, proposalId: string) => {
 }
 
 /**
+ * A stored proposal's title and lines, built as createProposal first showed
+ * them. Without this a reopened chat drew "3 sets" with no movement names.
+ */
+const storedCard = (
+  kind: string,
+  payload: any,
+  exerciseNames: Map<string, string>,
+  templateNames: Map<string, string>
+): { title: string; lines: string[] } => {
+  if (kind === 'create_template' && Array.isArray(payload?.template?.exercises)) {
+    const exercises = payload.template.exercises.map((e: any) => ({
+      exerciseId: String(e.exerciseId),
+      sets: Array.isArray(e.sets) ? e.sets : [],
+    }))
+    return { title: payload.template.name, lines: workoutCardLines(exercises, exerciseNames) }
+  }
+
+  if (kind === 'create_exercise' && payload?.name) {
+    return {
+      title: payload.name,
+      lines: exerciseCardLines({
+        name: payload.name,
+        modality: payload.modality,
+        description: payload.description ?? null,
+        muscles: Array.isArray(payload.muscles) ? payload.muscles : [],
+      }),
+    }
+  }
+
+  // The plan may have been deleted since
+  const planName = kind === 'schedule_workout' ? templateNames.get(payload?.templateId) : undefined
+  return planName
+    ? { title: planName, lines: [`Put "${planName}" on standby`] }
+    : { title: 'Scheduled workout', lines: [] }
+}
+
+/**
  * Every card a thread produced, for redrawing the conversation. Rejected
  * cards are omitted; `status` is derived so an expired pending card shows as
  * expired.
@@ -986,10 +1034,29 @@ export const listThreadProposals = async (userId: string, threadId: string) => {
     orderBy: { createdAt: 'asc' },
   })
 
+  // Names for every card in two queries: drafted movements, and scheduled plans
+  const payloads = rows.map(row => row.payload as any)
+  const exerciseIds = payloads.flatMap(p =>
+    Array.isArray(p?.template?.exercises) ? p.template.exercises.map((e: any) => String(e.exerciseId)) : []
+  )
+  const templateIds = rows
+    .filter(row => row.kind === 'schedule_workout')
+    .map(row => String((row.payload as any)?.templateId ?? ''))
+
+  const [exercises, templates] = await Promise.all([
+    exerciseIds.length
+      ? prisma.exercise.findMany({ where: { id: { in: exerciseIds } }, select: { id: true, name: true } })
+      : [],
+    templateIds.length
+      ? prisma.workoutTemplate.findMany({ where: { id: { in: templateIds }, userId }, select: { id: true, name: true } })
+      : [],
+  ])
+  const exerciseNames = new Map(exercises.map(e => [e.id, e.name]))
+  const templateNames = new Map(templates.map(t => [t.id, t.name]))
+
   const now = new Date()
-  return rows.map(row => {
-    const payload = row.payload as any
-    const template = payload?.template
+  return rows.map((row, i) => {
+    const payload = payloads[i]
     const status = row.status === 'pending' && row.expiresAt <= now ? 'expired' : row.status
 
     return {
@@ -997,10 +1064,7 @@ export const listThreadProposals = async (userId: string, threadId: string) => {
       kind: row.kind,
       status,
       messageId: row.messageId,
-      title: template?.name ?? 'Scheduled workout',
-      lines: Array.isArray(template?.exercises)
-        ? template.exercises.map((e: any) => `${e.sets?.length ?? 0} sets`)
-        : [],
+      ...storedCard(row.kind, payload, exerciseNames, templateNames),
       scheduledFor: payload?.scheduledFor ?? null,
       reminderAt: payload?.reminderAt ?? null,
       expiresAt: row.expiresAt.toISOString(),

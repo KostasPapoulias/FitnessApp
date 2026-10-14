@@ -22,7 +22,7 @@ export default function AIChat() {
     new URLSearchParams(location.search).get('ask') ??
     undefined
 
-  const { readinessScore } = useFatigueStore()
+  const { readinessScore, fetchFatigue } = useFatigueStore()
   const { t, intl } = useT()
   const { isPhone }     = useDeviceType()
   const keyboardInset   = useKeyboardInset()
@@ -117,6 +117,8 @@ export default function AIChat() {
         dateTime:    new Date().toISOString()
       }
       setMessages(prev => [...prev, aiMsg])
+      // The coach just read readiness fresh; the header shows the same moment
+      fetchFatigue()
       if (data.proposals?.length > 0) {
         // Stamped with this reply's id so the card sits under it (the server
         // binds messageId only after replying)

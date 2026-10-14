@@ -28,7 +28,7 @@ interface Thread {
 
 export default function AIChatHub() {
   const navigate = useNavigate()
-  const { readinessScore, muscles } = useFatigueStore()
+  const { readinessScore, muscles, fetchFatigue } = useFatigueStore()
   const { t, tn, intl } = useT()
 
   const [threads,     setThreads]     = useState<Thread[]>([])
@@ -36,6 +36,11 @@ export default function AIChatHub() {
   const [deleteId,    setDeleteId]    = useState<string | null>(null)
   // Undefined until known, so the "AI knows your state" card never flashes for consent-off users
   const [aiConsent,   setAiConsent]   = useState<boolean | undefined>(undefined)
+
+  // Fresh, so the figures here match what the coach reads (it computes its own)
+  useEffect(() => {
+    fetchFatigue()
+  }, [fetchFatigue])
 
   useEffect(() => {
     aiService.getThreads()
